@@ -1,0 +1,55 @@
+import { z } from "zod";
+
+export const SyncRequest = z.object({
+  account: z.string().email().optional(),
+  since: z.string().min(1).optional(),
+  max: z.number().int().positive().max(1000).optional(),
+});
+export type SyncRequestT = z.infer<typeof SyncRequest>;
+
+export const CreateLabelRequest = z.object({
+  accountId: z.string().uuid(),
+  name: z.string().min(1).max(80),
+});
+export type CreateLabelRequestT = z.infer<typeof CreateLabelRequest>;
+
+export const ListMessagesQuery = z.object({
+  account: z.string().uuid().optional(),
+  priority: z.enum(["high", "medium", "low"]).optional(),
+  label: z.string().uuid().optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+  cursor: z.string().optional(),
+  includeArchived: z.coerce.boolean().default(false),
+  includeTrashed: z.coerce.boolean().default(false),
+});
+export type ListMessagesQueryT = z.infer<typeof ListMessagesQuery>;
+
+export const ModifyLabelsRequest = z.object({
+  add: z.array(z.string().uuid()).optional(),
+  remove: z.array(z.string().uuid()).optional(),
+});
+export type ModifyLabelsRequestT = z.infer<typeof ModifyLabelsRequest>;
+
+export const ApplySuggestionsRequest = z.object({
+  triageId: z.string().uuid(),
+  acceptExistingLabelIds: z.array(z.string().uuid()).optional(),
+  acceptNewSuggestionIds: z.array(z.string().uuid()).optional(),
+});
+export type ApplySuggestionsRequestT = z.infer<typeof ApplySuggestionsRequest>;
+
+export const GenerateReplyRequest = z.object({
+  prompt: z.string().min(1),
+});
+export type GenerateReplyRequestT = z.infer<typeof GenerateReplyRequest>;
+
+export const SendReplyRequest = z.object({
+  subject: z.string().min(1),
+  body: z.string().min(1),
+});
+export type SendReplyRequestT = z.infer<typeof SendReplyRequest>;
+
+export const UpdateSettingsRequest = z.object({
+  triageModel: z.string().min(1).optional(),
+  replyModel: z.string().min(1).optional(),
+});
+export type UpdateSettingsRequestT = z.infer<typeof UpdateSettingsRequest>;

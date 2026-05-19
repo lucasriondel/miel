@@ -7,6 +7,7 @@ export { runMigrations } from "./db/migrate";
 export * as gmailSchemas from "./schemas/gmail";
 export * as triageSchemas from "./schemas/triage";
 export * as replySchemas from "./schemas/reply";
+export * as apiSchemas from "./schemas/api";
 export { createGogAdapter } from "./adapters/gog";
 export type { GogAdapter, SearchHit, SendResult } from "./adapters/gog";
 export { createClaudeAdapter } from "./adapters/claude";
@@ -51,6 +52,19 @@ export type {
   ApplySuggestionsResult,
   LatestTriageForMessage,
 } from "./services/apply";
+export {
+  listMessages,
+  getMessageDetail,
+  listAccounts as listAccountsFromDb,
+  getAccountById,
+} from "./services/messages";
+export type {
+  ListedMessage,
+  ListMessagesArgs,
+  ListMessagesResult,
+  MessageDetail,
+  AccountSummary,
+} from "./services/messages";
 export { generateReply, sendReply } from "./services/reply";
 export type {
   GenerateReplyArgs,
