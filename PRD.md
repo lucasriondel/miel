@@ -457,7 +457,7 @@ export default {
 ## Implementation order
 
 1. **Infra** ✅ DONE: deps added to each `package.json`, `docker-compose.yml`, `.env.example`, `drizzle.config.ts` written. `bun install` + `bun run typecheck` + `docker compose config` all clean.
-2. **DB schema + first migration**: write `schema.ts`, `client.ts`, `migrate.ts`. `bunx drizzle-kit generate`, run migrator. Verify: 8 tables present.
+2. **DB schema + first migration** ✅ DONE: `env.ts`, `db/schema.ts`, `db/client.ts`, `db/migrate.ts` written; root `drizzle-kit`/`drizzle-orm`/`postgres` devDeps added so `bunx drizzle-kit generate` resolves; compose port remapped 5432→5435 to avoid a conflict with another local Postgres; migration `0000_loving_lyja.sql` applied — verified 8 tables + 2 enums via `\dt`/`\dT+`.
 3. **gog adapter + gmail zod schemas**. Smoke test: `gog.listAccounts()`, `gog.searchMessages({query:"newer_than:7d", max:5})`, `gog.getMessage(...)`.
 4. **claude adapter + triage/reply zod schemas + settings service** (defaults seeded on first read). Hand-feed a fake TriageInput; verify parsed TriageOutput.
 5. **sync service**: account upsert from `gog auth list` → labels sync → message search → upsert → triage chunks of 15 → write `triages` + `triage_label_suggestions` + `suggested_labels`. Verify via CLI then `SELECT priority, count(*) FROM triages GROUP BY priority`.

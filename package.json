@@ -10,6 +10,9 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.30",
+    "drizzle-orm": "^0.36",
+    "postgres": "^3.4",
     "turbo": "^2.3.0",
     "typescript": "^5.7.0"
   },
