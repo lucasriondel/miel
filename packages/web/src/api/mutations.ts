@@ -18,3 +18,47 @@ export function useSync() {
     },
   });
 }
+
+export interface MessageActionResult {
+  ok: true;
+  threadId: string;
+}
+
+export interface MessageActionInput {
+  accountId: string;
+  gmailMessageId: string;
+}
+
+export function useArchiveMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: MessageActionInput) =>
+      apiFetch<MessageActionResult>({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/archive`,
+        method: "POST",
+      }),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      qc.invalidateQueries({
+        queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
+      });
+    },
+  });
+}
+
+export function useTrashMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: MessageActionInput) =>
+      apiFetch<MessageActionResult>({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}`,
+        method: "DELETE",
+      }),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      qc.invalidateQueries({
+        queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
+      });
+    },
+  });
+}
