@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: miel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: miel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-miel}
+      POSTGRES_DB: miel
+    ports:
+      - "5432:5432"
+    volumes:
+      - miel-pgdata:/var/lib/postgresql/data
+volumes:
+  miel-pgdata:

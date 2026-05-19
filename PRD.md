@@ -456,7 +456,7 @@ export default {
 
 ## Implementation order
 
-1. **Infra**: add deps to each `package.json`, write `docker-compose.yml`, `.env.example`, `drizzle.config.ts`. Verify: `docker compose up -d && psql $DATABASE_URL -c '\l'`.
+1. **Infra** ✅ DONE: deps added to each `package.json`, `docker-compose.yml`, `.env.example`, `drizzle.config.ts` written. `bun install` + `bun run typecheck` + `docker compose config` all clean.
 2. **DB schema + first migration**: write `schema.ts`, `client.ts`, `migrate.ts`. `bunx drizzle-kit generate`, run migrator. Verify: 8 tables present.
 3. **gog adapter + gmail zod schemas**. Smoke test: `gog.listAccounts()`, `gog.searchMessages({query:"newer_than:7d", max:5})`, `gog.getMessage(...)`.
 4. **claude adapter + triage/reply zod schemas + settings service** (defaults seeded on first read). Hand-feed a fake TriageInput; verify parsed TriageOutput.

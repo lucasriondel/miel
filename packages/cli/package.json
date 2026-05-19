@@ -14,7 +14,8 @@
     "lint": "echo 'no lint configured'"
   },
   "dependencies": {
-    "@miel/core": "workspace:*"
+    "@miel/core": "workspace:*",
+    "commander": "^12.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
