@@ -14,4 +14,12 @@ export function getDb() {
   return { db: cachedDb, sql: cachedSql };
 }
 
+export async function closeDb(): Promise<void> {
+  if (cachedSql) {
+    await cachedSql.end({ timeout: 5 });
+    cachedSql = null;
+    cachedDb = null;
+  }
+}
+
 export type Db = ReturnType<typeof getDb>["db"];

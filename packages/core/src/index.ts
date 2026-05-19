@@ -1,6 +1,6 @@
 export * from "./env";
 export * as schema from "./db/schema";
-export { getDb } from "./db/client";
+export { getDb, closeDb } from "./db/client";
 export type { Db } from "./db/client";
 export { runMigrations } from "./db/migrate";
 
@@ -38,6 +38,26 @@ export type {
   FetchAndTriageOptions,
   SyncAllOptions,
 } from "./services/sync";
+export {
+  applyLabels,
+  applySuggestions,
+  archiveMessage,
+  trashMessage,
+  getLatestTriageForMessage,
+} from "./services/apply";
+export type {
+  ApplyLabelsResult,
+  ApplySuggestionsInput,
+  ApplySuggestionsResult,
+  LatestTriageForMessage,
+} from "./services/apply";
+export { generateReply, sendReply } from "./services/reply";
+export type {
+  GenerateReplyArgs,
+  GenerateReplyResult,
+  SendReplyArgs,
+  SendReplyResult,
+} from "./services/reply";
 export { parseSince } from "./util/time";
 export {
   spawnCapture,
