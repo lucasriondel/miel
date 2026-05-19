@@ -35,7 +35,7 @@ export const PrioritySection = ({ priority, messages, isLoading }: Props) => {
           description="They'll appear here after the next sync."
         />
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="overflow-hidden rounded-md border border-miel-line bg-white">
           {messages.map((m) => (
             <MessageRow key={`${m.accountId}:${m.gmailMessageId}`} message={m} />
           ))}
