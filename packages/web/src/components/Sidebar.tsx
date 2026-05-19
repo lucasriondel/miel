@@ -11,6 +11,7 @@ interface Props {
   selectedLabelId: string | undefined;
   onSelectLabel: (id: string | undefined) => void;
   onSyncResult: (info: { fetched: number; triaged: number; errors: string[] }) => void;
+  onSyncError: (message: string) => void;
 }
 
 export const Sidebar = ({
@@ -20,6 +21,7 @@ export const Sidebar = ({
   selectedLabelId,
   onSelectLabel,
   onSyncResult,
+  onSyncError,
 }: Props) => {
   const selected = accounts.find((a) => a.id === selectedAccountId);
   return (
@@ -36,7 +38,11 @@ export const Sidebar = ({
 
       <AccountPicker value={selectedAccountId} onChange={onSelectAccount} />
 
-      <SyncButton accountEmail={selected?.email} onResult={onSyncResult} />
+      <SyncButton
+        accountEmail={selected?.email}
+        onResult={onSyncResult}
+        onError={onSyncError}
+      />
 
       <div className="flex-1 overflow-y-auto">
         <LabelList

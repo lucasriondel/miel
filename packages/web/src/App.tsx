@@ -52,6 +52,7 @@ export const App = () => {
             errors: info.errors,
           })
         }
+        onSyncError={(message) => setSyncStatus({ kind: "error", message })}
       />
       <main className="flex-1 overflow-y-auto p-6">
         <SyncStatusBanner

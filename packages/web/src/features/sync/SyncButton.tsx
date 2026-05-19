@@ -1,13 +1,21 @@
 import { useSync } from "../../api/mutations";
+import { ApiError } from "../../api/client";
 import { Button } from "../../components/Button";
 import { Spinner } from "../../components/Spinner";
 
 interface Props {
   accountEmail?: string;
   onResult?: (info: { fetched: number; triaged: number; errors: string[] }) => void;
+  onError?: (message: string) => void;
 }
 
-export const SyncButton = ({ accountEmail, onResult }: Props) => {
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  return "Unknown error";
+}
+
+export const SyncButton = ({ accountEmail, onResult, onError }: Props) => {
   const sync = useSync();
   return (
     <Button
@@ -28,6 +36,9 @@ export const SyncButton = ({ accountEmail, onResult }: Props) => {
                 { fetched: 0, triaged: 0, errors: [] as string[] },
               );
               onResult?.(totals);
+            },
+            onError: (err) => {
+              onError?.(describeError(err));
             },
           },
         );
