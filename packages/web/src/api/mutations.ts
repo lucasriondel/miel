@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { queryKeys } from "./queries";
-import type { SyncResponse } from "./types";
+import type { Account, Label, ModelSettings, SyncResponse } from "./types";
 
 export function useSync() {
   const qc = useQueryClient();
@@ -109,6 +109,78 @@ export function useSendReply() {
       qc.invalidateQueries({
         queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
       });
+    },
+  });
+}
+
+export interface UpdateSettingsInput {
+  triageModel?: string;
+  replyModel?: string;
+}
+
+export function useUpdateSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: UpdateSettingsInput) =>
+      apiFetch<ModelSettings>({
+        path: "/settings",
+        method: "PUT",
+        body: input,
+      }),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.settings, data);
+    },
+  });
+}
+
+export function useSyncAccounts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      apiFetch<{ accounts: Account[] }>({
+        path: "/accounts/sync",
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+    },
+  });
+}
+
+export interface SyncLabelsInput {
+  accountId: string;
+}
+
+export function useSyncAccountLabels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SyncLabelsInput) =>
+      apiFetch<{ labels: Label[] }>({
+        path: `/accounts/${input.accountId}/labels/sync`,
+        method: "POST",
+      }),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: queryKeys.labels(input.accountId) });
+    },
+  });
+}
+
+export interface CreateLabelInput {
+  accountId: string;
+  name: string;
+}
+
+export function useCreateLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateLabelInput) =>
+      apiFetch<{ label: Label }>({
+        path: "/labels",
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: queryKeys.labels(input.accountId) });
     },
   });
 }
