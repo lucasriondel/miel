@@ -15,14 +15,19 @@ export const MessageRow = ({ message }: Props) => {
     : formatDistanceToNow(date, { addSuffix: true });
   const sender = message.fromName?.trim() || message.fromEmail;
   const subject = message.subject?.trim() || "(no subject)";
-  const labels = message.labels.filter((l) => l.name !== "INBOX").slice(0, 3);
+  const isUnread = message.labels.some((l) => l.name === "UNREAD");
+  const labels = message.labels
+    .filter((l) => l.name !== "INBOX" && l.name !== "UNREAD")
+    .slice(0, 3);
 
   return (
     <Link
       to={`/messages/${message.accountId}/${message.gmailMessageId}`}
       className="group flex items-center gap-3 border-b border-miel-line bg-white px-3 py-1.5 text-sm transition-colors last:border-b-0 hover:bg-miel-bg"
     >
-      <span className="w-44 shrink-0 truncate font-medium text-miel-ink">
+      <span
+        className={`w-44 shrink-0 truncate text-miel-ink ${isUnread ? "font-semibold" : "font-normal"}`}
+      >
         {sender}
       </span>
       <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -32,13 +37,20 @@ export const MessageRow = ({ message }: Props) => {
               isSystemLabel(l.name) ? (
                 <SystemLabelBadge key={l.id} name={l.name} />
               ) : (
-                <LabelBadge key={l.id} name={l.name} />
+                <LabelBadge
+                  key={l.id}
+                  name={l.name}
+                  colorBg={l.colorBg}
+                  colorFg={l.colorFg}
+                />
               ),
             )}
           </span>
         ) : null}
         <span className="min-w-0 truncate">
-          <span className="text-miel-ink">{subject}</span>
+          <span className={`text-miel-ink ${isUnread ? "font-semibold" : ""}`}>
+            {subject}
+          </span>
           {message.snippet ? (
             <span className="text-miel-muted"> - {message.snippet}</span>
           ) : null}

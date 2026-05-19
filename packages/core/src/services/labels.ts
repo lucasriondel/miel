@@ -9,6 +9,8 @@ export interface LabelRow {
   gmailLabelId: string;
   name: string;
   type: string;
+  colorBg: string | null;
+  colorFg: string | null;
 }
 
 const LABEL_RETURNING = {
@@ -17,6 +19,8 @@ const LABEL_RETURNING = {
   gmailLabelId: labels.gmailLabelId,
   name: labels.name,
   type: labels.type,
+  colorBg: labels.colorBg,
+  colorFg: labels.colorFg,
 };
 
 export async function syncLabelsForAccount(args: {
@@ -34,6 +38,8 @@ export async function syncLabelsForAccount(args: {
     gmailLabelId: l.id,
     name: l.name,
     type: l.type === "system" ? "system" : "user",
+    colorBg: l.color?.backgroundColor ?? null,
+    colorFg: l.color?.textColor ?? null,
   }));
 
   const inserted = await db
@@ -44,6 +50,8 @@ export async function syncLabelsForAccount(args: {
       set: {
         name: sql`excluded.name`,
         type: sql`excluded.type`,
+        colorBg: sql`excluded.color_bg`,
+        colorFg: sql`excluded.color_fg`,
       },
     })
     .returning(LABEL_RETURNING);
@@ -105,10 +113,16 @@ export async function ensureLabel(args: {
       gmailLabelId: created.id,
       name: created.name,
       type: created.type === "system" ? "system" : "user",
+      colorBg: created.color?.backgroundColor ?? null,
+      colorFg: created.color?.textColor ?? null,
     })
     .onConflictDoUpdate({
       target: [labels.accountId, labels.gmailLabelId],
-      set: { name: sql`excluded.name` },
+      set: {
+        name: sql`excluded.name`,
+        colorBg: sql`excluded.color_bg`,
+        colorFg: sql`excluded.color_fg`,
+      },
     })
     .returning(LABEL_RETURNING);
   return inserted[0];

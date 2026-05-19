@@ -60,7 +60,12 @@ export const MessageDetailHeader = ({ message }: Props) => {
       {visibleLabels.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {visibleLabels.map((l) => (
-            <LabelBadge key={l.id} name={l.name} />
+            <LabelBadge
+              key={l.id}
+              name={l.name}
+              colorBg={l.colorBg}
+              colorFg={l.colorFg}
+            />
           ))}
         </div>
       ) : null}

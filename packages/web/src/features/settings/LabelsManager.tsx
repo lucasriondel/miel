@@ -141,7 +141,12 @@ export const LabelsManager = () => {
 
 interface GroupProps {
   title: string;
-  labels: { id: string; name: string }[];
+  labels: {
+    id: string;
+    name: string;
+    colorBg: string | null;
+    colorFg: string | null;
+  }[];
   muted?: boolean;
 }
 
@@ -156,7 +161,12 @@ const LabelGroup = ({ title, labels, muted }: GroupProps) => {
       </h4>
       <div className="flex flex-wrap gap-1.5">
         {labels.map((l) => (
-          <LabelBadge key={l.id} name={l.name} />
+          <LabelBadge
+            key={l.id}
+            name={l.name}
+            colorBg={l.colorBg}
+            colorFg={l.colorFg}
+          />
         ))}
       </div>
     </div>

@@ -21,6 +21,12 @@ export const GogLabel = z.object({
   type: z.string().optional(),
   messageListVisibility: z.string().optional(),
   labelListVisibility: z.string().optional(),
+  color: z
+    .object({
+      backgroundColor: z.string().optional(),
+      textColor: z.string().optional(),
+    })
+    .optional(),
 });
 export type GogLabelT = z.infer<typeof GogLabel>;
 

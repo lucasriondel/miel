@@ -12,6 +12,8 @@ export interface Label {
   gmailLabelId: string;
   name: string;
   type: string;
+  colorBg: string | null;
+  colorFg: string | null;
 }
 
 export type Priority = "high" | "medium" | "low";
@@ -20,6 +22,8 @@ export interface MessageLabel {
   id: string;
   name: string;
   gmailLabelId: string;
+  colorBg: string | null;
+  colorFg: string | null;
 }
 
 export interface ListedMessage {

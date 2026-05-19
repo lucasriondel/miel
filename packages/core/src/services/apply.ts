@@ -199,6 +199,8 @@ export async function applySuggestions(
           gmailLabelId: labels.gmailLabelId,
           name: labels.name,
           type: labels.type,
+          colorBg: labels.colorBg,
+          colorFg: labels.colorFg,
         })
         .from(labels)
         .where(

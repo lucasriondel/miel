@@ -26,7 +26,13 @@ export interface ListedMessage {
   isTrashed: boolean;
   priority: "high" | "medium" | "low" | null;
   triageId: string | null;
-  labels: { id: string; name: string; gmailLabelId: string }[];
+  labels: {
+    id: string;
+    name: string;
+    gmailLabelId: string;
+    colorBg: string | null;
+    colorFg: string | null;
+  }[];
 }
 
 export interface ListMessagesArgs {
@@ -182,6 +188,8 @@ export async function listMessages(
       labelId: labels.id,
       name: labels.name,
       gmailLabelId: labels.gmailLabelId,
+      colorBg: labels.colorBg,
+      colorFg: labels.colorFg,
     })
     .from(messageLabels)
     .innerJoin(labels, eq(messageLabels.labelId, labels.id))
@@ -198,7 +206,13 @@ export async function listMessages(
   for (const lr of labelRows) {
     const key = `${lr.accountId}|${lr.gmailMessageId}`;
     const list = labelsByMsg.get(key) ?? [];
-    list.push({ id: lr.labelId, name: lr.name, gmailLabelId: lr.gmailLabelId });
+    list.push({
+      id: lr.labelId,
+      name: lr.name,
+      gmailLabelId: lr.gmailLabelId,
+      colorBg: lr.colorBg,
+      colorFg: lr.colorFg,
+    });
     labelsByMsg.set(key, list);
   }
 
@@ -239,7 +253,13 @@ export interface MessageDetail {
   isArchived: boolean;
   isTrashed: boolean;
   rawHeaders: Record<string, string> | null;
-  labels: { id: string; name: string; gmailLabelId: string }[];
+  labels: {
+    id: string;
+    name: string;
+    gmailLabelId: string;
+    colorBg: string | null;
+    colorFg: string | null;
+  }[];
   triageHistory: {
     id: string;
     priority: "high" | "medium" | "low";
@@ -301,6 +321,8 @@ export async function getMessageDetail(args: {
       id: labels.id,
       name: labels.name,
       gmailLabelId: labels.gmailLabelId,
+      colorBg: labels.colorBg,
+      colorFg: labels.colorFg,
     })
     .from(messageLabels)
     .innerJoin(labels, eq(messageLabels.labelId, labels.id))

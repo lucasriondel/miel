@@ -38,6 +38,8 @@ export const labels = pgTable(
     gmailLabelId: text("gmail_label_id").notNull(),
     name: text("name").notNull(),
     type: text("type").notNull().default("user"),
+    colorBg: text("color_bg"),
+    colorFg: text("color_fg"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
