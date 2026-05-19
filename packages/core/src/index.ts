@@ -21,6 +21,25 @@ export {
 } from "./services/settings";
 export type { ModelSettings } from "./services/settings";
 export {
+  syncAccountsFromGog,
+  getAccountByEmail,
+} from "./services/accounts";
+export type { SyncedAccount } from "./services/accounts";
+export {
+  syncLabelsForAccount,
+  getLabelsForAccount,
+  getLabelsByGmailIds,
+  ensureLabel,
+} from "./services/labels";
+export type { LabelRow } from "./services/labels";
+export { fetchAndTriage, syncAll } from "./services/sync";
+export type {
+  SyncRunResult,
+  FetchAndTriageOptions,
+  SyncAllOptions,
+} from "./services/sync";
+export { parseSince } from "./util/time";
+export {
   spawnCapture,
   spawnJson,
   spawnVoid,
