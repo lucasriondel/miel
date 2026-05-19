@@ -1,11 +1,25 @@
 import { useLabels } from "../api/queries";
+import type { Label } from "../api/types";
+import { LabelListRow } from "./LabelListRow";
 import { Spinner } from "./Spinner";
+import { SystemLabelRow } from "./SystemLabelRow";
+import { UserLabelRow } from "./UserLabelRow";
+import { isSystemLabel } from "./systemLabels";
 
 interface Props {
   accountId: string | undefined;
   selectedLabelId: string | undefined;
   onSelect: (labelId: string | undefined) => void;
 }
+
+const HIDDEN_SYSTEM_LABELS = new Set([
+  "UNREAD",
+  "CHAT",
+  "YELLOW_STAR",
+]);
+
+const userLabelSort = (a: Label, b: Label) =>
+  a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
 export const LabelList = ({ accountId, selectedLabelId, onSelect }: Props) => {
   const { data, isLoading, error } = useLabels(accountId);
@@ -25,47 +39,62 @@ export const LabelList = ({ accountId, selectedLabelId, onSelect }: Props) => {
     return <p className="text-xs text-miel-muted">No labels yet.</p>;
   }
 
-  const userLabels = data.filter((l) => l.type !== "system");
-  const systemLabels = data.filter((l) => l.type === "system");
-
-  const Row = ({ id, name }: { id: string | undefined; name: string }) => {
-    const active = selectedLabelId === id || (id === undefined && !selectedLabelId);
-    return (
-      <button
-        type="button"
-        onClick={() => onSelect(id)}
-        className={`block w-full truncate rounded px-2 py-1 text-left text-sm ${
-          active
-            ? "bg-miel-accent/10 text-miel-ink"
-            : "text-miel-muted hover:bg-miel-line/40 hover:text-miel-ink"
-        }`}
-      >
-        {name}
-      </button>
-    );
-  };
+  const userLabels = data
+    .filter((l) => l.type !== "system")
+    .slice()
+    .sort(userLabelSort);
+  const systemLabels = data
+    .filter((l) => l.type === "system" && !HIDDEN_SYSTEM_LABELS.has(l.name))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="flex flex-col gap-0.5">
-      <Row id={undefined} name="All messages" />
+      <LabelListRow
+        active={!selectedLabelId}
+        onClick={() => onSelect(undefined)}
+      >
+        <span className="truncate">All messages</span>
+      </LabelListRow>
+
       {userLabels.length > 0 ? (
         <>
           <p className="mt-3 px-2 text-xs font-medium uppercase tracking-wide text-miel-muted">
             Labels
           </p>
-          {userLabels.map((l) => (
-            <Row key={l.id} id={l.id} name={l.name} />
-          ))}
+          {userLabels.map((l) => {
+            const parts = l.name.split("/");
+            const leaf = parts[parts.length - 1];
+            const depth = parts.length - 1;
+            return (
+              <UserLabelRow
+                key={l.id}
+                label={l}
+                leafName={leaf}
+                depth={depth}
+                active={selectedLabelId === l.id}
+                onSelect={() => onSelect(l.id)}
+              />
+            );
+          })}
         </>
       ) : null}
+
       {systemLabels.length > 0 ? (
         <>
           <p className="mt-3 px-2 text-xs font-medium uppercase tracking-wide text-miel-muted">
             System
           </p>
-          {systemLabels.map((l) => (
-            <Row key={l.id} id={l.id} name={l.name} />
-          ))}
+          {systemLabels
+            .filter((l) => isSystemLabel(l.name) || l.type === "system")
+            .map((l) => (
+              <SystemLabelRow
+                key={l.id}
+                label={l}
+                active={selectedLabelId === l.id}
+                onSelect={() => onSelect(l.id)}
+              />
+            ))}
         </>
       ) : null}
     </div>
