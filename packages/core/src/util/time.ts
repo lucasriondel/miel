@@ -7,5 +7,5 @@ export function parseSince(since: string): string {
       `Invalid --since value: "${since}". Expected forms like "7d", "24h", "2w".`,
     );
   }
-  return `newer_than:${trimmed.toLowerCase()}`;
+  return `newer_than:${trimmed.toLowerCase()} -in:sent`;
 }
