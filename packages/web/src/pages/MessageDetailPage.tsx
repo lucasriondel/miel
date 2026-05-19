@@ -7,6 +7,7 @@ import { MessageDetailBody } from "../features/message-detail/MessageDetailBody"
 import { MessageActions } from "../features/message-detail/MessageActions";
 import { SuggestedLabelsPanel } from "../features/message-detail/SuggestedLabelsPanel";
 import { TriageHistoryPanel } from "../features/message-detail/TriageHistoryPanel";
+import { ReplyComposer } from "../features/reply/ReplyComposer";
 
 export const MessageDetailPage = () => {
   const { accountId, gmailMessageId } = useParams();
@@ -32,6 +33,7 @@ export const MessageDetailPage = () => {
             <MessageDetailHeader message={messageQuery.data} />
             <MessageActions message={messageQuery.data} />
             <MessageDetailBody message={messageQuery.data} />
+            <ReplyComposer message={messageQuery.data} />
           </div>
           <aside className="flex flex-col gap-4">
             <SuggestedLabelsPanel message={messageQuery.data} />

@@ -62,3 +62,53 @@ export function useTrashMessage() {
     },
   });
 }
+
+export interface GenerateReplyInput extends MessageActionInput {
+  prompt: string;
+}
+
+export interface GenerateReplyResult {
+  subject: string;
+  body: string;
+  model: string;
+  runId: string;
+}
+
+export function useGenerateReply() {
+  return useMutation({
+    mutationFn: async (input: GenerateReplyInput) =>
+      apiFetch<GenerateReplyResult>({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/generate-reply`,
+        method: "POST",
+        body: { prompt: input.prompt },
+      }),
+  });
+}
+
+export interface SendReplyInput extends MessageActionInput {
+  subject: string;
+  body: string;
+}
+
+export interface SendReplyResult {
+  ok: true;
+  sentMessageId: string;
+}
+
+export function useSendReply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SendReplyInput) =>
+      apiFetch<SendReplyResult>({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/send-reply`,
+        method: "POST",
+        body: { subject: input.subject, body: input.body },
+      }),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      qc.invalidateQueries({
+        queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
+      });
+    },
+  });
+}
