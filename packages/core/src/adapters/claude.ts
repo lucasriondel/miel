@@ -31,6 +31,7 @@ interface ClaudeEnvelope {
   subtype?: string;
   is_error?: boolean;
   result?: string;
+  structured_output?: unknown;
   session_id?: string;
   uuid?: string;
   model?: string;
@@ -132,27 +133,31 @@ async function invokeClaude<T>(args: {
       cmd,
     );
   }
-  const resultStr = envelope.result;
-  if (typeof resultStr !== "string" || !resultStr.trim()) {
-    throw new ShellError(
-      "claude envelope missing result string",
-      exitCode,
-      stderr,
-      stdout,
-      cmd,
-    );
-  }
   let inner: unknown;
-  try {
-    inner = JSON.parse(resultStr);
-  } catch (err) {
-    throw new ShellError(
-      `Failed to parse claude result JSON: ${(err as Error).message}`,
-      exitCode,
-      stderr,
-      stdout,
-      cmd,
-    );
+  if (envelope.structured_output !== undefined) {
+    inner = envelope.structured_output;
+  } else {
+    const resultStr = envelope.result;
+    if (typeof resultStr !== "string" || !resultStr.trim()) {
+      throw new ShellError(
+        "claude envelope missing result string",
+        exitCode,
+        stderr,
+        stdout,
+        cmd,
+      );
+    }
+    try {
+      inner = JSON.parse(resultStr);
+    } catch (err) {
+      throw new ShellError(
+        `Failed to parse claude result JSON: ${(err as Error).message}`,
+        exitCode,
+        stderr,
+        stdout,
+        cmd,
+      );
+    }
   }
   const output = args.parser(inner);
   const runId =

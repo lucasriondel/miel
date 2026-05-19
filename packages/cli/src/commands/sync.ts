@@ -30,8 +30,7 @@ export function syncCommand(): Command {
         for (const r of results) {
           console.log(
             `  ${r.account}\tfetched=${r.fetched}\ttriaged=${r.triaged}\tnewLabelSuggestions=${r.suggestedNewLabels}\terrors=${r.errors.length}`,
-          );
-          for (const e of r.errors) {
+          );          for (const e of r.errors) {
             console.log(`    ! ${e}`);
           }
         }

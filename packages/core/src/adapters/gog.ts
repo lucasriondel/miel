@@ -52,6 +52,14 @@ function bin(): string {
   return getEnv().GOG_BIN;
 }
 
+function unwrapGetMessageResponse(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const obj = raw as Record<string, unknown>;
+  const inner = obj.message;
+  if (inner && typeof inner === "object") return inner;
+  return raw;
+}
+
 function normalizeSearchHits(
   parsed: unknown,
 ): { messageId: string; threadId: string }[] {
@@ -108,7 +116,7 @@ export function createGogAdapter(): GogAdapter {
           "--format=full",
         ],
       });
-      return GogMessage.parse(raw);
+      return GogMessage.parse(unwrapGetMessageResponse(raw));
     },
 
     async listLabels({ account }) {
