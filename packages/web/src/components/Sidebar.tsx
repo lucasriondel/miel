@@ -29,8 +29,9 @@ export const Sidebar = ({
       <div>
         <NavLink
           to="/"
-          className="text-base font-semibold tracking-tight text-miel-ink"
+          className="flex items-center gap-2 text-base font-semibold tracking-tight text-miel-ink"
         >
+          <img src="/miel.webp" alt="" className="h-6 w-6 shrink-0" />
           miel
         </NavLink>
         <p className="text-xs text-miel-muted">gmail triage</p>
