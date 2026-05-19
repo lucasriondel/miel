@@ -56,8 +56,25 @@ function unwrapGetMessageResponse(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const obj = raw as Record<string, unknown>;
   const inner = obj.message;
-  if (inner && typeof inner === "object") return inner;
-  return raw;
+  if (!inner || typeof inner !== "object") return raw;
+
+  // gog returns { body, headers: {subject,from,to,...}, message: {id, threadId, payload, ...} }
+  // Merge the outer decoded view onto the inner raw payload so both shapes are usable downstream.
+  const innerObj = inner as Record<string, unknown>;
+  const headers = (obj.headers ?? undefined) as
+    | Record<string, string>
+    | undefined;
+  const lifted: Record<string, unknown> = { ...innerObj };
+  if (typeof obj.body === "string") lifted.body = obj.body;
+  if (headers && typeof headers === "object") {
+    lifted.headers = headers;
+    if (typeof headers.subject === "string") lifted.subject = headers.subject;
+    if (typeof headers.from === "string") lifted.from = headers.from;
+    if (typeof headers.to === "string") lifted.to = headers.to;
+    if (typeof headers.cc === "string") lifted.cc = headers.cc;
+    if (typeof headers.date === "string") lifted.date = headers.date;
+  }
+  return lifted;
 }
 
 function normalizeSearchHits(

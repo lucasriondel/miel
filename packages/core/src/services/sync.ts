@@ -90,6 +90,11 @@ function normalizeMessage(
       : typeof d.to === "string"
         ? parseAddressList(d.to)
         : [];
+    // gog returns decoded text body + headers at the top level, but HTML lives
+    // only inside the raw multipart `payload`. Walk it for whichever piece is missing.
+    const payloadBodies = extractBodies(
+      raw as Extract<GogMessageT, { payload?: unknown }>,
+    );
     return {
       accountId,
       gmailMessageId: d.id,
@@ -99,8 +104,8 @@ function normalizeMessage(
       toEmails,
       subject: d.subject ?? null,
       snippet: d.snippet ?? null,
-      bodyText: d.bodyText ?? d.body ?? "",
-      bodyHtml: d.bodyHtml ?? "",
+      bodyText: d.bodyText ?? d.body ?? payloadBodies.bodyText,
+      bodyHtml: d.bodyHtml ?? payloadBodies.bodyHtml,
       internalDate: parseInternalDate(d.internalDate),
       rawHeaders: d.headers ?? {},
       labelIds: d.labelIds ?? [],
