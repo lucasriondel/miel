@@ -1,6 +1,6 @@
 import type { ListedMessage, Priority } from "../api/types";
-import { EmptyState } from "./EmptyState";
 import { MessageRow } from "./MessageRow";
+import { PrioritySectionEmpty } from "./PrioritySectionEmpty";
 import { SectionActions } from "./SectionActions";
 import { Spinner } from "./Spinner";
 
@@ -34,10 +34,7 @@ export const PrioritySection = ({ priority, messages, isLoading }: Props) => {
         </div>
       </header>
       {messages.length === 0 ? (
-        <EmptyState
-          title={`No ${priority}-priority messages`}
-          description="They'll appear here after the next sync."
-        />
+        <PrioritySectionEmpty priority={priority} />
       ) : (
         <div className="overflow-hidden rounded-md border border-miel-line bg-white">
           {messages.map((m) => (
