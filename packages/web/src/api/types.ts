@@ -26,6 +26,18 @@ export interface MessageLabel {
   colorFg: string | null;
 }
 
+export interface PendingExistingLabelSuggestion {
+  labelId: string;
+  name: string;
+  colorBg: string | null;
+  colorFg: string | null;
+}
+
+export interface PendingNewLabelSuggestion {
+  suggestionId: string;
+  name: string;
+}
+
 export interface ListedMessage {
   accountId: string;
   accountEmail: string;
@@ -42,6 +54,10 @@ export interface ListedMessage {
   priority: Priority | null;
   triageId: string | null;
   labels: MessageLabel[];
+  pendingSuggestions: {
+    existing: PendingExistingLabelSuggestion[];
+    new: PendingNewLabelSuggestion[];
+  };
 }
 
 export interface ListMessagesResponse {

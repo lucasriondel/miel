@@ -33,6 +33,15 @@ export interface ListedMessage {
     colorBg: string | null;
     colorFg: string | null;
   }[];
+  pendingSuggestions: {
+    existing: {
+      labelId: string;
+      name: string;
+      colorBg: string | null;
+      colorFg: string | null;
+    }[];
+    new: { suggestionId: string; name: string }[];
+  };
 }
 
 export interface ListMessagesArgs {
@@ -232,23 +241,116 @@ export async function listMessages(
     labelsByMsg.set(key, list);
   }
 
-  const items: ListedMessage[] = slice.map((r) => ({
-    accountId: r.accountId,
-    accountEmail: r.accountEmail,
-    gmailMessageId: r.gmailMessageId,
-    gmailThreadId: r.gmailThreadId,
-    fromEmail: r.fromEmail,
-    fromName: r.fromName,
-    toEmails: r.toEmails,
-    subject: r.subject,
-    snippet: r.snippet,
-    internalDate: r.internalDate.toISOString(),
-    isArchived: r.isArchived,
-    isTrashed: r.isTrashed,
-    priority: r.priority,
-    triageId: r.triageId,
-    labels: labelsByMsg.get(`${r.accountId}|${r.gmailMessageId}`) ?? [],
-  }));
+  const triageIds = slice
+    .map((r) => r.triageId)
+    .filter((id): id is string => Boolean(id));
+  const triageToMsg = new Map<string, { accountId: string; gmailMessageId: string }>();
+  for (const r of slice) {
+    if (r.triageId) {
+      triageToMsg.set(r.triageId, {
+        accountId: r.accountId,
+        gmailMessageId: r.gmailMessageId,
+      });
+    }
+  }
+
+  const existingSuggestionsByMsg = new Map<
+    string,
+    ListedMessage["pendingSuggestions"]["existing"]
+  >();
+  const newSuggestionsByMsg = new Map<
+    string,
+    ListedMessage["pendingSuggestions"]["new"]
+  >();
+
+  if (triageIds.length > 0) {
+    const existingSugRows = await db
+      .select({
+        triageId: triageLabelSuggestions.triageId,
+        labelId: labels.id,
+        name: labels.name,
+        colorBg: labels.colorBg,
+        colorFg: labels.colorFg,
+      })
+      .from(triageLabelSuggestions)
+      .innerJoin(labels, eq(triageLabelSuggestions.labelId, labels.id))
+      .where(
+        and(
+          eq(triageLabelSuggestions.status, "pending"),
+          sql`${triageLabelSuggestions.triageId} IN (${sql.join(
+            triageIds.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`,
+        ),
+      );
+    for (const s of existingSugRows) {
+      const msg = triageToMsg.get(s.triageId);
+      if (!msg) continue;
+      const key = `${msg.accountId}|${msg.gmailMessageId}`;
+      const alreadyApplied = (labelsByMsg.get(key) ?? []).some(
+        (l) => l.id === s.labelId,
+      );
+      if (alreadyApplied) continue;
+      const list = existingSuggestionsByMsg.get(key) ?? [];
+      list.push({
+        labelId: s.labelId,
+        name: s.name,
+        colorBg: s.colorBg,
+        colorFg: s.colorFg,
+      });
+      existingSuggestionsByMsg.set(key, list);
+    }
+
+    const newSugRows = await db
+      .select({
+        triageId: suggestedLabels.triageId,
+        suggestionId: suggestedLabels.id,
+        name: suggestedLabels.name,
+      })
+      .from(suggestedLabels)
+      .where(
+        and(
+          eq(suggestedLabels.status, "pending"),
+          sql`${suggestedLabels.triageId} IN (${sql.join(
+            triageIds.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`,
+        ),
+      );
+    for (const s of newSugRows) {
+      const msg = triageToMsg.get(s.triageId);
+      if (!msg) continue;
+      const key = `${msg.accountId}|${msg.gmailMessageId}`;
+      const list = newSuggestionsByMsg.get(key) ?? [];
+      list.push({ suggestionId: s.suggestionId, name: s.name });
+      newSuggestionsByMsg.set(key, list);
+    }
+  }
+
+  const items: ListedMessage[] = slice.map((r) => {
+    const key = `${r.accountId}|${r.gmailMessageId}`;
+    return {
+      accountId: r.accountId,
+      accountEmail: r.accountEmail,
+      gmailMessageId: r.gmailMessageId,
+      gmailThreadId: r.gmailThreadId,
+      fromEmail: r.fromEmail,
+      fromName: r.fromName,
+      toEmails: r.toEmails,
+      subject: r.subject,
+      snippet: r.snippet,
+      internalDate: r.internalDate.toISOString(),
+      isArchived: r.isArchived,
+      isTrashed: r.isTrashed,
+      priority: r.priority,
+      triageId: r.triageId,
+      labels: labelsByMsg.get(key) ?? [],
+      pendingSuggestions: {
+        existing: existingSuggestionsByMsg.get(key) ?? [],
+        new: newSuggestionsByMsg.get(key) ?? [],
+      },
+    };
+  });
 
   return { items, nextCursor };
 }

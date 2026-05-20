@@ -378,6 +378,106 @@ export function useBatchMessageAction() {
   });
 }
 
+export type ApplyLabelSuggestionInput = MessageActionInput & {
+  triageId: string;
+} & (
+    | {
+        kind: "existing";
+        labelId: string;
+        name: string;
+        colorBg: string | null;
+        colorFg: string | null;
+      }
+    | { kind: "new"; suggestionId: string }
+  );
+
+export interface ApplyLabelSuggestionResult {
+  ok: true;
+  appliedExistingLabelIds: string[];
+  createdLabels: { suggestionId: string; labelId: string; name: string }[];
+  attached: { gmailLabelId: string; name: string }[];
+}
+
+export function useApplyLabelSuggestion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ApplyLabelSuggestionInput) =>
+      apiFetch<ApplyLabelSuggestionResult>({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/apply-suggestions`,
+        method: "POST",
+        body: {
+          triageId: input.triageId,
+          acceptExistingLabelIds:
+            input.kind === "existing" ? [input.labelId] : undefined,
+          acceptNewSuggestionIds:
+            input.kind === "new" ? [input.suggestionId] : undefined,
+        },
+      }),
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ["messages"] });
+      const snapshot = snapshotMessageLists(qc);
+      qc.setQueriesData<ListMessagesResponse>(
+        { queryKey: ["messages"] },
+        (data) => {
+          if (!data) return data;
+          return {
+            ...data,
+            items: data.items.map((m) => {
+              if (!matches(m, input)) return m;
+              if (input.kind === "existing") {
+                const alreadyApplied = m.labels.some(
+                  (l) => l.id === input.labelId,
+                );
+                return {
+                  ...m,
+                  labels: alreadyApplied
+                    ? m.labels
+                    : [
+                        ...m.labels,
+                        {
+                          id: input.labelId,
+                          name: input.name,
+                          gmailLabelId: input.labelId,
+                          colorBg: input.colorBg,
+                          colorFg: input.colorFg,
+                        },
+                      ],
+                  pendingSuggestions: {
+                    ...m.pendingSuggestions,
+                    existing: m.pendingSuggestions.existing.filter(
+                      (s) => s.labelId !== input.labelId,
+                    ),
+                  },
+                };
+              }
+              return {
+                ...m,
+                pendingSuggestions: {
+                  ...m.pendingSuggestions,
+                  new: m.pendingSuggestions.new.filter(
+                    (s) => s.suggestionId !== input.suggestionId,
+                  ),
+                },
+              };
+            }),
+          };
+        },
+      );
+      return { snapshot };
+    },
+    onError: (_err, _input, context) => {
+      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
+    },
+    onSettled: (_data, _err, input) => {
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      qc.invalidateQueries({
+        queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
+      });
+      qc.invalidateQueries({ queryKey: queryKeys.labels(input.accountId) });
+    },
+  });
+}
+
 export interface CreateLabelInput {
   accountId: string;
   name: string;

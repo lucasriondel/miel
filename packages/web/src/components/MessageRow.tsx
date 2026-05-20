@@ -1,9 +1,13 @@
 import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
+import { useApplyLabelSuggestion } from "../api/mutations";
 import type { ListedMessage } from "../api/types";
 import { LabelBadge } from "./LabelBadge";
 import { MessageRowActions } from "./MessageRowActions";
+import { SuggestedLabelBadge } from "./SuggestedLabelBadge";
 import { SystemLabelBadge, isSystemLabel } from "./SystemLabelBadge";
+
+const MAX_BADGES = 5;
 
 interface Props {
   message: ListedMessage;
@@ -17,9 +21,27 @@ export const MessageRow = ({ message }: Props) => {
   const sender = message.fromName?.trim() || message.fromEmail;
   const subject = message.subject?.trim() || "(no subject)";
   const isUnread = message.labels.some((l) => l.name === "UNREAD");
-  const labels = message.labels
-    .filter((l) => l.name !== "INBOX" && l.name !== "UNREAD")
-    .slice(0, 3);
+  const appliedLabels = message.labels.filter(
+    (l) => l.name !== "INBOX" && l.name !== "UNREAD",
+  );
+  const remaining = Math.max(0, MAX_BADGES - appliedLabels.length);
+  const existingSuggestions = message.pendingSuggestions.existing.slice(
+    0,
+    remaining,
+  );
+  const newSuggestions = message.pendingSuggestions.new.slice(
+    0,
+    Math.max(0, remaining - existingSuggestions.length),
+  );
+  const visibleLabels = appliedLabels.slice(0, MAX_BADGES);
+  const hasBadges =
+    visibleLabels.length > 0 ||
+    existingSuggestions.length > 0 ||
+    newSuggestions.length > 0;
+
+  const applySuggestion = useApplyLabelSuggestion();
+  const isApplying = applySuggestion.isPending;
+  const canApply = Boolean(message.triageId);
 
   return (
     <Link
@@ -32,9 +54,9 @@ export const MessageRow = ({ message }: Props) => {
         {sender}
       </span>
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        {labels.length > 0 ? (
+        {hasBadges ? (
           <span className="flex shrink-0 items-center gap-1">
-            {labels.map((l) =>
+            {visibleLabels.map((l) =>
               isSystemLabel(l.name) ? (
                 <SystemLabelBadge key={l.id} name={l.name} />
               ) : (
@@ -46,6 +68,49 @@ export const MessageRow = ({ message }: Props) => {
                 />
               ),
             )}
+            {existingSuggestions.map((s) => (
+              <SuggestedLabelBadge
+                key={`existing:${s.labelId}`}
+                name={s.name}
+                kind="existing"
+                disabled={isApplying || !canApply}
+                onClick={
+                  canApply && message.triageId
+                    ? () =>
+                        applySuggestion.mutate({
+                          accountId: message.accountId,
+                          gmailMessageId: message.gmailMessageId,
+                          triageId: message.triageId!,
+                          kind: "existing",
+                          labelId: s.labelId,
+                          name: s.name,
+                          colorBg: s.colorBg,
+                          colorFg: s.colorFg,
+                        })
+                    : undefined
+                }
+              />
+            ))}
+            {newSuggestions.map((s) => (
+              <SuggestedLabelBadge
+                key={`new:${s.suggestionId}`}
+                name={s.name}
+                kind="new"
+                disabled={isApplying || !canApply}
+                onClick={
+                  canApply && message.triageId
+                    ? () =>
+                        applySuggestion.mutate({
+                          accountId: message.accountId,
+                          gmailMessageId: message.gmailMessageId,
+                          triageId: message.triageId!,
+                          kind: "new",
+                          suggestionId: s.suggestionId,
+                        })
+                    : undefined
+                }
+              />
+            ))}
           </span>
         ) : null}
         <span className="min-w-0 truncate">
