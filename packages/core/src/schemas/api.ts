@@ -53,6 +53,15 @@ export const SetMessageReadRequest = z.object({
 });
 export type SetMessageReadRequestT = z.infer<typeof SetMessageReadRequest>;
 
+export const BatchMessageActionRequest = z.object({
+  accountId: z.string().uuid(),
+  gmailMessageIds: z.array(z.string().min(1)).min(1).max(1000),
+  action: z.enum(["read", "archive", "trash"]),
+});
+export type BatchMessageActionRequestT = z.infer<
+  typeof BatchMessageActionRequest
+>;
+
 export const UpdateSettingsRequest = z.object({
   triageModel: z.string().min(1).optional(),
   replyModel: z.string().min(1).optional(),

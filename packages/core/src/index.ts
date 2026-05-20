@@ -45,12 +45,15 @@ export {
   archiveMessage,
   trashMessage,
   setMessageRead,
+  batchModifyMessages,
   getLatestTriageForMessage,
 } from "./services/apply";
 export type {
   ApplyLabelsResult,
   ApplySuggestionsInput,
   ApplySuggestionsResult,
+  BatchMessageAction,
+  BatchModifyMessagesResult,
   LatestTriageForMessage,
 } from "./services/apply";
 export {

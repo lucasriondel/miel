@@ -298,6 +298,80 @@ export function useSyncAccountLabels() {
   });
 }
 
+export type BatchMessageAction = "read" | "archive" | "trash";
+
+export interface BatchMessageActionInput {
+  accountId: string;
+  gmailMessageIds: string[];
+  action: BatchMessageAction;
+}
+
+export interface BatchMessageActionResult {
+  ok: true;
+  action: BatchMessageAction;
+  count: number;
+}
+
+export function useBatchMessageAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: BatchMessageActionInput) =>
+      apiFetch<BatchMessageActionResult>({
+        path: "/messages/batch",
+        method: "POST",
+        body: {
+          accountId: input.accountId,
+          gmailMessageIds: input.gmailMessageIds,
+          action: input.action,
+        },
+      }),
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ["messages"] });
+      const snapshot = snapshotMessageLists(qc);
+      const ids = new Set(input.gmailMessageIds);
+      qc.setQueriesData<ListMessagesResponse>(
+        { queryKey: ["messages"] },
+        (data) => {
+          if (!data) return data;
+          if (input.action === "archive" || input.action === "trash") {
+            return {
+              ...data,
+              items: data.items.filter(
+                (m) =>
+                  !(m.accountId === input.accountId && ids.has(m.gmailMessageId)),
+              ),
+            };
+          }
+          return {
+            ...data,
+            items: data.items.map((m) => {
+              if (m.accountId !== input.accountId) return m;
+              if (!ids.has(m.gmailMessageId)) return m;
+              if (!m.labels.some((l) => l.name === "UNREAD")) return m;
+              return {
+                ...m,
+                labels: m.labels.filter((l) => l.name !== "UNREAD"),
+              };
+            }),
+          };
+        },
+      );
+      return { snapshot };
+    },
+    onError: (_err, _input, context) => {
+      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
+    },
+    onSettled: (_data, _err, input) => {
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      for (const id of input.gmailMessageIds) {
+        qc.invalidateQueries({
+          queryKey: queryKeys.message(input.accountId, id),
+        });
+      }
+    },
+  });
+}
+
 export interface CreateLabelInput {
   accountId: string;
   name: string;

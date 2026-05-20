@@ -425,6 +425,142 @@ export async function trashMessage(args: {
   return { ok: true, threadId: row[0].gmailThreadId };
 }
 
+export type BatchMessageAction = "read" | "archive" | "trash";
+
+export interface BatchModifyMessagesResult {
+  ok: true;
+  action: BatchMessageAction;
+  count: number;
+}
+
+async function resolveAccountContext(args: {
+  accountId?: string;
+  accountEmail?: string;
+  gog?: GogAdapter;
+}): Promise<{ accountId: string; accountEmail: string; gog: GogAdapter }> {
+  const gog = args.gog ?? createGogAdapter();
+  if (args.accountEmail) {
+    const acc = await getAccountByEmail(args.accountEmail);
+    if (!acc) throw new Error(`Account not synced: ${args.accountEmail}`);
+    return { accountId: acc.id, accountEmail: acc.email, gog };
+  }
+  if (!args.accountId) {
+    throw new Error("accountEmail or accountId is required");
+  }
+  const { db } = getDb();
+  const { accounts } = await import("../db/schema");
+  const rows = await db
+    .select({ id: accounts.id, email: accounts.email })
+    .from(accounts)
+    .where(eq(accounts.id, args.accountId))
+    .limit(1);
+  if (rows.length === 0) {
+    throw new Error(`Account not found: ${args.accountId}`);
+  }
+  return { accountId: rows[0].id, accountEmail: rows[0].email, gog };
+}
+
+export async function batchModifyMessages(args: {
+  accountId?: string;
+  accountEmail?: string;
+  gmailMessageIds: string[];
+  action: BatchMessageAction;
+  gog?: GogAdapter;
+}): Promise<BatchModifyMessagesResult> {
+  debug("batchModifyMessages", {
+    action: args.action,
+    count: args.gmailMessageIds.length,
+  });
+
+  if (args.gmailMessageIds.length === 0) {
+    return { ok: true, action: args.action, count: 0 };
+  }
+
+  const ctx = await resolveAccountContext(args);
+  const { db } = getDb();
+  const { messages } = await import("../db/schema");
+
+  const addGmailLabels: string[] = [];
+  const removeGmailLabels: string[] = [];
+  if (args.action === "read") {
+    removeGmailLabels.push("UNREAD");
+  } else if (args.action === "archive") {
+    removeGmailLabels.push("INBOX");
+  } else if (args.action === "trash") {
+    addGmailLabels.push("TRASH");
+    removeGmailLabels.push("INBOX");
+  }
+
+  await ctx.gog.batchModifyLabels({
+    account: ctx.accountEmail,
+    messageIds: args.gmailMessageIds,
+    add: addGmailLabels.length ? addGmailLabels : undefined,
+    remove: removeGmailLabels.length ? removeGmailLabels : undefined,
+  });
+
+  const affectedGmailLabelIds = [...addGmailLabels, ...removeGmailLabels];
+  const labelRows = affectedGmailLabelIds.length
+    ? await db
+        .select({ id: labels.id, gmailLabelId: labels.gmailLabelId })
+        .from(labels)
+        .where(
+          and(
+            eq(labels.accountId, ctx.accountId),
+            inArray(labels.gmailLabelId, affectedGmailLabelIds),
+          ),
+        )
+    : [];
+  const labelByGmailId = new Map(labelRows.map((l) => [l.gmailLabelId, l.id]));
+
+  for (const gmailLabelId of removeGmailLabels) {
+    const labelId = labelByGmailId.get(gmailLabelId);
+    if (!labelId) continue;
+    await db
+      .delete(messageLabels)
+      .where(
+        and(
+          eq(messageLabels.accountId, ctx.accountId),
+          inArray(messageLabels.gmailMessageId, args.gmailMessageIds),
+          eq(messageLabels.labelId, labelId),
+        ),
+      );
+  }
+  for (const gmailLabelId of addGmailLabels) {
+    const labelId = labelByGmailId.get(gmailLabelId);
+    if (!labelId) continue;
+    await db
+      .insert(messageLabels)
+      .values(
+        args.gmailMessageIds.map((gmailMessageId) => ({
+          accountId: ctx.accountId,
+          gmailMessageId,
+          labelId,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  if (args.action === "archive" || args.action === "trash") {
+    const patch =
+      args.action === "archive" ? { isArchived: true } : { isTrashed: true };
+    await db
+      .update(messages)
+      .set(patch)
+      .where(
+        and(
+          eq(messages.accountId, ctx.accountId),
+          inArray(messages.gmailMessageId, args.gmailMessageIds),
+        ),
+      );
+  }
+
+  debug("batchModifyMessages done", {
+    action: args.action,
+    count: args.gmailMessageIds.length,
+  });
+  return { ok: true, action: args.action, count: args.gmailMessageIds.length };
+}
+
 export async function setMessageRead(args: {
   accountId?: string;
   accountEmail?: string;

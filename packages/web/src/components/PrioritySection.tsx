@@ -1,6 +1,7 @@
 import type { ListedMessage, Priority } from "../api/types";
 import { EmptyState } from "./EmptyState";
 import { MessageRow } from "./MessageRow";
+import { SectionActions } from "./SectionActions";
 import { Spinner } from "./Spinner";
 
 interface Props {
@@ -18,7 +19,7 @@ const labels: Record<Priority, { title: string; chip: string }> = {
 export const PrioritySection = ({ priority, messages, isLoading }: Props) => {
   const meta = labels[priority];
   return (
-    <section className="flex flex-col gap-2">
+    <section className="group/section flex flex-col gap-2">
       <header className="flex items-center gap-2">
         <span
           className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide ${meta.chip}`}
@@ -28,6 +29,9 @@ export const PrioritySection = ({ priority, messages, isLoading }: Props) => {
         <h2 className="text-sm font-semibold text-miel-ink">{meta.title}</h2>
         <span className="text-xs text-miel-muted">({messages.length})</span>
         {isLoading ? <Spinner size={12} /> : null}
+        <div className="ml-auto">
+          <SectionActions messages={messages} />
+        </div>
       </header>
       {messages.length === 0 ? (
         <EmptyState

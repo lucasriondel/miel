@@ -4,6 +4,7 @@ import {
   applyLabels,
   applySuggestions,
   archiveMessage,
+  batchModifyMessages,
   generateReply,
   getMessageDetail,
   listMessages,
@@ -32,6 +33,16 @@ messagesRoutes.get("/", async (c) => {
     cursor: q.cursor,
     includeArchived: q.includeArchived,
     includeTrashed: q.includeTrashed,
+  });
+  return c.json(result);
+});
+
+messagesRoutes.post("/batch", async (c) => {
+  const body = apiSchemas.BatchMessageActionRequest.parse(await c.req.json());
+  const result = await batchModifyMessages({
+    accountId: body.accountId,
+    gmailMessageIds: body.gmailMessageIds,
+    action: body.action,
   });
   return c.json(result);
 });
