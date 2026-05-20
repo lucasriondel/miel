@@ -30,7 +30,7 @@ import {
   parseInternalDate,
 } from "../util/gmailPayload";
 import { createDebug } from "../util/debug";
-import { parseSince } from "../util/time";
+import { buildRangeQuery, parseSince, type DateRange } from "../util/time";
 import { getAccountByEmail, syncAccountsFromGog } from "./accounts";
 import {
   getLabelsByGmailIds,
@@ -286,6 +286,7 @@ async function persistTriageResults(args: {
 export interface FetchAndTriageOptions {
   accountEmail: string;
   since?: string;
+  range?: DateRange;
   max?: number;
   gog?: GogAdapter;
   claude?: ClaudeAdapter;
@@ -298,14 +299,16 @@ export async function fetchAndTriage(
   const gog = opts.gog ?? createGogAdapter();
   const claude = opts.claude ?? createClaudeAdapter();
   const log = opts.log ?? (() => {});
-  const since = opts.since ?? "7d";
   const max = opts.max ?? DEFAULT_SEARCH_MAX;
-  const query = parseSince(since);
+  const query = opts.range
+    ? buildRangeQuery(opts.range)
+    : parseSince(opts.since ?? "7d");
   const errors: string[] = [];
 
   debug("fetchAndTriage start", {
     accountEmail: opts.accountEmail,
-    since,
+    since: opts.since,
+    range: opts.range,
     max,
     query,
   });
@@ -500,6 +503,7 @@ export async function fetchAndTriage(
 export interface SyncAllOptions {
   accountEmail?: string;
   since?: string;
+  range?: DateRange;
   max?: number;
   gog?: GogAdapter;
   claude?: ClaudeAdapter;
@@ -510,6 +514,7 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
   debug("syncAll start", {
     accountEmail: opts.accountEmail ?? "(all)",
     since: opts.since,
+    range: opts.range,
     max: opts.max,
   });
   const gog = opts.gog ?? createGogAdapter();
@@ -531,6 +536,7 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
       await fetchAndTriage({
         accountEmail: target.email,
         since: opts.since,
+        range: opts.range,
         max: opts.max,
         gog,
         claude: opts.claude,

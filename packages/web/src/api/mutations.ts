@@ -10,10 +10,16 @@ import type {
   SyncResponse,
 } from "./types";
 
+export interface SyncInput {
+  account?: string;
+  since?: string;
+  range?: { from: string; to: string };
+}
+
 export function useSync() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { account?: string; since?: string }) =>
+    mutationFn: async (input: SyncInput) =>
       apiFetch<SyncResponse>({
         path: "/sync",
         method: "POST",

@@ -24,6 +24,8 @@ messagesRoutes.get("/", async (c) => {
     cursor: c.req.query("cursor"),
     includeArchived: c.req.query("includeArchived"),
     includeTrashed: c.req.query("includeTrashed"),
+    internalDateFrom: c.req.query("internalDateFrom"),
+    internalDateTo: c.req.query("internalDateTo"),
   });
   const result = await listMessages({
     accountId: q.account,
@@ -33,6 +35,8 @@ messagesRoutes.get("/", async (c) => {
     cursor: q.cursor,
     includeArchived: q.includeArchived,
     includeTrashed: q.includeTrashed,
+    internalDateFrom: q.internalDateFrom,
+    internalDateTo: q.internalDateTo,
   });
   return c.json(result);
 });

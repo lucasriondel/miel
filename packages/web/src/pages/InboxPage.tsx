@@ -7,11 +7,14 @@ import type { ListedMessage, Priority } from "../api/types";
 import type { LayoutContext } from "../App";
 
 export const InboxPage = () => {
-  const { selectedAccountId, selectedLabelId } = useOutletContext<LayoutContext>();
+  const { selectedAccountId, selectedLabelId, weekStartIso, weekEndIso } =
+    useOutletContext<LayoutContext>();
   const { data, isLoading, error } = useMessages({
     accountId: selectedAccountId,
     labelId: selectedLabelId,
     limit: 100,
+    internalDateFrom: weekStartIso,
+    internalDateTo: weekEndIso,
   });
 
   if (!selectedAccountId) {
@@ -44,8 +47,8 @@ export const InboxPage = () => {
   if (items.length === 0) {
     return (
       <EmptyState
-        title="No messages yet"
-        description="Click Sync in the sidebar to fetch and triage recent messages."
+        title="No messages this week"
+        description="Navigate to another week or run Sync to fetch messages for this range."
       />
     );
   }

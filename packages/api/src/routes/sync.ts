@@ -9,6 +9,7 @@ syncRoutes.post("/", async (c) => {
   const runs = await syncAll({
     accountEmail: body.account,
     since: body.since,
+    range: body.range,
     max: body.max,
   });
   return c.json({ runs });

@@ -48,6 +48,8 @@ export interface ListMessagesParams {
   labelId?: string;
   limit?: number;
   cursor?: string;
+  internalDateFrom?: string;
+  internalDateTo?: string;
 }
 
 export function useMessages(params: ListMessagesParams) {
@@ -63,6 +65,8 @@ export function useMessages(params: ListMessagesParams) {
           label: params.labelId,
           limit: params.limit,
           cursor: params.cursor,
+          internalDateFrom: params.internalDateFrom,
+          internalDateTo: params.internalDateTo,
         },
       }),
   });

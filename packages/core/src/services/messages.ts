@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import {
   accounts,
@@ -43,6 +43,8 @@ export interface ListMessagesArgs {
   cursor?: string;
   includeArchived?: boolean;
   includeTrashed?: boolean;
+  internalDateFrom?: string;
+  internalDateTo?: string;
 }
 
 export interface ListMessagesResult {
@@ -96,7 +98,7 @@ export async function listMessages(
       ),
   );
 
-  const conditions = [] as ReturnType<typeof eq>[];
+  const conditions: ReturnType<typeof eq>[] = [];
   if (args.accountId) {
     conditions.push(eq(messages.accountId, args.accountId));
   }
@@ -110,12 +112,26 @@ export async function listMessages(
     const decoded = decodeCursor(args.cursor);
     if (decoded) {
       conditions.push(
-        sql`(${messages.internalDate}, ${messages.gmailMessageId}) < (${new Date(decoded.internalDate)}, ${decoded.gmailMessageId})`,
+        sql`(${messages.internalDate}, ${messages.gmailMessageId}) < (${new Date(decoded.internalDate)}, ${decoded.gmailMessageId})` as ReturnType<typeof eq>,
       );
     }
   }
   if (args.priority) {
     conditions.push(eq(latestTriagePerMsg.priority, args.priority));
+  }
+  if (args.internalDateFrom) {
+    conditions.push(
+      gte(messages.internalDate, new Date(args.internalDateFrom)) as ReturnType<
+        typeof eq
+      >,
+    );
+  }
+  if (args.internalDateTo) {
+    conditions.push(
+      lt(messages.internalDate, new Date(args.internalDateTo)) as ReturnType<
+        typeof eq
+      >,
+    );
   }
 
   let query = db

@@ -1,10 +1,22 @@
 import { z } from "zod";
 
-export const SyncRequest = z.object({
-  account: z.string().email().optional(),
-  since: z.string().min(1).optional(),
-  max: z.number().int().positive().max(1000).optional(),
+export const DateRange = z.object({
+  from: z.string().datetime(),
+  to: z.string().datetime(),
 });
+export type DateRangeT = z.infer<typeof DateRange>;
+
+export const SyncRequest = z
+  .object({
+    account: z.string().email().optional(),
+    since: z.string().min(1).optional(),
+    range: DateRange.optional(),
+    max: z.number().int().positive().max(1000).optional(),
+  })
+  .refine((v) => !(v.since && v.range), {
+    message: "Provide either `since` or `range`, not both.",
+    path: ["range"],
+  });
 export type SyncRequestT = z.infer<typeof SyncRequest>;
 
 export const CreateLabelRequest = z.object({
@@ -21,6 +33,8 @@ export const ListMessagesQuery = z.object({
   cursor: z.string().optional(),
   includeArchived: z.coerce.boolean().default(false),
   includeTrashed: z.coerce.boolean().default(false),
+  internalDateFrom: z.string().datetime().optional(),
+  internalDateTo: z.string().datetime().optional(),
 });
 export type ListMessagesQueryT = z.infer<typeof ListMessagesQuery>;
 
