@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import type { ListedMessage } from "../api/types";
 import { LabelBadge } from "./LabelBadge";
+import { MessageRowActions } from "./MessageRowActions";
 import { SystemLabelBadge, isSystemLabel } from "./SystemLabelBadge";
 
 interface Props {
@@ -23,7 +24,7 @@ export const MessageRow = ({ message }: Props) => {
   return (
     <Link
       to={`/messages/${message.accountId}/${message.gmailMessageId}`}
-      className="group flex items-center gap-3 border-b border-miel-line bg-white px-3 py-1.5 text-sm transition-colors last:border-b-0 hover:bg-miel-bg"
+      className="group relative flex items-center gap-3 border-b border-miel-line bg-white px-3 py-1.5 text-sm transition-colors last:border-b-0 hover:bg-miel-bg"
     >
       <span
         className={`w-44 shrink-0 truncate text-miel-ink ${isUnread ? "font-semibold" : "font-normal"}`}
@@ -57,6 +58,11 @@ export const MessageRow = ({ message }: Props) => {
         </span>
       </div>
       <span className="shrink-0 text-xs text-miel-muted">{relative}</span>
+      <MessageRowActions
+        accountId={message.accountId}
+        gmailMessageId={message.gmailMessageId}
+        isUnread={isUnread}
+      />
     </Link>
   );
 };

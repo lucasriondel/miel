@@ -48,6 +48,11 @@ export const SendReplyRequest = z.object({
 });
 export type SendReplyRequestT = z.infer<typeof SendReplyRequest>;
 
+export const SetMessageReadRequest = z.object({
+  read: z.boolean(),
+});
+export type SetMessageReadRequestT = z.infer<typeof SetMessageReadRequest>;
+
 export const UpdateSettingsRequest = z.object({
   triageModel: z.string().min(1).optional(),
   replyModel: z.string().min(1).optional(),

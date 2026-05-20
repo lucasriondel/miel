@@ -44,6 +44,7 @@ export {
   applySuggestions,
   archiveMessage,
   trashMessage,
+  setMessageRead,
   getLatestTriageForMessage,
 } from "./services/apply";
 export type {

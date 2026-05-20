@@ -425,6 +425,66 @@ export async function trashMessage(args: {
   return { ok: true, threadId: row[0].gmailThreadId };
 }
 
+export async function setMessageRead(args: {
+  accountId?: string;
+  accountEmail?: string;
+  gmailMessageId: string;
+  read: boolean;
+  gog?: GogAdapter;
+}): Promise<{ ok: true; read: boolean }> {
+  debug("setMessageRead", {
+    gmailMessageId: args.gmailMessageId,
+    read: args.read,
+  });
+  const ctx = await resolveContext(args);
+  const { db } = getDb();
+
+  const unreadRow = await db
+    .select({ id: labels.id })
+    .from(labels)
+    .where(
+      and(eq(labels.accountId, ctx.accountId), eq(labels.gmailLabelId, "UNREAD")),
+    )
+    .limit(1);
+
+  await ctx.gog.batchModifyLabels({
+    account: ctx.accountEmail,
+    messageIds: [ctx.gmailMessageId],
+    add: args.read ? undefined : ["UNREAD"],
+    remove: args.read ? ["UNREAD"] : undefined,
+  });
+
+  if (unreadRow.length > 0) {
+    const unreadLabelId = unreadRow[0].id;
+    if (args.read) {
+      await db
+        .delete(messageLabels)
+        .where(
+          and(
+            eq(messageLabels.accountId, ctx.accountId),
+            eq(messageLabels.gmailMessageId, ctx.gmailMessageId),
+            eq(messageLabels.labelId, unreadLabelId),
+          ),
+        );
+    } else {
+      await db
+        .insert(messageLabels)
+        .values({
+          accountId: ctx.accountId,
+          gmailMessageId: ctx.gmailMessageId,
+          labelId: unreadLabelId,
+        })
+        .onConflictDoNothing();
+    }
+  }
+
+  debug("setMessageRead done", {
+    gmailMessageId: ctx.gmailMessageId,
+    read: args.read,
+  });
+  return { ok: true, read: args.read };
+}
+
 export interface LatestTriageForMessage {
   triageId: string;
   priority: "high" | "medium" | "low";

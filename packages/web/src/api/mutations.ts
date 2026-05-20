@@ -1,7 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { queryKeys } from "./queries";
-import type { Account, Label, ModelSettings, SyncResponse } from "./types";
+import type {
+  Account,
+  Label,
+  ListMessagesResponse,
+  ListedMessage,
+  ModelSettings,
+  SyncResponse,
+} from "./types";
 
 export function useSync() {
   const qc = useQueryClient();
@@ -29,6 +36,48 @@ export interface MessageActionInput {
   gmailMessageId: string;
 }
 
+type MessagesSnapshot = Array<
+  [readonly unknown[], ListMessagesResponse | undefined]
+>;
+
+function snapshotMessageLists(
+  qc: ReturnType<typeof useQueryClient>,
+): MessagesSnapshot {
+  return qc.getQueriesData<ListMessagesResponse>({ queryKey: ["messages"] });
+}
+
+function matches(m: ListedMessage, input: MessageActionInput): boolean {
+  return (
+    m.accountId === input.accountId &&
+    m.gmailMessageId === input.gmailMessageId
+  );
+}
+
+function removeFromMessageLists(
+  qc: ReturnType<typeof useQueryClient>,
+  input: MessageActionInput,
+) {
+  qc.setQueriesData<ListMessagesResponse>(
+    { queryKey: ["messages"] },
+    (data) => {
+      if (!data) return data;
+      return {
+        ...data,
+        items: data.items.filter((m) => !matches(m, input)),
+      };
+    },
+  );
+}
+
+function restoreMessageLists(
+  qc: ReturnType<typeof useQueryClient>,
+  snapshot: MessagesSnapshot,
+) {
+  for (const [key, data] of snapshot) {
+    qc.setQueryData(key, data);
+  }
+}
+
 export function useArchiveMessage() {
   const qc = useQueryClient();
   return useMutation({
@@ -37,7 +86,16 @@ export function useArchiveMessage() {
         path: `/messages/${input.accountId}/${input.gmailMessageId}/archive`,
         method: "POST",
       }),
-    onSuccess: (_data, input) => {
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ["messages"] });
+      const snapshot = snapshotMessageLists(qc);
+      removeFromMessageLists(qc, input);
+      return { snapshot };
+    },
+    onError: (_err, _input, context) => {
+      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
+    },
+    onSettled: (_data, _err, input) => {
       qc.invalidateQueries({ queryKey: ["messages"] });
       qc.invalidateQueries({
         queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
@@ -54,7 +112,82 @@ export function useTrashMessage() {
         path: `/messages/${input.accountId}/${input.gmailMessageId}`,
         method: "DELETE",
       }),
-    onSuccess: (_data, input) => {
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ["messages"] });
+      const snapshot = snapshotMessageLists(qc);
+      removeFromMessageLists(qc, input);
+      return { snapshot };
+    },
+    onError: (_err, _input, context) => {
+      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
+    },
+    onSettled: (_data, _err, input) => {
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      qc.invalidateQueries({
+        queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
+      });
+    },
+  });
+}
+
+export interface SetMessageReadInput extends MessageActionInput {
+  read: boolean;
+}
+
+export interface SetMessageReadResult {
+  ok: true;
+  read: boolean;
+}
+
+const UNREAD_LABEL: ListedMessage["labels"][number] = {
+  id: "__unread__",
+  name: "UNREAD",
+  gmailLabelId: "UNREAD",
+  colorBg: null,
+  colorFg: null,
+};
+
+export function useSetMessageRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SetMessageReadInput) =>
+      apiFetch<SetMessageReadResult>({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/read`,
+        method: "POST",
+        body: { read: input.read },
+      }),
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ["messages"] });
+      const snapshot = snapshotMessageLists(qc);
+      qc.setQueriesData<ListMessagesResponse>(
+        { queryKey: ["messages"] },
+        (data) => {
+          if (!data) return data;
+          return {
+            ...data,
+            items: data.items.map((m) => {
+              if (!matches(m, input)) return m;
+              const hasUnread = m.labels.some((l) => l.name === "UNREAD");
+              if (input.read && hasUnread) {
+                return {
+                  ...m,
+                  labels: m.labels.filter((l) => l.name !== "UNREAD"),
+                };
+              }
+              if (!input.read && !hasUnread) {
+                return { ...m, labels: [UNREAD_LABEL, ...m.labels] };
+              }
+              return m;
+            }),
+          };
+        },
+      );
+      return { snapshot };
+    },
+    onError: (_err, _input, context) => {
+      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
+    },
+    onSettled: (_data, _err, input) => {
       qc.invalidateQueries({ queryKey: ["messages"] });
       qc.invalidateQueries({
         queryKey: queryKeys.message(input.accountId, input.gmailMessageId),

@@ -8,6 +8,7 @@ import {
   getMessageDetail,
   listMessages,
   sendReply,
+  setMessageRead,
   trashMessage,
 } from "@miel/core";
 
@@ -79,6 +80,18 @@ messagesRoutes.post("/:accountId/:gmailMessageId/archive", async (c) => {
   const accountId = c.req.param("accountId");
   const gmailMessageId = c.req.param("gmailMessageId");
   const result = await archiveMessage({ accountId, gmailMessageId });
+  return c.json(result);
+});
+
+messagesRoutes.post("/:accountId/:gmailMessageId/read", async (c) => {
+  const accountId = c.req.param("accountId");
+  const gmailMessageId = c.req.param("gmailMessageId");
+  const body = apiSchemas.SetMessageReadRequest.parse(await c.req.json());
+  const result = await setMessageRead({
+    accountId,
+    gmailMessageId,
+    read: body.read,
+  });
   return c.json(result);
 });
 
