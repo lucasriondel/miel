@@ -30,24 +30,48 @@ export const AccountPicker = ({ value, onChange }: Props) => {
   }
 
   return (
-    <label className="block">
-      <span className="block text-xs font-medium uppercase tracking-wide text-miel-muted">
+    <fieldset className="block">
+      <legend className="block text-xs font-medium uppercase tracking-wide text-miel-muted">
         Account
-      </span>
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm"
-      >
-        <option value="" disabled>
-          Select an account
-        </option>
+      </legend>
+      <div role="radiogroup" className="mt-1 flex flex-col gap-1">
         {data.map((a) => (
-          <option key={a.id} value={a.id}>
-            {a.email}
-          </option>
+          <AccountOption
+            key={a.id}
+            email={a.email}
+            checked={value === a.id}
+            onSelect={() => onChange(a.id)}
+          />
         ))}
-      </select>
+      </div>
+    </fieldset>
+  );
+};
+
+interface AccountOptionProps {
+  email: string;
+  checked: boolean;
+  onSelect: () => void;
+}
+
+const AccountOption = ({ email, checked, onSelect }: AccountOptionProps) => {
+  return (
+    <label
+      className={`flex cursor-pointer items-center rounded px-2 py-1.5 text-sm transition-colors ${
+        checked
+          ? "bg-miel-accent/15 text-miel-ink"
+          : "text-miel-muted hover:bg-miel-line/40 hover:text-miel-ink"
+      }`}
+    >
+      <input
+        type="radio"
+        name="account-picker"
+        value={email}
+        checked={checked}
+        onChange={onSelect}
+        className="sr-only"
+      />
+      <span className="truncate">{email}</span>
     </label>
   );
 };
