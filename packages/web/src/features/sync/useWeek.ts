@@ -46,15 +46,17 @@ function buildWeek(start: Date): Week {
 export function useWeek(): {
   week: Week;
   isCurrentWeek: boolean;
+  canGoNext: boolean;
   goPrev: () => void;
   goNext: () => void;
   goToday: () => void;
 } {
   const [params, setParams] = useSearchParams();
+  const currentWeekStart = useMemo(() => startOfWeek(new Date()), []);
   const week = useMemo<Week>(() => {
     const fromUrl = parseKey(params.get("week"));
-    return buildWeek(fromUrl ?? startOfWeek(new Date()));
-  }, [params]);
+    return buildWeek(fromUrl ?? currentWeekStart);
+  }, [params, currentWeekStart]);
 
   const setWeek = useCallback(
     (start: Date) => {
@@ -65,10 +67,15 @@ export function useWeek(): {
     [params, setParams],
   );
 
-  const goPrev = useCallback(() => setWeek(addDays(week.start, -7)), [setWeek, week.start]);
-  const goNext = useCallback(() => setWeek(addDays(week.start, 7)), [setWeek, week.start]);
-  const goToday = useCallback(() => setWeek(startOfWeek(new Date())), [setWeek]);
+  const isCurrentWeek = week.key === toKey(currentWeekStart);
+  const canGoNext = week.start < currentWeekStart;
 
-  const isCurrentWeek = week.key === toKey(startOfWeek(new Date()));
-  return { week, isCurrentWeek, goPrev, goNext, goToday };
+  const goPrev = useCallback(() => setWeek(addDays(week.start, -7)), [setWeek, week.start]);
+  const goNext = useCallback(() => {
+    if (!canGoNext) return;
+    setWeek(addDays(week.start, 7));
+  }, [setWeek, week.start, canGoNext]);
+  const goToday = useCallback(() => setWeek(currentWeekStart), [setWeek, currentWeekStart]);
+
+  return { week, isCurrentWeek, canGoNext, goPrev, goNext, goToday };
 }

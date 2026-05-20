@@ -4,6 +4,7 @@ import type { Week } from "./useWeek";
 interface Props {
   week: Week;
   isCurrentWeek: boolean;
+  canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -26,7 +27,7 @@ function formatRange(week: Week): string {
   return sameYear ? `${left} – ${right}, ${year}` : `${left}, ${YEAR_FMT.format(start)} – ${right}, ${year}`;
 }
 
-export const WeekNav = ({ week, isCurrentWeek, onPrev, onNext, onToday }: Props) => {
+export const WeekNav = ({ week, isCurrentWeek, canGoNext, onPrev, onNext, onToday }: Props) => {
   return (
     <div className="flex items-center gap-2">
       <Button variant="ghost" onClick={onPrev} aria-label="Previous week">
@@ -35,7 +36,12 @@ export const WeekNav = ({ week, isCurrentWeek, onPrev, onNext, onToday }: Props)
       <div className="min-w-[14rem] text-center text-sm font-medium text-miel-ink">
         {formatRange(week)}
       </div>
-      <Button variant="ghost" onClick={onNext} aria-label="Next week">
+      <Button
+        variant="ghost"
+        onClick={onNext}
+        disabled={!canGoNext}
+        aria-label="Next week"
+      >
         ›
       </Button>
       <Button

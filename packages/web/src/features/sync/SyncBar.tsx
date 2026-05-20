@@ -5,6 +5,7 @@ import type { Week } from "./useWeek";
 interface Props {
   week: Week;
   isCurrentWeek: boolean;
+  canGoNext: boolean;
   onPrevWeek: () => void;
   onNextWeek: () => void;
   onToday: () => void;
@@ -16,6 +17,7 @@ interface Props {
 export const SyncBar = ({
   week,
   isCurrentWeek,
+  canGoNext,
   onPrevWeek,
   onNextWeek,
   onToday,
@@ -28,6 +30,7 @@ export const SyncBar = ({
       <WeekNav
         week={week}
         isCurrentWeek={isCurrentWeek}
+        canGoNext={canGoNext}
         onPrev={onPrevWeek}
         onNext={onNextWeek}
         onToday={onToday}

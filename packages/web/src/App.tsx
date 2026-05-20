@@ -23,7 +23,7 @@ export const App = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>();
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ kind: "idle" });
-  const { week, isCurrentWeek, goPrev, goNext, goToday } = useWeek();
+  const { week, isCurrentWeek, canGoNext, goPrev, goNext, goToday } = useWeek();
 
   useEffect(() => {
     if (!selectedAccountId && accounts.data && accounts.data.length > 0) {
@@ -58,6 +58,7 @@ export const App = () => {
         <SyncBar
           week={week}
           isCurrentWeek={isCurrentWeek}
+          canGoNext={canGoNext}
           onPrevWeek={goPrev}
           onNextWeek={goNext}
           onToday={goToday}
