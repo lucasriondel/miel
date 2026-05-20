@@ -26,7 +26,7 @@ export const SyncBar = ({
   onSyncError,
 }: Props) => {
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-miel-line bg-miel-panel px-3 py-2">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-miel-line bg-miel-panel px-6 py-3">
       <WeekNav
         week={week}
         isCurrentWeek={isCurrentWeek}

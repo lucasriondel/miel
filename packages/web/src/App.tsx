@@ -54,7 +54,7 @@ export const App = () => {
         selectedLabelId={selectedLabelId}
         onSelectLabel={(id) => setSelectedLabelId(id)}
       />
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="flex flex-1 flex-col overflow-hidden">
         <SyncBar
           week={week}
           isCurrentWeek={isCurrentWeek}
@@ -73,11 +73,13 @@ export const App = () => {
           }
           onSyncError={(message) => setSyncStatus({ kind: "error", message })}
         />
-        <SyncStatusBanner
-          status={syncStatus}
-          onDismiss={() => setSyncStatus({ kind: "idle" })}
-        />
-        <Outlet context={outletContext} />
+        <div className="flex-1 overflow-y-auto px-6 pb-6 pt-4">
+          <SyncStatusBanner
+            status={syncStatus}
+            onDismiss={() => setSyncStatus({ kind: "idle" })}
+          />
+          <Outlet context={outletContext} />
+        </div>
       </main>
     </div>
   );
