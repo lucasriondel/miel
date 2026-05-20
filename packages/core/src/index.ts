@@ -8,6 +8,7 @@ export * as gmailSchemas from "./schemas/gmail";
 export * as triageSchemas from "./schemas/triage";
 export * as replySchemas from "./schemas/reply";
 export * as apiSchemas from "./schemas/api";
+export * as filterSuggestSchemas from "./schemas/filterSuggest";
 export { createGogAdapter } from "./adapters/gog";
 export type { GogAdapter, SearchHit, SendResult } from "./adapters/gog";
 export { createClaudeAdapter } from "./adapters/claude";
@@ -33,6 +34,20 @@ export {
   ensureLabel,
 } from "./services/labels";
 export type { LabelRow } from "./services/labels";
+export {
+  syncFiltersForAccount,
+  listFiltersForAccount,
+  listAllFilters,
+  listSuggestedFilters,
+  suggestFiltersForBatch,
+  acceptSuggestedFilter,
+  dismissSuggestedFilter,
+} from "./services/filters";
+export type {
+  GmailFilterRow,
+  SuggestedFilterRow,
+  SuggestedFilterWithAccount,
+} from "./services/filters";
 export { fetchAndTriage, syncAll } from "./services/sync";
 export type {
   SyncRunResult,

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import type {
   Account,
+  FiltersResponse,
   Label,
   ListMessagesResponse,
   MessageDetail,
@@ -17,6 +18,8 @@ export const queryKeys = {
   message: (accountId: string, gmailMessageId: string) =>
     ["messages", accountId, gmailMessageId] as const,
   settings: ["settings"] as const,
+  filters: (accountId: string | undefined) =>
+    ["filters", accountId ?? "_all"] as const,
 };
 
 export function useAccounts() {
@@ -90,5 +93,16 @@ export function useSettings() {
   return useQuery({
     queryKey: queryKeys.settings,
     queryFn: async () => apiFetch<ModelSettings>({ path: "/settings" }),
+  });
+}
+
+export function useFilters(accountId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.filters(accountId),
+    queryFn: async () =>
+      apiFetch<FiltersResponse>({
+        path: "/filters",
+        query: { accountId: accountId ?? undefined },
+      }),
   });
 }

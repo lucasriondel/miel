@@ -10,6 +10,11 @@ import {
   type TriageInputT,
   type TriageOutputT,
 } from "../schemas/triage";
+import {
+  FilterSuggestOutput,
+  type FilterSuggestInputT,
+  type FilterSuggestOutputT,
+} from "../schemas/filterSuggest";
 import { getModelSettings } from "../services/settings";
 import { createDebug } from "../util/debug";
 import { spawnCapture, ShellError } from "./shell";
@@ -27,6 +32,9 @@ export interface ClaudeAdapter {
   generateReply(
     input: ReplyGenInputT,
   ): Promise<ClaudeRunResult<ReplyGenOutputT>>;
+  runFilterSuggest(
+    input: FilterSuggestInputT,
+  ): Promise<ClaudeRunResult<FilterSuggestOutputT>>;
 }
 
 interface ClaudeEnvelope {
@@ -54,6 +62,27 @@ function buildTriagePrompt(input: TriageInputT): string {
     "- applyExistingLabels: zero or more names drawn EXACTLY from the existing labels list above (case-sensitive).",
     "- suggestNewLabels: propose new labels only when no existing label fits and the theme is recurring. Keep names short (<=40 chars). Reasoning is one sentence.",
     "- reasoning: one or two sentences explaining the priority choice.",
+    "",
+    "Messages JSON:",
+    JSON.stringify(input.messages),
+  ].join("\n");
+}
+
+function buildFilterSuggestPrompt(input: FilterSuggestInputT): string {
+  return [
+    "You design Gmail filters. Given a batch of recently fetched messages, propose Gmail filters that would auto-apply an existing label to similar future messages. Return strict JSON matching the schema.",
+    "",
+    `Account: ${input.account}`,
+    `Existing labels (verbatim names): ${JSON.stringify(input.existingLabels)}`,
+    `Existing filters (do NOT duplicate): ${JSON.stringify(input.existingFilters)}`,
+    "",
+    "Rules:",
+    "- Only suggest a filter when at least two messages share a recurring sender domain, sender address, or distinctive subject pattern that is well-handled by exactly one existing label.",
+    "- addLabelName MUST be drawn EXACTLY from the existing labels list (case-sensitive). Never invent a new label here.",
+    "- Prefer the narrowest precise criterion. If sender is the strong signal, use criteriaFrom (an address or @domain.tld). Use criteriaSubject only for subject patterns. Use criteriaQuery only when sender/subject alone do not capture the pattern.",
+    "- Never duplicate one of the existing filters above.",
+    "- reasoning: one short sentence citing the pattern you saw.",
+    "- If nothing meets the bar, return an empty suggestions array.",
     "",
     "Messages JSON:",
     JSON.stringify(input.messages),
@@ -214,6 +243,30 @@ export function createClaudeAdapter(): ClaudeAdapter {
       debug("runTriage done", {
         account: input.account,
         results: result.output.results.length,
+        runId: result.runId,
+      });
+      return result;
+    },
+    async runFilterSuggest(input) {
+      debug("runFilterSuggest", {
+        account: input.account,
+        messages: input.messages.length,
+        existingFilters: input.existingFilters.length,
+      });
+      const { triageModel } = await getModelSettings();
+      const jsonSchema = zodToJsonSchema(FilterSuggestOutput, {
+        target: "jsonSchema7",
+      });
+      const result = await invokeClaude({
+        prompt: buildFilterSuggestPrompt(input),
+        model: triageModel,
+        schema: jsonSchema,
+        parser: (raw) => FilterSuggestOutput.parse(raw),
+        kind: "filterSuggest",
+      });
+      debug("runFilterSuggest done", {
+        account: input.account,
+        suggestions: result.output.suggestions.length,
         runId: result.runId,
       });
       return result;

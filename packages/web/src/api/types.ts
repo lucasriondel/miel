@@ -108,7 +108,51 @@ export interface SyncRunResult {
   fetched: number;
   triaged: number;
   suggestedNewLabels: number;
+  filtersSynced: number;
+  suggestedFilters: number;
   errors: string[];
+}
+
+export interface GmailFilter {
+  id: string;
+  accountId: string;
+  gmailFilterId: string;
+  criteria: {
+    from?: string;
+    to?: string;
+    subject?: string;
+    query?: string;
+    negatedQuery?: string;
+    hasAttachment?: boolean;
+    excludeChats?: boolean;
+    [k: string]: unknown;
+  };
+  action: {
+    addLabelIds?: string[];
+    removeLabelIds?: string[];
+    forward?: string;
+    [k: string]: unknown;
+  };
+  syncedAt: string;
+}
+
+export interface SuggestedFilter {
+  id: string;
+  accountId: string;
+  accountEmail: string;
+  criteriaFrom: string | null;
+  criteriaSubject: string | null;
+  criteriaQuery: string | null;
+  addLabelId: string | null;
+  addLabelName: string;
+  reasoning: string | null;
+  status: "pending" | "accepted" | "dismissed";
+  createdAt: string;
+}
+
+export interface FiltersResponse {
+  filters: GmailFilter[];
+  suggestions: SuggestedFilter[];
 }
 
 export interface SyncResponse {

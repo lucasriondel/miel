@@ -120,6 +120,42 @@ export type GogMessageT = z.infer<typeof GogMessage>;
 
 export const GogCreateLabelResponse = GogLabel;
 
+export const GogFilterCriteria = z
+  .object({
+    from: z.string().optional(),
+    to: z.string().optional(),
+    subject: z.string().optional(),
+    query: z.string().optional(),
+    negatedQuery: z.string().optional(),
+    hasAttachment: z.boolean().optional(),
+    excludeChats: z.boolean().optional(),
+    size: z.number().optional(),
+    sizeComparison: z.string().optional(),
+  })
+  .passthrough();
+export type GogFilterCriteriaT = z.infer<typeof GogFilterCriteria>;
+
+export const GogFilterAction = z
+  .object({
+    addLabelIds: z.array(z.string()).optional(),
+    removeLabelIds: z.array(z.string()).optional(),
+    forward: z.string().optional(),
+  })
+  .passthrough();
+export type GogFilterActionT = z.infer<typeof GogFilterAction>;
+
+export const GogFilter = z.object({
+  id: z.string(),
+  criteria: GogFilterCriteria.optional().default({}),
+  action: GogFilterAction.optional().default({}),
+});
+export type GogFilterT = z.infer<typeof GogFilter>;
+
+export const GogFilterListResponse = z.union([
+  z.object({ filters: z.array(GogFilter).optional() }),
+  z.array(GogFilter),
+]);
+
 export const GogSendResponse = z
   .object({
     id: z.string().optional(),

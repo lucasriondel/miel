@@ -2,11 +2,14 @@ import { getEnv } from "../env";
 import {
   GogAuthList,
   GogCreateLabelResponse,
+  GogFilter,
+  GogFilterListResponse,
   GogLabelListResponse,
   GogMessage,
   GogSearchResponse,
   GogSendResponse,
   type GogAccountT,
+  type GogFilterT,
   type GogLabelT,
   type GogMessageT,
 } from "../schemas/gmail";
@@ -49,6 +52,15 @@ export interface GogAdapter {
     body: string;
     replyToMessageId: string;
   }): Promise<SendResult>;
+  listFilters(o: { account: string }): Promise<GogFilterT[]>;
+  createFilter(o: {
+    account: string;
+    from?: string;
+    to?: string;
+    subject?: string;
+    query?: string;
+    addLabel?: string;
+  }): Promise<GogFilterT>;
 }
 
 function bin(): string {
@@ -271,6 +283,48 @@ export function createGogAdapter(): GogAdapter {
       const messageId = parsed.messageId ?? parsed.id ?? "";
       debug("sendReply done", { account, sentMessageId: messageId });
       return { messageId };
+    },
+
+    async listFilters({ account }) {
+      debug("listFilters", { account });
+      const raw = await spawnJson({
+        cmd: [
+          bin(),
+          "--account",
+          account,
+          "--json",
+          "gmail",
+          "filters",
+          "list",
+        ],
+      });
+      const parsed = GogFilterListResponse.parse(raw);
+      const list = Array.isArray(parsed) ? parsed : (parsed.filters ?? []);
+      debug("listFilters done", { account, count: list.length });
+      return list;
+    },
+
+    async createFilter({ account, from, to, subject, query, addLabel }) {
+      debug("createFilter", { account, from, to, subject, query, addLabel });
+      const cmd = [
+        bin(),
+        "--account",
+        account,
+        "--json",
+        "--force",
+        "gmail",
+        "filters",
+        "create",
+      ];
+      if (from) cmd.push(`--from=${from}`);
+      if (to) cmd.push(`--to=${to}`);
+      if (subject) cmd.push(`--subject=${subject}`);
+      if (query) cmd.push(`--query=${query}`);
+      if (addLabel) cmd.push(`--add-label=${addLabel}`);
+      const raw = await spawnJson({ cmd });
+      const parsed = GogFilter.parse(raw);
+      debug("createFilter done", { account, id: parsed.id });
+      return parsed;
     },
   };
 }

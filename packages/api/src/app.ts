@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { bearerAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/error";
 import { accountsRoutes } from "./routes/accounts";
+import { filtersRoutes } from "./routes/filters";
 import { labelsRoutes } from "./routes/labels";
 import { messagesRoutes } from "./routes/messages";
 import { syncRoutes } from "./routes/sync";
@@ -28,6 +29,7 @@ export function createApp(opts: { webOrigin?: string } = {}) {
   app.route("/accounts", accountsRoutes);
   app.route("/labels", labelsRoutes);
   app.route("/messages", messagesRoutes);
+  app.route("/filters", filtersRoutes);
   app.route("/sync", syncRoutes);
   app.route("/settings", settingsRoutes);
 

@@ -38,6 +38,10 @@ import {
   syncLabelsForAccount,
   type LabelRow,
 } from "./labels";
+import {
+  suggestFiltersForBatch,
+  syncFiltersForAccount,
+} from "./filters";
 
 const debug = createDebug("service:sync");
 
@@ -50,6 +54,8 @@ export interface SyncRunResult {
   fetched: number;
   triaged: number;
   suggestedNewLabels: number;
+  filtersSynced: number;
+  suggestedFilters: number;
   errors: string[];
 }
 
@@ -332,6 +338,22 @@ export async function fetchAndTriage(
   const labelsByName = new Map(allLabels.map((l) => [l.name, l]));
   debug("labels loaded", { account: account.email, count: allLabels.length });
 
+  log(`[${account.email}] syncing filters`);
+  let filtersSyncedCount = 0;
+  try {
+    const syncedFilters = await syncFiltersForAccount({
+      accountId: account.id,
+      accountEmail: account.email,
+      gog,
+    });
+    filtersSyncedCount = syncedFilters.length;
+    log(`[${account.email}] ${filtersSyncedCount} filter(s)`);
+  } catch (err) {
+    const m = (err as Error).message;
+    errors.push(`syncFilters: ${m}`);
+    log(`[${account.email}] WARN syncFilters failed: ${m}`);
+  }
+
   log(`[${account.email}] searching messages (${query}, max=${max})`);
   const hits = await gog.searchMessages({
     account: account.email,
@@ -378,6 +400,8 @@ export async function fetchAndTriage(
       fetched: 0,
       triaged: 0,
       suggestedNewLabels: 0,
+      filtersSynced: filtersSyncedCount,
+      suggestedFilters: 0,
       errors,
     };
   }
@@ -483,6 +507,33 @@ export async function fetchAndTriage(
     }
   }
 
+  let suggestedFiltersCount = 0;
+  try {
+    log(`[${account.email}] running filter suggestions over ${normalized.length} messages`);
+    const proposals = await suggestFiltersForBatch({
+      accountId: account.id,
+      accountEmail: account.email,
+      messages: normalized.map((m) => ({
+        id: m.gmailMessageId,
+        from: m.fromEmail,
+        subject: m.subject,
+        snippet: m.snippet,
+        currentLabels: m.labelIds
+          .map((id) => labelsByGmailId.get(id)?.name)
+          .filter((n): n is string => Boolean(n)),
+      })),
+      claude,
+    });
+    suggestedFiltersCount = proposals.created;
+    log(
+      `[${account.email}] filter suggestions: ${proposals.created} new, ${proposals.skipped} skipped`,
+    );
+  } catch (err) {
+    const m = (err as Error).message;
+    errors.push(`filterSuggest: ${m}`);
+    log(`[${account.email}] WARN filterSuggest failed: ${m}`);
+  }
+
   const { db } = getDb();
   await db
     .update(accounts)
@@ -494,6 +545,8 @@ export async function fetchAndTriage(
     fetched: normalized.length,
     triaged: triagedCount,
     suggestedNewLabels: suggestedNewLabelsCount,
+    filtersSynced: filtersSyncedCount,
+    suggestedFilters: suggestedFiltersCount,
     errors,
   };
   debug("fetchAndTriage done", result);

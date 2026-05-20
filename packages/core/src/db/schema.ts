@@ -18,6 +18,12 @@ export const suggestionStatusEnum = pgEnum("suggestion_status", [
   "dismissed",
 ]);
 
+export const filterSuggestionStatusEnum = pgEnum("filter_suggestion_status", [
+  "pending",
+  "accepted",
+  "dismissed",
+]);
+
 export const accounts = pgTable("accounts", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
@@ -148,6 +154,55 @@ export const suggestedLabels = pgTable("suggested_labels", {
   status: suggestionStatusEnum("status").notNull().default("pending"),
   createdLabelId: uuid("created_label_id").references(() => labels.id),
 });
+
+export const gmailFilters = pgTable(
+  "gmail_filters",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    gmailFilterId: text("gmail_filter_id").notNull(),
+    criteria: jsonb("criteria").$type<Record<string, unknown>>().notNull(),
+    action: jsonb("action").$type<Record<string, unknown>>().notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    byAccountGmailId: uniqueIndex("gmail_filters_account_gmail_id").on(
+      t.accountId,
+      t.gmailFilterId,
+    ),
+  }),
+);
+
+export const suggestedFilters = pgTable(
+  "suggested_filters",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    criteriaFrom: text("criteria_from"),
+    criteriaSubject: text("criteria_subject"),
+    criteriaQuery: text("criteria_query"),
+    addLabelId: uuid("add_label_id").references(() => labels.id, {
+      onDelete: "set null",
+    }),
+    addLabelName: text("add_label_name").notNull(),
+    reasoning: text("reasoning"),
+    status: filterSuggestionStatusEnum("status").notNull().default("pending"),
+    createdGmailFilterId: text("created_gmail_filter_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byAccount: index("suggested_filters_account").on(t.accountId, t.status),
+  }),
+);
 
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),

@@ -3,6 +3,7 @@ import { App } from "./App";
 import { InboxPage } from "./pages/InboxPage";
 import { MessageDetailPage } from "./pages/MessageDetailPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { FiltersPage } from "./pages/FiltersPage";
 
 export const router = createBrowserRouter([
   {
@@ -14,6 +15,7 @@ export const router = createBrowserRouter([
         path: "messages/:accountId/:gmailMessageId",
         element: <MessageDetailPage />,
       },
+      { path: "filters", element: <FiltersPage /> },
       { path: "settings", element: <SettingsPage /> },
     ],
   },
