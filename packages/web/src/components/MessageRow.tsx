@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
-import { useApplyLabelSuggestion } from "../api/mutations";
+import {
+  useApplyLabelSuggestion,
+  useRemoveMessageLabel,
+} from "../api/mutations";
 import type { ListedMessage } from "../api/types";
 import { LabelBadge } from "./LabelBadge";
 import { MessageRowActions } from "./MessageRowActions";
@@ -40,13 +43,15 @@ export const MessageRow = ({ message }: Props) => {
     newSuggestions.length > 0;
 
   const applySuggestion = useApplyLabelSuggestion();
+  const removeLabel = useRemoveMessageLabel();
   const isApplying = applySuggestion.isPending;
+  const isRemoving = removeLabel.isPending;
   const canApply = Boolean(message.triageId);
 
   return (
     <Link
       to={`/messages/${message.accountId}/${message.gmailMessageId}`}
-      className="group relative flex items-center gap-3 border-b border-miel-line bg-white px-3 py-1.5 text-sm transition-colors last:border-b-0 hover:bg-miel-bg"
+      className="group relative flex items-center gap-3 border-b border-miel-line bg-miel-panel px-3 py-1.5 text-sm transition-colors last:border-b-0 hover:bg-miel-bg"
     >
       <span
         className={`w-44 shrink-0 truncate text-miel-ink ${isUnread ? "font-semibold" : "font-normal"}`}
@@ -65,6 +70,14 @@ export const MessageRow = ({ message }: Props) => {
                   name={l.name}
                   colorBg={l.colorBg}
                   colorFg={l.colorFg}
+                  removeDisabled={isRemoving}
+                  onRemove={() =>
+                    removeLabel.mutate({
+                      accountId: message.accountId,
+                      gmailMessageId: message.gmailMessageId,
+                      labelId: l.id,
+                    })
+                  }
                 />
               ),
             )}

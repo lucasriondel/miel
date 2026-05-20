@@ -478,6 +478,58 @@ export function useApplyLabelSuggestion() {
   });
 }
 
+export interface RemoveMessageLabelInput extends MessageActionInput {
+  labelId: string;
+}
+
+export interface RemoveMessageLabelResult {
+  ok: true;
+  added: { labelId: string; gmailLabelId: string; name: string }[];
+  removed: { labelId: string; gmailLabelId: string; name: string }[];
+}
+
+export function useRemoveMessageLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RemoveMessageLabelInput) =>
+      apiFetch<RemoveMessageLabelResult>({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/labels`,
+        method: "POST",
+        body: { remove: [input.labelId] },
+      }),
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ["messages"] });
+      const snapshot = snapshotMessageLists(qc);
+      qc.setQueriesData<ListMessagesResponse>(
+        { queryKey: ["messages"] },
+        (data) => {
+          if (!data) return data;
+          return {
+            ...data,
+            items: data.items.map((m) => {
+              if (!matches(m, input)) return m;
+              return {
+                ...m,
+                labels: m.labels.filter((l) => l.id !== input.labelId),
+              };
+            }),
+          };
+        },
+      );
+      return { snapshot };
+    },
+    onError: (_err, _input, context) => {
+      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
+    },
+    onSettled: (_data, _err, input) => {
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      qc.invalidateQueries({
+        queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
+      });
+    },
+  });
+}
+
 export interface CreateLabelInput {
   accountId: string;
   name: string;

@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import { useRemoveMessageLabel } from "../../api/mutations";
 import type { MessageDetail, Priority } from "../../api/types";
 import { LabelBadge } from "../../components/LabelBadge";
 
@@ -15,6 +16,7 @@ const priorityChipStyles: Record<Priority, string> = {
 export const MessageDetailHeader = ({ message }: Props) => {
   const latestPriority = message.triageHistory[0]?.priority;
   const visibleLabels = message.labels.filter((l) => l.gmailLabelId !== "INBOX");
+  const removeLabel = useRemoveMessageLabel();
 
   return (
     <header className="flex flex-col gap-3 border-b border-miel-line pb-4">
@@ -65,6 +67,14 @@ export const MessageDetailHeader = ({ message }: Props) => {
               name={l.name}
               colorBg={l.colorBg}
               colorFg={l.colorFg}
+              removeDisabled={removeLabel.isPending}
+              onRemove={() =>
+                removeLabel.mutate({
+                  accountId: message.accountId,
+                  gmailMessageId: message.gmailMessageId,
+                  labelId: l.id,
+                })
+              }
             />
           ))}
         </div>
