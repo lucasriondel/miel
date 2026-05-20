@@ -2,6 +2,9 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { labels } from "../db/schema";
 import { createGogAdapter, type GogAdapter } from "../adapters/gog";
+import { createDebug } from "../util/debug";
+
+const debug = createDebug("service:labels");
 
 export interface LabelRow {
   id: string;
@@ -28,10 +31,14 @@ export async function syncLabelsForAccount(args: {
   accountEmail: string;
   gog?: GogAdapter;
 }): Promise<LabelRow[]> {
+  debug("syncLabelsForAccount", { account: args.accountEmail });
   const gog = args.gog ?? createGogAdapter();
   const { db } = getDb();
   const remote = await gog.listLabels({ account: args.accountEmail });
-  if (remote.length === 0) return [];
+  if (remote.length === 0) {
+    debug("syncLabelsForAccount empty", { account: args.accountEmail });
+    return [];
+  }
 
   const values = remote.map((l) => ({
     accountId: args.accountId,
@@ -55,6 +62,10 @@ export async function syncLabelsForAccount(args: {
       },
     })
     .returning(LABEL_RETURNING);
+  debug("syncLabelsForAccount done", {
+    account: args.accountEmail,
+    upserted: inserted.length,
+  });
   return inserted;
 }
 
@@ -91,6 +102,7 @@ export async function ensureLabel(args: {
   name: string;
   gog?: GogAdapter;
 }): Promise<LabelRow> {
+  debug("ensureLabel", { account: args.accountEmail, name: args.name });
   const gog = args.gog ?? createGogAdapter();
   const { db } = getDb();
   const existing = await db
@@ -100,8 +112,12 @@ export async function ensureLabel(args: {
       and(eq(labels.accountId, args.accountId), eq(labels.name, args.name)),
     )
     .limit(1);
-  if (existing.length > 0) return existing[0];
+  if (existing.length > 0) {
+    debug("ensureLabel hit", { name: args.name, labelId: existing[0].id });
+    return existing[0];
+  }
 
+  debug("ensureLabel creating", { account: args.accountEmail, name: args.name });
   const created = await gog.createLabel({
     account: args.accountEmail,
     name: args.name,
@@ -125,5 +141,10 @@ export async function ensureLabel(args: {
       },
     })
     .returning(LABEL_RETURNING);
+  debug("ensureLabel created", {
+    name: args.name,
+    labelId: inserted[0].id,
+    gmailLabelId: inserted[0].gmailLabelId,
+  });
   return inserted[0];
 }

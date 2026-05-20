@@ -8,8 +8,11 @@ import {
   triages,
 } from "../db/schema";
 import { createGogAdapter, type GogAdapter } from "../adapters/gog";
+import { createDebug } from "../util/debug";
 import { getAccountByEmail } from "./accounts";
 import { ensureLabel, type LabelRow } from "./labels";
+
+const debug = createDebug("service:apply");
 
 export interface ApplyLabelsResult {
   ok: true;
@@ -79,6 +82,13 @@ export async function applyLabels(args: {
   removeLabelIds?: string[];
   gog?: GogAdapter;
 }): Promise<ApplyLabelsResult> {
+  debug("applyLabels", {
+    accountEmail: args.accountEmail,
+    accountId: args.accountId,
+    gmailMessageId: args.gmailMessageId,
+    add: args.addLabelIds ?? [],
+    remove: args.removeLabelIds ?? [],
+  });
   const ctx = await resolveContext(args);
   const { db } = getDb();
 
@@ -106,6 +116,7 @@ export async function applyLabels(args: {
     .filter((l): l is (typeof labelRows)[number] => Boolean(l));
 
   if (addRows.length === 0 && removeRows.length === 0) {
+    debug("applyLabels noop", { gmailMessageId: ctx.gmailMessageId });
     return { ok: true, added: [], removed: [] };
   }
 
@@ -143,6 +154,11 @@ export async function applyLabels(args: {
       );
   }
 
+  debug("applyLabels done", {
+    gmailMessageId: ctx.gmailMessageId,
+    added: addRows.map((l) => l.name),
+    removed: removeRows.map((l) => l.name),
+  });
   return {
     ok: true,
     added: addRows.map((l) => ({
@@ -171,6 +187,12 @@ export interface ApplySuggestionsInput {
 export async function applySuggestions(
   input: ApplySuggestionsInput,
 ): Promise<ApplySuggestionsResult> {
+  debug("applySuggestions", {
+    triageId: input.triageId,
+    gmailMessageId: input.gmailMessageId,
+    acceptExisting: input.acceptExistingLabelIds ?? [],
+    acceptNew: input.acceptNewSuggestionIds ?? [],
+  });
   const ctx = await resolveContext(input);
   const { db } = getDb();
 
@@ -290,6 +312,12 @@ export async function applySuggestions(
       );
   }
 
+  debug("applySuggestions done", {
+    triageId: input.triageId,
+    appliedExisting: existingRows.map((l) => l.name),
+    createdLabels: createdLabels.map((l) => l.name),
+    attached: labelsToAttach.map((l) => l.name),
+  });
   return {
     ok: true,
     appliedExistingLabelIds: existingRows.map((l) => l.id),
@@ -307,6 +335,10 @@ export async function archiveMessage(args: {
   gmailMessageId: string;
   gog?: GogAdapter;
 }): Promise<{ ok: true; threadId: string }> {
+  debug("archiveMessage", {
+    gmailMessageId: args.gmailMessageId,
+    accountEmail: args.accountEmail,
+  });
   const ctx = await resolveContext(args);
   const { db } = getDb();
   const { messages } = await import("../db/schema");
@@ -338,6 +370,10 @@ export async function archiveMessage(args: {
         eq(messages.gmailMessageId, ctx.gmailMessageId),
       ),
     );
+  debug("archiveMessage done", {
+    gmailMessageId: ctx.gmailMessageId,
+    threadId: row[0].gmailThreadId,
+  });
   return { ok: true, threadId: row[0].gmailThreadId };
 }
 
@@ -347,6 +383,10 @@ export async function trashMessage(args: {
   gmailMessageId: string;
   gog?: GogAdapter;
 }): Promise<{ ok: true; threadId: string }> {
+  debug("trashMessage", {
+    gmailMessageId: args.gmailMessageId,
+    accountEmail: args.accountEmail,
+  });
   const ctx = await resolveContext(args);
   const { db } = getDb();
   const { messages } = await import("../db/schema");
@@ -378,6 +418,10 @@ export async function trashMessage(args: {
         eq(messages.gmailMessageId, ctx.gmailMessageId),
       ),
     );
+  debug("trashMessage done", {
+    gmailMessageId: ctx.gmailMessageId,
+    threadId: row[0].gmailThreadId,
+  });
   return { ok: true, threadId: row[0].gmailThreadId };
 }
 

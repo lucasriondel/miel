@@ -7,6 +7,9 @@ import {
   type ClaudeAdapter,
 } from "../adapters/claude";
 import { type ReplyGenOutputT } from "../schemas/reply";
+import { createDebug } from "../util/debug";
+
+const debug = createDebug("service:reply");
 
 const BODY_TRUNCATION = 8000;
 
@@ -87,6 +90,11 @@ export interface GenerateReplyResult {
 export async function generateReply(
   args: GenerateReplyArgs,
 ): Promise<GenerateReplyResult> {
+  debug("generateReply", {
+    gmailMessageId: args.gmailMessageId,
+    accountEmail: args.accountEmail,
+    promptLen: args.prompt.length,
+  });
   const claude = args.claude ?? createClaudeAdapter();
   const msg = await resolveMessage(args);
   const { output, model, runId } = await claude.generateReply({
@@ -95,6 +103,13 @@ export async function generateReply(
     subject: msg.subject,
     body: truncate(msg.bodyText, BODY_TRUNCATION),
     userInstruction: args.prompt,
+  });
+  debug("generateReply done", {
+    gmailMessageId: args.gmailMessageId,
+    subject: output.subject,
+    bodyLen: output.body.length,
+    runId,
+    model,
   });
   return { subject: output.subject, body: output.body, model, runId };
 }
@@ -114,6 +129,11 @@ export interface SendReplyResult {
 }
 
 export async function sendReply(args: SendReplyArgs): Promise<SendReplyResult> {
+  debug("sendReply", {
+    gmailMessageId: args.gmailMessageId,
+    subject: args.subject,
+    bodyLen: args.body.length,
+  });
   const gog = args.gog ?? createGogAdapter();
   const msg = await resolveMessage(args);
   const recipients = msg.toEmails.length > 0 ? msg.toEmails : [msg.fromEmail];
@@ -127,6 +147,10 @@ export async function sendReply(args: SendReplyArgs): Promise<SendReplyResult> {
     subject: args.subject,
     body: args.body,
     replyToMessageId: msg.gmailMessageId,
+  });
+  debug("sendReply done", {
+    gmailMessageId: args.gmailMessageId,
+    sentMessageId: messageId,
   });
   return { ok: true, sentMessageId: messageId };
 }

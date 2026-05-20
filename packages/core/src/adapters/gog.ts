@@ -10,7 +10,10 @@ import {
   type GogLabelT,
   type GogMessageT,
 } from "../schemas/gmail";
+import { createDebug } from "../util/debug";
 import { spawnJson, spawnVoid } from "./shell";
+
+const debug = createDebug("adapter:gog");
 
 export interface SearchHit {
   messageId: string;
@@ -98,11 +101,15 @@ function normalizeSearchHits(
 export function createGogAdapter(): GogAdapter {
   return {
     async listAccounts() {
+      debug("listAccounts");
       const raw = await spawnJson({ cmd: [bin(), "auth", "list", "--json"] });
-      return GogAuthList.parse(raw).accounts;
+      const parsed = GogAuthList.parse(raw).accounts;
+      debug("listAccounts done", { count: parsed.length });
+      return parsed;
     },
 
     async searchMessages({ account, query, max = 50 }) {
+      debug("searchMessages", { account, query, max });
       const raw = await spawnJson({
         cmd: [
           bin(),
@@ -117,10 +124,13 @@ export function createGogAdapter(): GogAdapter {
         ],
       });
       GogSearchResponse.parse(raw);
-      return normalizeSearchHits(raw);
+      const hits = normalizeSearchHits(raw);
+      debug("searchMessages done", { account, hits: hits.length });
+      return hits;
     },
 
     async getMessage({ account, messageId }) {
+      debug("getMessage", { account, messageId });
       const raw = await spawnJson({
         cmd: [
           bin(),
@@ -133,18 +143,24 @@ export function createGogAdapter(): GogAdapter {
           "--format=full",
         ],
       });
-      return GogMessage.parse(unwrapGetMessageResponse(raw));
+      const parsed = GogMessage.parse(unwrapGetMessageResponse(raw));
+      debug("getMessage done", { account, messageId });
+      return parsed;
     },
 
     async listLabels({ account }) {
+      debug("listLabels", { account });
       const raw = await spawnJson({
         cmd: [bin(), "--account", account, "--json", "gmail", "labels", "list"],
       });
       const parsed = GogLabelListResponse.parse(raw);
-      return Array.isArray(parsed) ? parsed : parsed.labels;
+      const out = Array.isArray(parsed) ? parsed : parsed.labels;
+      debug("listLabels done", { account, count: out.length });
+      return out;
     },
 
     async createLabel({ account, name }) {
+      debug("createLabel", { account, name });
       const raw = await spawnJson({
         cmd: [
           bin(),
@@ -157,11 +173,22 @@ export function createGogAdapter(): GogAdapter {
           name,
         ],
       });
-      return GogCreateLabelResponse.parse(raw);
+      const parsed = GogCreateLabelResponse.parse(raw);
+      debug("createLabel done", { account, name, gmailLabelId: parsed.id });
+      return parsed;
     },
 
     async batchModifyLabels({ account, messageIds, add, remove }) {
-      if (messageIds.length === 0) return;
+      if (messageIds.length === 0) {
+        debug("batchModifyLabels noop (no messages)", { account });
+        return;
+      }
+      debug("batchModifyLabels", {
+        account,
+        messageCount: messageIds.length,
+        add: add ?? [],
+        remove: remove ?? [],
+      });
       const cmd = [
         bin(),
         "--account",
@@ -176,9 +203,11 @@ export function createGogAdapter(): GogAdapter {
       if (add && add.length > 0) cmd.push(`--add=${add.join(",")}`);
       if (remove && remove.length > 0) cmd.push(`--remove=${remove.join(",")}`);
       await spawnVoid({ cmd });
+      debug("batchModifyLabels done", { account });
     },
 
     async trashThread({ account, threadId }) {
+      debug("trashThread", { account, threadId });
       await spawnVoid({
         cmd: [
           bin(),
@@ -194,9 +223,11 @@ export function createGogAdapter(): GogAdapter {
           "--remove=INBOX",
         ],
       });
+      debug("trashThread done", { account, threadId });
     },
 
     async archiveThread({ account, threadId }) {
+      debug("archiveThread", { account, threadId });
       await spawnVoid({
         cmd: [
           bin(),
@@ -211,9 +242,17 @@ export function createGogAdapter(): GogAdapter {
           "--remove=INBOX",
         ],
       });
+      debug("archiveThread done", { account, threadId });
     },
 
     async sendReply({ account, to, subject, body, replyToMessageId }) {
+      debug("sendReply", {
+        account,
+        to,
+        subject,
+        bodyLen: body.length,
+        replyToMessageId,
+      });
       const raw = await spawnJson({
         cmd: [
           bin(),
@@ -230,6 +269,7 @@ export function createGogAdapter(): GogAdapter {
       });
       const parsed = GogSendResponse.parse(raw);
       const messageId = parsed.messageId ?? parsed.id ?? "";
+      debug("sendReply done", { account, sentMessageId: messageId });
       return { messageId };
     },
   };

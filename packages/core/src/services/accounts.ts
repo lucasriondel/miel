@@ -2,6 +2,9 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { accounts } from "../db/schema";
 import { createGogAdapter, type GogAdapter } from "../adapters/gog";
+import { createDebug } from "../util/debug";
+
+const debug = createDebug("service:accounts");
 
 export interface SyncedAccount {
   id: string;
@@ -13,8 +16,10 @@ export interface SyncedAccount {
 export async function syncAccountsFromGog(
   gog: GogAdapter = createGogAdapter(),
 ): Promise<SyncedAccount[]> {
+  debug("syncAccountsFromGog start");
   const { db } = getDb();
   const remote = await gog.listAccounts();
+  debug("syncAccountsFromGog remote", { count: remote.length });
 
   const synced: SyncedAccount[] = [];
   for (const account of remote) {
@@ -52,7 +57,12 @@ export async function syncAccountsFromGog(
       displayName: inserted[0].displayName,
       inserted: true,
     });
+    debug("syncAccountsFromGog inserted", { email: inserted[0].email });
   }
+  debug("syncAccountsFromGog done", {
+    total: synced.length,
+    new: synced.filter((s) => s.inserted).length,
+  });
   return synced;
 }
 
@@ -65,5 +75,6 @@ export async function getAccountByEmail(
     .from(accounts)
     .where(eq(accounts.email, email))
     .limit(1);
+  debug("getAccountByEmail", { email, found: rows.length > 0 });
   return rows.length > 0 ? rows[0] : null;
 }

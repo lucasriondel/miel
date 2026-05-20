@@ -1,6 +1,9 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { appSettings } from "../db/schema";
+import { createDebug } from "../util/debug";
+
+const debug = createDebug("service:settings");
 
 export const SETTING_KEYS = {
   triageModel: "triage.model",
@@ -24,15 +27,20 @@ export async function getSetting(key: string): Promise<string> {
     .from(appSettings)
     .where(eq(appSettings.key, key))
     .limit(1);
-  if (rows.length > 0) return rows[0].value;
+  if (rows.length > 0) {
+    debug("getSetting hit", { key, value: rows[0].value });
+    return rows[0].value;
+  }
   const fallback = SETTING_DEFAULTS[key];
   if (fallback === undefined) {
     throw new Error(`Unknown setting key with no default: ${key}`);
   }
+  debug("getSetting default", { key, value: fallback });
   return fallback;
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
+  debug("setSetting", { key, value });
   const { db } = getDb();
   await db
     .insert(appSettings)

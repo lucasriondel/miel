@@ -29,6 +29,7 @@ import {
   parseFromHeader,
   parseInternalDate,
 } from "../util/gmailPayload";
+import { createDebug } from "../util/debug";
 import { parseSince } from "../util/time";
 import { getAccountByEmail, syncAccountsFromGog } from "./accounts";
 import {
@@ -37,6 +38,8 @@ import {
   syncLabelsForAccount,
   type LabelRow,
 } from "./labels";
+
+const debug = createDebug("service:sync");
 
 const TRIAGE_BATCH_SIZE = 15;
 const BODY_TRUNCATION = 4000;
@@ -300,14 +303,23 @@ export async function fetchAndTriage(
   const query = parseSince(since);
   const errors: string[] = [];
 
+  debug("fetchAndTriage start", {
+    accountEmail: opts.accountEmail,
+    since,
+    max,
+    query,
+  });
+
   const account = await getAccountByEmail(opts.accountEmail);
   if (!account) {
+    debug("fetchAndTriage account not synced", { accountEmail: opts.accountEmail });
     throw new Error(
       `Account not synced: ${opts.accountEmail}. Run accounts sync first.`,
     );
   }
 
   log(`[${account.email}] syncing labels`);
+  debug("syncing labels", { account: account.email });
   await syncLabelsForAccount({
     accountId: account.id,
     accountEmail: account.email,
@@ -315,6 +327,7 @@ export async function fetchAndTriage(
   });
   const allLabels = await getLabelsForAccount(account.id);
   const labelsByName = new Map(allLabels.map((l) => [l.name, l]));
+  debug("labels loaded", { account: account.email, count: allLabels.length });
 
   log(`[${account.email}] searching messages (${query}, max=${max})`);
   const hits = await gog.searchMessages({
@@ -323,6 +336,7 @@ export async function fetchAndTriage(
     max,
   });
   log(`[${account.email}] ${hits.length} hits`);
+  debug("search hits", { account: account.email, hits: hits.length });
 
   const normalized: NormalizedMessage[] = [];
   for (const hit of hits) {
@@ -336,10 +350,21 @@ export async function fetchAndTriage(
       const m = (err as Error).message;
       errors.push(`getMessage(${hit.messageId}): ${m}`);
       log(`[${account.email}] WARN getMessage failed for ${hit.messageId}: ${m}`);
+      debug("getMessage failed", {
+        account: account.email,
+        messageId: hit.messageId,
+        error: m,
+      });
     }
   }
 
+  debug("normalized messages", {
+    account: account.email,
+    count: normalized.length,
+  });
+
   if (normalized.length === 0) {
+    debug("nothing to triage", { account: account.email });
     const { db } = getDb();
     await db
       .update(accounts)
@@ -355,6 +380,7 @@ export async function fetchAndTriage(
   }
 
   await upsertMessages(normalized);
+  debug("upserted messages", { account: account.email, rows: normalized.length });
   const allGmailLabelIds = Array.from(
     new Set(normalized.flatMap((m) => m.labelIds)),
   );
@@ -370,6 +396,11 @@ export async function fetchAndTriage(
       labelIds: r.labelIds,
     })),
     labelMap: new Map(matchedLabels.map((l) => [l.gmailLabelId, l.id])),
+  });
+  debug("upserted message_labels", {
+    account: account.email,
+    distinctGmailLabels: allGmailLabelIds.length,
+    matchedLabels: matchedLabels.length,
   });
 
   const existingLabelNames = allLabels
@@ -393,7 +424,20 @@ export async function fetchAndTriage(
     });
     try {
       log(`[${account.email}] batch ${i + 1}/${batches.length} → claude`);
+      debug("triage batch start", {
+        account: account.email,
+        batch: i + 1,
+        of: batches.length,
+        items: items.length,
+      });
       const { output, runId, model } = await claude.runTriage(input);
+      debug("triage batch returned", {
+        account: account.email,
+        batch: i + 1,
+        results: output.results.length,
+        runId,
+        model,
+      });
       const byId = new Map(batch.map((m) => [m.gmailMessageId, m]));
       const returnedIds = new Set(output.results.map((r) => r.id));
       const missing = items.filter((m) => !returnedIds.has(m.id));
@@ -418,10 +462,21 @@ export async function fetchAndTriage(
       });
       triagedCount += persisted.persisted;
       suggestedNewLabelsCount += persisted.newLabelSuggestions;
+      debug("triage batch persisted", {
+        account: account.email,
+        batch: i + 1,
+        persisted: persisted.persisted,
+        newLabelSuggestions: persisted.newLabelSuggestions,
+      });
     } catch (err) {
       const m = (err as Error).message;
       errors.push(`triage batch ${i + 1}: ${m}`);
       log(`[${account.email}] ERROR triage batch ${i + 1}: ${m}`);
+      debug("triage batch failed", {
+        account: account.email,
+        batch: i + 1,
+        error: m,
+      });
     }
   }
 
@@ -431,13 +486,15 @@ export async function fetchAndTriage(
     .set({ lastSyncedAt: new Date() })
     .where(eq(accounts.id, account.id));
 
-  return {
+  const result = {
     account: account.email,
     fetched: normalized.length,
     triaged: triagedCount,
     suggestedNewLabels: suggestedNewLabelsCount,
     errors,
   };
+  debug("fetchAndTriage done", result);
+  return result;
 }
 
 export interface SyncAllOptions {
@@ -450,6 +507,11 @@ export interface SyncAllOptions {
 }
 
 export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[]> {
+  debug("syncAll start", {
+    accountEmail: opts.accountEmail ?? "(all)",
+    since: opts.since,
+    max: opts.max,
+  });
   const gog = opts.gog ?? createGogAdapter();
   await syncAccountsFromGog(gog);
 
@@ -460,6 +522,8 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
         .from(accounts)
         .where(eq(accounts.email, opts.accountEmail))
     : await db.select({ email: accounts.email }).from(accounts);
+
+  debug("syncAll targets", { count: targets.length });
 
   const results: SyncRunResult[] = [];
   for (const target of targets) {
@@ -474,5 +538,6 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
       }),
     );
   }
+  debug("syncAll done", { runs: results.length });
   return results;
 }

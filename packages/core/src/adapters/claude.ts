@@ -11,7 +11,10 @@ import {
   type TriageOutputT,
 } from "../schemas/triage";
 import { getModelSettings } from "../services/settings";
+import { createDebug } from "../util/debug";
 import { spawnCapture, ShellError } from "./shell";
+
+const debug = createDebug("adapter:claude");
 
 export interface ClaudeRunResult<T> {
   output: T;
@@ -82,6 +85,7 @@ async function invokeClaude<T>(args: {
   model: string;
   schema: object;
   parser: (raw: unknown) => T;
+  kind: string;
 }): Promise<ClaudeRunResult<T>> {
   const { CLAUDE_BIN } = getEnv();
   const cmd = [
@@ -92,7 +96,19 @@ async function invokeClaude<T>(args: {
     `--json-schema=${JSON.stringify(args.schema)}`,
     args.prompt,
   ];
+  debug("invoke", {
+    kind: args.kind,
+    model: args.model,
+    promptLen: args.prompt.length,
+  });
+  const startedAt = Date.now();
   const { stdout, stderr, exitCode } = await spawnCapture({ cmd });
+  debug("invoke returned", {
+    kind: args.kind,
+    exitCode,
+    ms: Date.now() - startedAt,
+    stdoutBytes: stdout.length,
+  });
   if (exitCode !== 0) {
     throw new ShellError(
       `claude exited with ${exitCode}`,
@@ -168,34 +184,65 @@ async function invokeClaude<T>(args: {
     typeof envelope.model === "string" && envelope.model
       ? envelope.model
       : args.model;
+  debug("invoke parsed", {
+    kind: args.kind,
+    model: modelUsed,
+    runId,
+  });
   return { output, runId, model: modelUsed };
 }
 
 export function createClaudeAdapter(): ClaudeAdapter {
   return {
     async runTriage(input) {
+      debug("runTriage", {
+        account: input.account,
+        messages: input.messages.length,
+        existingLabels: input.existingLabels.length,
+      });
       const { triageModel } = await getModelSettings();
       const jsonSchema = zodToJsonSchema(TriageOutput, {
         target: "jsonSchema7",
       });
-      return invokeClaude({
+      const result = await invokeClaude({
         prompt: buildTriagePrompt(input),
         model: triageModel,
         schema: jsonSchema,
         parser: (raw) => TriageOutput.parse(raw),
+        kind: "triage",
       });
+      debug("runTriage done", {
+        account: input.account,
+        results: result.output.results.length,
+        runId: result.runId,
+      });
+      return result;
     },
     async generateReply(input) {
+      debug("generateReply", {
+        from: input.from,
+        to: input.to,
+        subject: input.subject,
+        bodyLen: input.body.length,
+        instructionLen: input.userInstruction.length,
+      });
       const { replyModel } = await getModelSettings();
       const jsonSchema = zodToJsonSchema(ReplyGenOutput, {
         target: "jsonSchema7",
       });
-      return invokeClaude({
+      const result = await invokeClaude({
         prompt: buildReplyPrompt(input),
         model: replyModel,
         schema: jsonSchema,
         parser: (raw) => ReplyGenOutput.parse(raw),
+        kind: "reply",
       });
+      debug("generateReply done", {
+        subjectLen: result.output.subject.length,
+        bodyLen: result.output.body.length,
+        runId: result.runId,
+      });
+      return result;
     },
   };
 }

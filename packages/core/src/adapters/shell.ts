@@ -1,3 +1,7 @@
+import { createDebug } from "../util/debug";
+
+const debug = createDebug("shell");
+
 export interface SpawnJsonOptions {
   cmd: string[];
   stdin?: string;
@@ -36,6 +40,16 @@ export async function spawnCapture(opts: SpawnJsonOptions): Promise<{
   stderr: string;
   exitCode: number;
 }> {
+  const bin = opts.cmd[0]?.split("/").pop() ?? opts.cmd[0];
+  const argPreview = opts.cmd.slice(1, 8).join(" ");
+  const startedAt = Date.now();
+  debug("spawn", {
+    bin,
+    args: argPreview,
+    argc: opts.cmd.length - 1,
+    hasStdin: Boolean(opts.stdin),
+  });
+
   const proc = Bun.spawn({
     cmd: opts.cmd,
     stdin: opts.stdin ? new TextEncoder().encode(opts.stdin) : "ignore",
@@ -49,6 +63,14 @@ export async function spawnCapture(opts: SpawnJsonOptions): Promise<{
     readAll(proc.stderr as ReadableStream<Uint8Array> | null),
     proc.exited,
   ]);
+
+  debug("spawn done", {
+    bin,
+    exitCode,
+    ms: Date.now() - startedAt,
+    stdoutBytes: stdout.length,
+    stderrBytes: stderr.length,
+  });
 
   return { stdout, stderr, exitCode };
 }
