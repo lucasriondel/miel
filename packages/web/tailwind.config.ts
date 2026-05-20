@@ -2,19 +2,20 @@ import type { Config } from "tailwindcss";
 
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
         miel: {
-          bg: "#fafaf7",
-          panel: "#ffffff",
-          ink: "#1a1a1a",
-          muted: "#6b6b6b",
-          line: "#e6e6e0",
-          accent: "#b8860b",
-          high: "#c73e3e",
-          medium: "#c98429",
-          low: "#5d9c5b",
+          bg: "rgb(var(--miel-bg) / <alpha-value>)",
+          panel: "rgb(var(--miel-panel) / <alpha-value>)",
+          ink: "rgb(var(--miel-ink) / <alpha-value>)",
+          muted: "rgb(var(--miel-muted) / <alpha-value>)",
+          line: "rgb(var(--miel-line) / <alpha-value>)",
+          accent: "rgb(var(--miel-accent) / <alpha-value>)",
+          high: "rgb(var(--miel-high) / <alpha-value>)",
+          medium: "rgb(var(--miel-medium) / <alpha-value>)",
+          low: "rgb(var(--miel-low) / <alpha-value>)",
         },
       },
     },

@@ -7,7 +7,7 @@ interface Props {
 }
 
 export const EmptyState = ({ title, description, action }: Props) => (
-  <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-miel-line bg-white px-6 py-12 text-center">
+  <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-miel-line bg-miel-panel px-6 py-12 text-center">
     <p className="text-sm font-medium text-miel-ink">{title}</p>
     {description ? (
       <p className="mt-1 max-w-md text-sm text-miel-muted">{description}</p>

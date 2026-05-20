@@ -38,7 +38,7 @@ export const ModelPicker = ({ task, label, description, value, onSaved }: Props)
     !MODEL_OPTIONS.some((opt) => opt.value === draft) && draft.length > 0;
 
   return (
-    <div className="rounded border border-miel-line bg-white p-4">
+    <div className="rounded border border-miel-line bg-miel-panel p-4">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold text-miel-ink">{label}</h3>
         <p className="text-xs text-miel-muted">{description}</p>
@@ -52,7 +52,7 @@ export const ModelPicker = ({ task, label, description, value, onSaved }: Props)
             setDraft(next);
             setSavedMessage(null);
           }}
-          className="rounded border border-miel-line bg-white px-2 py-1.5 text-sm"
+          className="rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm"
         >
           {MODEL_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -71,7 +71,7 @@ export const ModelPicker = ({ task, label, description, value, onSaved }: Props)
             setSavedMessage(null);
           }}
           placeholder="model id"
-          className="flex-1 rounded border border-miel-line bg-white px-2 py-1.5 text-sm font-mono"
+          className="flex-1 rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm font-mono"
         />
         <Button
           variant="primary"

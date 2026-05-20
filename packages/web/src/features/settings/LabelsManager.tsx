@@ -34,7 +34,7 @@ export const LabelsManager = () => {
     labels.data?.filter((l) => l.type === "system") ?? [];
 
   return (
-    <div className="rounded border border-miel-line bg-white p-4">
+    <div className="rounded border border-miel-line bg-miel-panel p-4">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold text-miel-ink">Labels</h3>
         <p className="text-xs text-miel-muted">
@@ -47,7 +47,7 @@ export const LabelsManager = () => {
         <select
           value={effectiveAccountId ?? ""}
           onChange={(e) => setSelectedAccountId(e.target.value || undefined)}
-          className="rounded border border-miel-line bg-white px-2 py-1.5 text-sm"
+          className="rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm"
           disabled={!accounts.data || accounts.data.length === 0}
         >
           {accounts.data?.map((a) => (
@@ -80,7 +80,7 @@ export const LabelsManager = () => {
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="New label name"
-          className="flex-1 rounded border border-miel-line bg-white px-2 py-1.5 text-sm"
+          className="flex-1 rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm"
         />
         <Button
           variant="primary"

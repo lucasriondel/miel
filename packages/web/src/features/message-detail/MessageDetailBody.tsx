@@ -14,7 +14,7 @@ export const MessageDetailBody = ({ message }: Props) => {
 
   if (!hasHtml && !hasText) {
     return (
-      <div className="rounded-md border border-dashed border-miel-line bg-white px-4 py-6 text-sm text-miel-muted">
+      <div className="rounded-md border border-dashed border-miel-line bg-miel-panel px-4 py-6 text-sm text-miel-muted">
         No body content available for this message.
       </div>
     );
@@ -33,8 +33,8 @@ export const MessageDetailBody = ({ message }: Props) => {
               onClick={() => setMode("html")}
               className={`px-2 py-0.5 ${
                 mode === "html"
-                  ? "bg-miel-ink text-white"
-                  : "bg-white text-miel-ink hover:bg-miel-bg"
+                  ? "bg-miel-ink text-miel-bg"
+                  : "bg-miel-panel text-miel-ink hover:bg-miel-bg"
               }`}
             >
               HTML
@@ -44,8 +44,8 @@ export const MessageDetailBody = ({ message }: Props) => {
               onClick={() => setMode("text")}
               className={`px-2 py-0.5 ${
                 mode === "text"
-                  ? "bg-miel-ink text-white"
-                  : "bg-white text-miel-ink hover:bg-miel-bg"
+                  ? "bg-miel-ink text-miel-bg"
+                  : "bg-miel-panel text-miel-ink hover:bg-miel-bg"
               }`}
             >
               Text
@@ -61,7 +61,7 @@ export const MessageDetailBody = ({ message }: Props) => {
           className="min-h-[400px] w-full rounded-md border border-miel-line bg-white"
         />
       ) : (
-        <pre className="max-h-[600px] overflow-auto whitespace-pre-wrap rounded-md border border-miel-line bg-white p-4 text-sm text-miel-ink">
+        <pre className="max-h-[600px] overflow-auto whitespace-pre-wrap rounded-md border border-miel-line bg-miel-panel p-4 text-sm text-miel-ink">
           {message.bodyText ?? ""}
         </pre>
       )}

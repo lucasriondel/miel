@@ -17,7 +17,7 @@ export const AccountsManager = () => {
   const syncAccounts = useSyncAccounts();
 
   return (
-    <div className="rounded border border-miel-line bg-white p-4">
+    <div className="rounded border border-miel-line bg-miel-panel p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h3 className="text-sm font-semibold text-miel-ink">Accounts</h3>

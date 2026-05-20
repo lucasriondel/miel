@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import {
   accounts,
@@ -109,7 +109,7 @@ export async function syncFiltersForAccount(args: {
     .where(
       and(
         eq(gmailFilters.accountId, args.accountId),
-        sql`NOT (${gmailFilters.gmailFilterId} = ANY(${remoteIds}))`,
+        notInArray(gmailFilters.gmailFilterId, remoteIds),
       ),
     );
 

@@ -9,13 +9,13 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const styles: Record<Variant, string> = {
   primary:
-    "bg-miel-ink text-white hover:bg-black disabled:bg-miel-muted disabled:cursor-not-allowed",
+    "bg-miel-ink text-miel-bg hover:bg-miel-ink/90 disabled:bg-miel-muted disabled:cursor-not-allowed",
   secondary:
-    "bg-white border border-miel-line text-miel-ink hover:bg-miel-bg disabled:opacity-50 disabled:cursor-not-allowed",
+    "bg-miel-panel border border-miel-line text-miel-ink hover:bg-miel-bg disabled:opacity-50 disabled:cursor-not-allowed",
   ghost:
     "bg-transparent text-miel-ink hover:bg-miel-line/60 disabled:opacity-50 disabled:cursor-not-allowed",
   danger:
-    "bg-miel-high text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed",
+    "bg-miel-high text-white hover:bg-miel-high/85 disabled:opacity-50 disabled:cursor-not-allowed",
 };
 
 export const Button = ({ variant = "secondary", className, children, ...rest }: Props) => (

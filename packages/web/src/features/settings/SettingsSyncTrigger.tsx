@@ -33,7 +33,7 @@ export const SettingsSyncTrigger = () => {
   }, [accounts.data, accountEmail]);
 
   return (
-    <div className="rounded border border-miel-line bg-white p-4">
+    <div className="rounded border border-miel-line bg-miel-panel p-4">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold text-miel-ink">Run sync</h3>
         <p className="text-xs text-miel-muted">
@@ -45,7 +45,7 @@ export const SettingsSyncTrigger = () => {
         <select
           value={accountEmail}
           onChange={(e) => setAccountEmail(e.target.value)}
-          className="rounded border border-miel-line bg-white px-2 py-1.5 text-sm"
+          className="rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm"
         >
           <option value="">All accounts</option>
           {accounts.data?.map((a) => (
@@ -58,7 +58,7 @@ export const SettingsSyncTrigger = () => {
         <select
           value={since}
           onChange={(e) => setSince(e.target.value)}
-          className="rounded border border-miel-line bg-white px-2 py-1.5 text-sm"
+          className="rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm"
         >
           {SINCE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>

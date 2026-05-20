@@ -14,7 +14,7 @@ const priorityChipStyles: Record<Priority, string> = {
 export const TriageHistoryPanel = ({ message }: Props) => {
   if (message.triageHistory.length === 0) {
     return (
-      <section className="rounded-md border border-miel-line bg-white p-4">
+      <section className="rounded-md border border-miel-line bg-miel-panel p-4">
         <h2 className="text-sm font-semibold text-miel-ink">Triage history</h2>
         <p className="mt-1 text-sm text-miel-muted">No triage runs recorded.</p>
       </section>
@@ -22,7 +22,7 @@ export const TriageHistoryPanel = ({ message }: Props) => {
   }
 
   return (
-    <section className="rounded-md border border-miel-line bg-white p-4">
+    <section className="rounded-md border border-miel-line bg-miel-panel p-4">
       <h2 className="text-sm font-semibold text-miel-ink">Triage history</h2>
       <ol className="mt-3 flex flex-col gap-3">
         {message.triageHistory.map((t) => (

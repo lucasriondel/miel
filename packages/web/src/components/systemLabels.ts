@@ -35,22 +35,22 @@ export const SYSTEM_LABELS: Record<string, SystemLabelMeta> = {
   CATEGORY_PROMOTIONS: {
     label: "Promotions",
     Icon: Tag,
-    className: "bg-emerald-50 text-emerald-900",
+    className: "bg-emerald-50 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-200",
   },
   CATEGORY_UPDATES: {
     label: "Notifications",
     Icon: Info,
-    className: "bg-amber-50 text-amber-900",
+    className: "bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200",
   },
   CATEGORY_FORUMS: {
     label: "Forums",
     Icon: MessageSquare,
-    className: "bg-sky-50 text-sky-900",
+    className: "bg-sky-50 text-sky-900 dark:bg-sky-900/30 dark:text-sky-200",
   },
   CATEGORY_SOCIAL: {
     label: "Social",
     Icon: Users,
-    className: "bg-indigo-50 text-indigo-900",
+    className: "bg-indigo-50 text-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-200",
   },
   IMPORTANT: {
     label: "Important",
@@ -77,7 +77,7 @@ export const SYSTEM_LABELS: Record<string, SystemLabelMeta> = {
   SPAM: {
     label: "Spam",
     Icon: AlertOctagon,
-    className: "bg-red-50 text-red-900",
+    className: "bg-red-50 text-red-900 dark:bg-red-900/30 dark:text-red-200",
   },
   TRASH: {
     label: "Corbeille",

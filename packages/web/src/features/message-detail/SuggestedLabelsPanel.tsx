@@ -6,7 +6,7 @@ interface Props {
 }
 
 const statusStyles: Record<"pending" | "applied" | "dismissed", string> = {
-  pending: "bg-white text-miel-ink border-miel-line",
+  pending: "bg-miel-panel text-miel-ink border-miel-line",
   applied: "bg-miel-low/10 text-miel-low border-miel-low/30",
   dismissed: "bg-miel-bg text-miel-muted border-miel-line",
 };
@@ -15,7 +15,7 @@ export const SuggestedLabelsPanel = ({ message }: Props) => {
   const latest = message.triageHistory[0];
   if (!latest) {
     return (
-      <section className="rounded-md border border-miel-line bg-white p-4">
+      <section className="rounded-md border border-miel-line bg-miel-panel p-4">
         <h2 className="text-sm font-semibold text-miel-ink">Label suggestions</h2>
         <p className="mt-1 text-sm text-miel-muted">
           This message has not been triaged yet — run a sync to generate suggestions.
@@ -29,7 +29,7 @@ export const SuggestedLabelsPanel = ({ message }: Props) => {
     latest.newLabelSuggestions.length > 0;
 
   return (
-    <section className="rounded-md border border-miel-line bg-white p-4">
+    <section className="rounded-md border border-miel-line bg-miel-panel p-4">
       <header className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-miel-ink">Label suggestions</h2>
         <span className="text-xs text-miel-muted">

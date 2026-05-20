@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --miel-bg: 250 250 247;
+    --miel-panel: 255 255 255;
+    --miel-ink: 26 26 26;
+    --miel-muted: 107 107 107;
+    --miel-line: 230 230 224;
+    --miel-accent: 184 134 11;
+    --miel-high: 199 62 62;
+    --miel-medium: 201 132 41;
+    --miel-low: 93 156 91;
+  }
+
+  .dark {
+    --miel-bg: 17 18 20;
+    --miel-panel: 26 28 31;
+    --miel-ink: 235 233 226;
+    --miel-muted: 148 148 142;
+    --miel-line: 48 50 54;
+    --miel-accent: 214 165 50;
+    --miel-high: 224 96 96;
+    --miel-medium: 219 158 80;
+    --miel-low: 122 184 120;
+  }
+}
+
 html,
 body,
 #root {
@@ -10,4 +36,12 @@ body,
 
 body {
   @apply bg-miel-bg text-miel-ink font-sans antialiased;
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }

@@ -84,7 +84,7 @@ export const ReplyComposer = ({ message }: Props) => {
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="e.g. Decline politely; I'm on vacation until June."
           rows={3}
-          className="rounded border border-miel-line bg-white px-2 py-1.5 text-sm text-miel-ink focus:border-miel-ink focus:outline-none"
+          className="rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm text-miel-ink focus:border-miel-ink focus:outline-none"
           disabled={generate.isPending}
         />
       </label>

@@ -37,7 +37,7 @@ export const AccountPicker = ({ value, onChange }: Props) => {
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-miel-line bg-white px-2 py-1.5 text-sm"
+        className="mt-1 w-full rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm"
       >
         <option value="" disabled>
           Select an account

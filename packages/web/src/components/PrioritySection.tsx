@@ -36,7 +36,7 @@ export const PrioritySection = ({ priority, messages, isLoading }: Props) => {
       {messages.length === 0 ? (
         <PrioritySectionEmpty priority={priority} />
       ) : (
-        <div className="overflow-hidden rounded-md border border-miel-line bg-white">
+        <div className="overflow-hidden rounded-md border border-miel-line bg-miel-panel">
           {messages.map((m) => (
             <MessageRow key={`${m.accountId}:${m.gmailMessageId}`} message={m} />
           ))}

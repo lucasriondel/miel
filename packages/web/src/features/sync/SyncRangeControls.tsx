@@ -75,7 +75,7 @@ export const SyncRangeControls = ({ accountEmail, onResult, onError }: Props) =>
 
   return (
     <div className="relative flex items-center gap-2">
-      <div className="flex items-center gap-1 rounded-md border border-miel-line bg-white p-0.5">
+      <div className="flex items-center gap-1 rounded-md border border-miel-line bg-miel-panel p-0.5">
         {presets.map((p) => (
           <button
             type="button"
@@ -86,7 +86,7 @@ export const SyncRangeControls = ({ accountEmail, onResult, onError }: Props) =>
             }}
             className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
               preset === p && !customOpen
-                ? "bg-miel-ink text-white"
+                ? "bg-miel-ink text-miel-bg"
                 : "text-miel-muted hover:bg-miel-line/60"
             }`}
           >
@@ -98,7 +98,7 @@ export const SyncRangeControls = ({ accountEmail, onResult, onError }: Props) =>
           onClick={() => setCustomOpen((v) => !v)}
           className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
             customOpen
-              ? "bg-miel-ink text-white"
+              ? "bg-miel-ink text-miel-bg"
               : "text-miel-muted hover:bg-miel-line/60"
           }`}
         >
@@ -116,7 +116,7 @@ export const SyncRangeControls = ({ accountEmail, onResult, onError }: Props) =>
       </Button>
 
       {customOpen ? (
-        <div className="absolute right-0 top-10 z-10 flex items-center gap-2 rounded-md border border-miel-line bg-white p-3 shadow-md">
+        <div className="absolute right-0 top-10 z-10 flex items-center gap-2 rounded-md border border-miel-line bg-miel-panel p-3 shadow-md">
           <label className="flex flex-col text-xs text-miel-muted">
             From
             <input

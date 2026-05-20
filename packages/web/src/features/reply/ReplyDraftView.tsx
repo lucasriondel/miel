@@ -35,7 +35,7 @@ export const ReplyDraftView = ({
 }: Props) => {
   const canSend = subject.trim().length > 0 && body.trim().length > 0 && !isSending;
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-miel-line bg-white p-3">
+    <div className="flex flex-col gap-3 rounded-md border border-miel-line bg-miel-panel p-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-miel-muted">
           Draft reply
@@ -50,7 +50,7 @@ export const ReplyDraftView = ({
           type="text"
           value={subject}
           onChange={(e) => onSubjectChange(e.target.value)}
-          className="rounded border border-miel-line bg-white px-2 py-1.5 text-sm text-miel-ink focus:border-miel-ink focus:outline-none"
+          className="rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm text-miel-ink focus:border-miel-ink focus:outline-none"
           disabled={isSending || sentMessageId !== null}
         />
       </label>
@@ -60,7 +60,7 @@ export const ReplyDraftView = ({
           value={body}
           onChange={(e) => onBodyChange(e.target.value)}
           rows={12}
-          className="rounded border border-miel-line bg-white px-2 py-1.5 text-sm text-miel-ink focus:border-miel-ink focus:outline-none"
+          className="rounded border border-miel-line bg-miel-panel px-2 py-1.5 text-sm text-miel-ink focus:border-miel-ink focus:outline-none"
           disabled={isSending || sentMessageId !== null}
         />
       </label>
