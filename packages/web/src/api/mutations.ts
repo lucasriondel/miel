@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { queryKeys } from "./queries";
+import { maybeShowReauthToast } from "../features/auth/reauthToast";
 import type {
   Account,
   Label,
@@ -28,6 +29,9 @@ export function useSync() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.accounts });
       qc.invalidateQueries({ queryKey: ["messages"] });
+    },
+    onError: (err) => {
+      maybeShowReauthToast(err);
     },
   });
 }

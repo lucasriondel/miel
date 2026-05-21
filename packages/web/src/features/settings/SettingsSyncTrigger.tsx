@@ -87,7 +87,13 @@ export const SettingsSyncTrigger = () => {
         </Button>
       </div>
 
-      {sync.isError ? (
+      {sync.isError &&
+      !(
+        sync.error instanceof ApiError &&
+        typeof sync.error.body === "object" &&
+        sync.error.body !== null &&
+        (sync.error.body as { error?: unknown }).error === "reauth_required"
+      ) ? (
         <p className="mt-2 text-xs text-miel-high">
           Sync failed: {describeError(sync.error)}
         </p>

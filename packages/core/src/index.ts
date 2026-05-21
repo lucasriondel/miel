@@ -10,7 +10,12 @@ export * as replySchemas from "./schemas/reply";
 export * as apiSchemas from "./schemas/api";
 export * as filterSuggestSchemas from "./schemas/filterSuggest";
 export { createGogAdapter } from "./adapters/gog";
-export type { GogAdapter, SearchHit, SendResult } from "./adapters/gog";
+export type {
+  GogAdapter,
+  SearchHit,
+  SendResult,
+  ReauthSession,
+} from "./adapters/gog";
 export { createClaudeAdapter } from "./adapters/claude";
 export type { ClaudeAdapter, ClaudeRunResult } from "./adapters/claude";
 export {
@@ -97,6 +102,8 @@ export {
   spawnJson,
   spawnVoid,
   ShellError,
+  ReauthRequiredError,
+  isInvalidGrantStderr,
 } from "./adapters/shell";
 export {
   extractBodies,

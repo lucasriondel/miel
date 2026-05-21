@@ -21,6 +21,20 @@ export class ShellError extends Error {
   }
 }
 
+export class ReauthRequiredError extends Error {
+  constructor(
+    public readonly account: string,
+    public readonly cause: ShellError,
+  ) {
+    super(`Account ${account} needs re-authentication`);
+    this.name = "ReauthRequiredError";
+  }
+}
+
+export function isInvalidGrantStderr(stderr: string): boolean {
+  return /invalid_grant/i.test(stderr);
+}
+
 async function readAll(stream: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) return "";
   const reader = stream.getReader();

@@ -4,6 +4,15 @@ import { useSync, type SyncInput } from "../../api/mutations";
 import { Button } from "../../components/Button";
 import { Spinner } from "../../components/Spinner";
 
+function isReauthError(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    typeof err.body === "object" &&
+    err.body !== null &&
+    (err.body as { error?: unknown }).error === "reauth_required"
+  );
+}
+
 type Preset = "1d" | "7d" | "30d";
 
 interface Props {
@@ -51,7 +60,10 @@ export const SyncRangeControls = ({ accountEmail, onResult, onError }: Props) =>
           );
           onResult?.(totals);
         },
-        onError: (err) => onError?.(describeError(err)),
+        onError: (err) => {
+          if (isReauthError(err)) return;
+          onError?.(describeError(err));
+        },
       },
     );
   };

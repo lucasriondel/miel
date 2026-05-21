@@ -14,9 +14,26 @@ import {
   type GogMessageT,
 } from "../schemas/gmail";
 import { createDebug } from "../util/debug";
-import { spawnJson, spawnVoid } from "./shell";
+import {
+  ReauthRequiredError,
+  ShellError,
+  isInvalidGrantStderr,
+  spawnJson,
+  spawnVoid,
+} from "./shell";
 
 const debug = createDebug("adapter:gog");
+
+async function withReauthGuard<T>(account: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof ShellError && isInvalidGrantStderr(err.stderr)) {
+      throw new ReauthRequiredError(account, err);
+    }
+    throw err;
+  }
+}
 
 export interface SearchHit {
   messageId: string;
@@ -27,8 +44,14 @@ export interface SendResult {
   messageId: string;
 }
 
+export interface ReauthSession {
+  url: string;
+  done: Promise<{ ok: true } | { ok: false; error: string }>;
+}
+
 export interface GogAdapter {
   listAccounts(): Promise<GogAccountT[]>;
+  startReauth(o: { account: string }): Promise<ReauthSession>;
   searchMessages(o: {
     account: string;
     query: string;
@@ -110,6 +133,91 @@ function normalizeSearchHits(
   return hits;
 }
 
+const AUTH_URL_RE = /https:\/\/accounts\.google\.com\/o\/oauth2\/auth\?[^\s]+/;
+
+async function spawnReauthSession(account: string): Promise<ReauthSession> {
+  const proc = Bun.spawn({
+    cmd: [bin(), "auth", "add", account, "--no-input"],
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "ignore",
+    env: { ...process.env },
+  });
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  async function* lines(stream: ReadableStream<Uint8Array> | null) {
+    if (!stream) return;
+    const reader = stream.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      yield decoder.decode(value, { stream: true });
+    }
+  }
+
+  const url = await new Promise<string>((resolve, reject) => {
+    let settled = false;
+    const fail = (msg: string) => {
+      if (settled) return;
+      settled = true;
+      try {
+        proc.kill();
+      } catch {}
+      reject(new Error(msg));
+    };
+    const ok = (u: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(u);
+    };
+
+    (async () => {
+      try {
+        for await (const chunk of lines(
+          proc.stdout as ReadableStream<Uint8Array> | null,
+        )) {
+          buffer += chunk;
+          const m = AUTH_URL_RE.exec(buffer);
+          if (m) return ok(m[0]);
+        }
+      } catch (err) {
+        fail(`stdout error: ${(err as Error).message}`);
+      }
+    })();
+
+    (async () => {
+      try {
+        for await (const chunk of lines(
+          proc.stderr as ReadableStream<Uint8Array> | null,
+        )) {
+          buffer += chunk;
+          const m = AUTH_URL_RE.exec(buffer);
+          if (m) return ok(m[0]);
+        }
+      } catch (err) {
+        fail(`stderr error: ${(err as Error).message}`);
+      }
+    })();
+
+    proc.exited.then((code) => {
+      if (!settled) fail(`gog auth add exited (${code}) before printing URL`);
+    });
+
+    setTimeout(() => fail("timed out waiting for auth URL"), 10_000);
+  });
+
+  const done = proc.exited.then((code) =>
+    code === 0
+      ? ({ ok: true } as const)
+      : ({ ok: false as const, error: `gog auth add exit ${code}` }),
+  );
+
+  debug("reauth url ready", { account });
+  return { url, done };
+}
+
 export function createGogAdapter(): GogAdapter {
   return {
     async listAccounts() {
@@ -120,74 +228,87 @@ export function createGogAdapter(): GogAdapter {
       return parsed;
     },
 
+    async startReauth({ account }) {
+      debug("startReauth", { account });
+      return spawnReauthSession(account);
+    },
+
     async searchMessages({ account, query, max = 50 }) {
       debug("searchMessages", { account, query, max });
-      const raw = await spawnJson({
-        cmd: [
-          bin(),
-          "--account",
-          account,
-          "--json",
-          "gmail",
-          "messages",
-          "search",
-          query,
-          `--max=${max}`,
-        ],
+      return withReauthGuard(account, async () => {
+        const raw = await spawnJson({
+          cmd: [
+            bin(),
+            "--account",
+            account,
+            "--json",
+            "gmail",
+            "messages",
+            "search",
+            query,
+            `--max=${max}`,
+          ],
+        });
+        GogSearchResponse.parse(raw);
+        const hits = normalizeSearchHits(raw);
+        debug("searchMessages done", { account, hits: hits.length });
+        return hits;
       });
-      GogSearchResponse.parse(raw);
-      const hits = normalizeSearchHits(raw);
-      debug("searchMessages done", { account, hits: hits.length });
-      return hits;
     },
 
     async getMessage({ account, messageId }) {
       debug("getMessage", { account, messageId });
-      const raw = await spawnJson({
-        cmd: [
-          bin(),
-          "--account",
-          account,
-          "--json",
-          "gmail",
-          "get",
-          messageId,
-          "--format=full",
-        ],
+      return withReauthGuard(account, async () => {
+        const raw = await spawnJson({
+          cmd: [
+            bin(),
+            "--account",
+            account,
+            "--json",
+            "gmail",
+            "get",
+            messageId,
+            "--format=full",
+          ],
+        });
+        const parsed = GogMessage.parse(unwrapGetMessageResponse(raw));
+        debug("getMessage done", { account, messageId });
+        return parsed;
       });
-      const parsed = GogMessage.parse(unwrapGetMessageResponse(raw));
-      debug("getMessage done", { account, messageId });
-      return parsed;
     },
 
     async listLabels({ account }) {
       debug("listLabels", { account });
-      const raw = await spawnJson({
-        cmd: [bin(), "--account", account, "--json", "gmail", "labels", "list"],
+      return withReauthGuard(account, async () => {
+        const raw = await spawnJson({
+          cmd: [bin(), "--account", account, "--json", "gmail", "labels", "list"],
+        });
+        const parsed = GogLabelListResponse.parse(raw);
+        const out = Array.isArray(parsed) ? parsed : parsed.labels;
+        debug("listLabels done", { account, count: out.length });
+        return out;
       });
-      const parsed = GogLabelListResponse.parse(raw);
-      const out = Array.isArray(parsed) ? parsed : parsed.labels;
-      debug("listLabels done", { account, count: out.length });
-      return out;
     },
 
     async createLabel({ account, name }) {
       debug("createLabel", { account, name });
-      const raw = await spawnJson({
-        cmd: [
-          bin(),
-          "--account",
-          account,
-          "--json",
-          "gmail",
-          "labels",
-          "create",
-          name,
-        ],
+      return withReauthGuard(account, async () => {
+        const raw = await spawnJson({
+          cmd: [
+            bin(),
+            "--account",
+            account,
+            "--json",
+            "gmail",
+            "labels",
+            "create",
+            name,
+          ],
+        });
+        const parsed = GogCreateLabelResponse.parse(raw);
+        debug("createLabel done", { account, name, gmailLabelId: parsed.id });
+        return parsed;
       });
-      const parsed = GogCreateLabelResponse.parse(raw);
-      debug("createLabel done", { account, name, gmailLabelId: parsed.id });
-      return parsed;
     },
 
     async batchModifyLabels({ account, messageIds, add, remove }) {
@@ -201,59 +322,66 @@ export function createGogAdapter(): GogAdapter {
         add: add ?? [],
         remove: remove ?? [],
       });
-      const cmd = [
-        bin(),
-        "--account",
-        account,
-        "--json",
-        "--force",
-        "gmail",
-        "batch",
-        "modify",
-        ...messageIds,
-      ];
-      if (add && add.length > 0) cmd.push(`--add=${add.join(",")}`);
-      if (remove && remove.length > 0) cmd.push(`--remove=${remove.join(",")}`);
-      await spawnVoid({ cmd });
+      await withReauthGuard(account, async () => {
+        const cmd = [
+          bin(),
+          "--account",
+          account,
+          "--json",
+          "--force",
+          "gmail",
+          "batch",
+          "modify",
+          ...messageIds,
+        ];
+        if (add && add.length > 0) cmd.push(`--add=${add.join(",")}`);
+        if (remove && remove.length > 0)
+          cmd.push(`--remove=${remove.join(",")}`);
+        await spawnVoid({ cmd });
+      });
       debug("batchModifyLabels done", { account });
     },
 
     async trashThread({ account, threadId }) {
       debug("trashThread", { account, threadId });
-      await spawnVoid({
-        cmd: [
-          bin(),
-          "--account",
-          account,
-          "--json",
-          "--force",
-          "gmail",
-          "thread",
-          "modify",
-          threadId,
-          "--add=TRASH",
-          "--remove=INBOX",
-        ],
-      });
+      await withReauthGuard(account, () =>
+        spawnVoid({
+          cmd: [
+            bin(),
+            "--account",
+            account,
+            "--json",
+            "--force",
+            "gmail",
+            "thread",
+            "modify",
+            threadId,
+            "--add=TRASH",
+            "--remove=INBOX",
+          ],
+        }),
+      );
       debug("trashThread done", { account, threadId });
     },
 
     async archiveThread({ account, threadId }) {
       debug("archiveThread", { account, threadId });
-      await spawnVoid({
-        cmd: [
-          bin(),
-          "--account",
-          account,
-          "--json",
-          "--force",
-          "gmail",
-          "thread",
-          "modify",
-          threadId,
-          "--remove=INBOX",
-        ],
-      });
+      await withReauthGuard(account, () =>
+        spawnVoid({
+          cmd: [
+            bin(),
+            "--account",
+            account,
+            "--json",
+            "--force",
+            "gmail",
+            "thread",
+            "modify",
+            threadId,
+            "--remove=INBOX",
+          ],
+        }),
+      );
       debug("archiveThread done", { account, threadId });
     },
 
@@ -265,66 +393,72 @@ export function createGogAdapter(): GogAdapter {
         bodyLen: body.length,
         replyToMessageId,
       });
-      const raw = await spawnJson({
-        cmd: [
-          bin(),
-          "--account",
-          account,
-          "--json",
-          "gmail",
-          "send",
-          `--to=${to.join(",")}`,
-          `--subject=${subject}`,
-          `--body=${body}`,
-          `--reply-to-message-id=${replyToMessageId}`,
-        ],
+      return withReauthGuard(account, async () => {
+        const raw = await spawnJson({
+          cmd: [
+            bin(),
+            "--account",
+            account,
+            "--json",
+            "gmail",
+            "send",
+            `--to=${to.join(",")}`,
+            `--subject=${subject}`,
+            `--body=${body}`,
+            `--reply-to-message-id=${replyToMessageId}`,
+          ],
+        });
+        const parsed = GogSendResponse.parse(raw);
+        const messageId = parsed.messageId ?? parsed.id ?? "";
+        debug("sendReply done", { account, sentMessageId: messageId });
+        return { messageId };
       });
-      const parsed = GogSendResponse.parse(raw);
-      const messageId = parsed.messageId ?? parsed.id ?? "";
-      debug("sendReply done", { account, sentMessageId: messageId });
-      return { messageId };
     },
 
     async listFilters({ account }) {
       debug("listFilters", { account });
-      const raw = await spawnJson({
-        cmd: [
-          bin(),
-          "--account",
-          account,
-          "--json",
-          "gmail",
-          "filters",
-          "list",
-        ],
+      return withReauthGuard(account, async () => {
+        const raw = await spawnJson({
+          cmd: [
+            bin(),
+            "--account",
+            account,
+            "--json",
+            "gmail",
+            "filters",
+            "list",
+          ],
+        });
+        const parsed = GogFilterListResponse.parse(raw);
+        const list = Array.isArray(parsed) ? parsed : (parsed.filters ?? []);
+        debug("listFilters done", { account, count: list.length });
+        return list;
       });
-      const parsed = GogFilterListResponse.parse(raw);
-      const list = Array.isArray(parsed) ? parsed : (parsed.filters ?? []);
-      debug("listFilters done", { account, count: list.length });
-      return list;
     },
 
     async createFilter({ account, from, to, subject, query, addLabel }) {
       debug("createFilter", { account, from, to, subject, query, addLabel });
-      const cmd = [
-        bin(),
-        "--account",
-        account,
-        "--json",
-        "--force",
-        "gmail",
-        "filters",
-        "create",
-      ];
-      if (from) cmd.push(`--from=${from}`);
-      if (to) cmd.push(`--to=${to}`);
-      if (subject) cmd.push(`--subject=${subject}`);
-      if (query) cmd.push(`--query=${query}`);
-      if (addLabel) cmd.push(`--add-label=${addLabel}`);
-      const raw = await spawnJson({ cmd });
-      const parsed = GogFilter.parse(raw);
-      debug("createFilter done", { account, id: parsed.id });
-      return parsed;
+      return withReauthGuard(account, async () => {
+        const cmd = [
+          bin(),
+          "--account",
+          account,
+          "--json",
+          "--force",
+          "gmail",
+          "filters",
+          "create",
+        ];
+        if (from) cmd.push(`--from=${from}`);
+        if (to) cmd.push(`--to=${to}`);
+        if (subject) cmd.push(`--subject=${subject}`);
+        if (query) cmd.push(`--query=${query}`);
+        if (addLabel) cmd.push(`--add-label=${addLabel}`);
+        const raw = await spawnJson({ cmd });
+        const parsed = GogFilter.parse(raw);
+        debug("createFilter done", { account, id: parsed.id });
+        return parsed;
+      });
     },
   };
 }

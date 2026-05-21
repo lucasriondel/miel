@@ -1,7 +1,7 @@
 import type { ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
-import { ShellError } from "@miel/core";
+import { ReauthRequiredError, ShellError } from "@miel/core";
 
 export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof HTTPException) {
@@ -11,6 +11,16 @@ export const errorHandler: ErrorHandler = (err, c) => {
     return c.json(
       { error: "validation_failed", issues: err.issues },
       400,
+    );
+  }
+  if (err instanceof ReauthRequiredError) {
+    return c.json(
+      {
+        error: "reauth_required",
+        account: err.account,
+        message: err.message,
+      },
+      409,
     );
   }
   if (err instanceof ShellError) {
