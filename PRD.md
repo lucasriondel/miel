@@ -184,7 +184,7 @@ Swap to `useSyncStream()`. Drop the per-run summary table (toasts cover it). Kee
 
 1. ~~Add `schemas/syncEvents.ts` + core export. Type-only.~~ ✅ Done 2026-05-21.
 2. ~~Add `onEvent` to `fetchAndTriage` and `syncAll`, emit at the labeled points (no parallelism yet). Run the CLI to confirm log output unchanged.~~ ✅ Done 2026-05-21.
-3. Parallelize triage batches + filter suggest. Re-run CLI; totals should match the sequential run.
+3. ~~Parallelize triage batches + filter suggest. Re-run CLI; totals should match the sequential run.~~ ✅ Done 2026-05-21.
 4. Add the WS handler in `api/index.ts` + `api/ws/syncSocket.ts`. Smoke-test with `wscat -c "ws://localhost:3001/sync/ws?token=$API_SECRET"` sending `{"type":"sync.start","since":"1d"}` and watching events stream.
 5. Add `useSyncStream`, wire `SyncRangeControls`. Verify toasts.
 6. Delete `SyncStatusBanner`, the POST route, `useSync`, `SyncResponse`. Trim `LayoutContext`, `InboxPage`, `MessageDetailPage`, `SettingsSyncTrigger`. Run `bun run typecheck`.

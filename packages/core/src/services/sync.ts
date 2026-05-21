@@ -438,11 +438,9 @@ export async function fetchAndTriage(
     .filter((l) => l.type === "user")
     .map((l) => l.name);
 
-  let triagedCount = 0;
-  let suggestedNewLabelsCount = 0;
   const batches = chunk(normalized, TRIAGE_BATCH_SIZE);
   log(
-    `[${account.email}] running ${batches.length} triage batch(es) over ${normalized.length} messages`,
+    `[${account.email}] running ${batches.length} triage batch(es) over ${normalized.length} messages (in parallel with filter suggest)`,
   );
   emit({
     type: "triage.started",
@@ -450,8 +448,16 @@ export async function fetchAndTriage(
     totalBatches: batches.length,
   });
 
-  for (let i = 0; i < batches.length; i += 1) {
-    const batch = batches[i];
+  interface BatchOutcome {
+    persisted: number;
+    newLabelSuggestions: number;
+    errors: string[];
+  }
+
+  const runTriageBatch = async (
+    batch: NormalizedMessage[],
+    i: number,
+  ): Promise<BatchOutcome> => {
     const items = buildTriageItems(batch, labelsByGmailId);
     const input = TriageInput.parse({
       account: account.email,
@@ -465,6 +471,7 @@ export async function fetchAndTriage(
       totalBatches: batches.length,
       status: "started",
     });
+    const localErrors: string[] = [];
     try {
       log(`[${account.email}] batch ${i + 1}/${batches.length} → claude`);
       debug("triage batch start", {
@@ -486,13 +493,13 @@ export async function fetchAndTriage(
       const missing = items.filter((m) => !returnedIds.has(m.id));
       if (missing.length > 0) {
         const m = `triage batch ${i + 1} dropped ids: ${missing.map((x) => x.id).join(",")}`;
-        errors.push(m);
+        localErrors.push(m);
         log(`[${account.email}] WARN ${m}`);
       }
       const extras = output.results.filter((r) => !byId.has(r.id));
       if (extras.length > 0) {
         const m = `triage batch ${i + 1} returned unknown ids: ${extras.map((x) => x.id).join(",")}`;
-        errors.push(m);
+        localErrors.push(m);
         log(`[${account.email}] WARN ${m}`);
       }
       const persisted = await persistTriageResults({
@@ -503,8 +510,6 @@ export async function fetchAndTriage(
         labelsByName,
         items: output.results.filter((r) => byId.has(r.id)),
       });
-      triagedCount += persisted.persisted;
-      suggestedNewLabelsCount += persisted.newLabelSuggestions;
       debug("triage batch persisted", {
         account: account.email,
         batch: i + 1,
@@ -518,9 +523,14 @@ export async function fetchAndTriage(
         totalBatches: batches.length,
         status: "done",
       });
+      return {
+        persisted: persisted.persisted,
+        newLabelSuggestions: persisted.newLabelSuggestions,
+        errors: localErrors,
+      };
     } catch (err) {
       const m = (err as Error).message;
-      errors.push(`triage batch ${i + 1}: ${m}`);
+      localErrors.push(`triage batch ${i + 1}: ${m}`);
       log(`[${account.email}] ERROR triage batch ${i + 1}: ${m}`);
       debug("triage batch failed", {
         account: account.email,
@@ -535,6 +545,65 @@ export async function fetchAndTriage(
         status: "failed",
         error: m,
       });
+      return { persisted: 0, newLabelSuggestions: 0, errors: localErrors };
+    }
+  };
+
+  const runFilterSuggest = async (): Promise<{
+    suggestedFilters: number;
+    errors: string[];
+  }> => {
+    emit({ type: "filters.started", account: account.email });
+    try {
+      log(
+        `[${account.email}] running filter suggestions over ${normalized.length} messages`,
+      );
+      const proposals = await suggestFiltersForBatch({
+        accountId: account.id,
+        accountEmail: account.email,
+        messages: normalized.map((m) => ({
+          id: m.gmailMessageId,
+          from: m.fromEmail,
+          subject: m.subject,
+          snippet: m.snippet,
+          currentLabels: m.labelIds
+            .map((id) => labelsByGmailId.get(id)?.name)
+            .filter((n): n is string => Boolean(n)),
+        })),
+        claude,
+      });
+      log(
+        `[${account.email}] filter suggestions: ${proposals.created} new, ${proposals.skipped} skipped`,
+      );
+      return { suggestedFilters: proposals.created, errors: [] };
+    } catch (err) {
+      const m = (err as Error).message;
+      log(`[${account.email}] WARN filterSuggest failed: ${m}`);
+      return { suggestedFilters: 0, errors: [`filterSuggest: ${m}`] };
+    }
+  };
+
+  const batchPromise = Promise.allSettled(
+    batches.map((batch, i) => runTriageBatch(batch, i)),
+  );
+  const filterPromise = runFilterSuggest();
+  const [batchResults, filterResult] = await Promise.all([
+    batchPromise,
+    filterPromise,
+  ]);
+
+  let triagedCount = 0;
+  let suggestedNewLabelsCount = 0;
+  for (let i = 0; i < batchResults.length; i += 1) {
+    const r = batchResults[i];
+    if (r.status === "fulfilled") {
+      triagedCount += r.value.persisted;
+      suggestedNewLabelsCount += r.value.newLabelSuggestions;
+      errors.push(...r.value.errors);
+    } else {
+      const m = (r.reason as Error)?.message ?? String(r.reason);
+      errors.push(`triage batch ${i + 1}: ${m}`);
+      log(`[${account.email}] ERROR triage batch ${i + 1} rejected: ${m}`);
     }
   }
 
@@ -545,33 +614,8 @@ export async function fetchAndTriage(
     suggestedNewLabels: suggestedNewLabelsCount,
   });
 
-  let suggestedFiltersCount = 0;
-  emit({ type: "filters.started", account: account.email });
-  try {
-    log(`[${account.email}] running filter suggestions over ${normalized.length} messages`);
-    const proposals = await suggestFiltersForBatch({
-      accountId: account.id,
-      accountEmail: account.email,
-      messages: normalized.map((m) => ({
-        id: m.gmailMessageId,
-        from: m.fromEmail,
-        subject: m.subject,
-        snippet: m.snippet,
-        currentLabels: m.labelIds
-          .map((id) => labelsByGmailId.get(id)?.name)
-          .filter((n): n is string => Boolean(n)),
-      })),
-      claude,
-    });
-    suggestedFiltersCount = proposals.created;
-    log(
-      `[${account.email}] filter suggestions: ${proposals.created} new, ${proposals.skipped} skipped`,
-    );
-  } catch (err) {
-    const m = (err as Error).message;
-    errors.push(`filterSuggest: ${m}`);
-    log(`[${account.email}] WARN filterSuggest failed: ${m}`);
-  }
+  const suggestedFiltersCount = filterResult.suggestedFilters;
+  errors.push(...filterResult.errors);
   emit({
     type: "filters.finished",
     account: account.email,
