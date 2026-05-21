@@ -44,14 +44,11 @@ export const WeekNav = ({ week, isCurrentWeek, canGoNext, onPrev, onNext, onToda
       >
         ›
       </Button>
-      <Button
-        variant="secondary"
-        onClick={onToday}
-        disabled={isCurrentWeek}
-        className="ml-1"
-      >
-        Today
-      </Button>
+      {!isCurrentWeek && (
+        <Button variant="secondary" onClick={onToday} className="ml-1">
+          Today
+        </Button>
+      )}
     </div>
   );
 };
