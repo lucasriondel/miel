@@ -7,6 +7,7 @@ import { TopBar } from "../components/TopBar";
 import { WeekNav } from "../features/sync/WeekNav";
 import { SyncRangeControls } from "../features/sync/SyncRangeControls";
 import { SyncStatusBanner } from "../features/sync/SyncStatusBanner";
+import { InboxFilterSuggestions } from "../features/filters/InboxFilterSuggestions";
 import type { ListedMessage, Priority } from "../api/types";
 import type { LayoutContext } from "../App";
 
@@ -59,8 +60,11 @@ export const InboxPage = () => {
           />
         }
       />
-      <div className="flex-1 px-6 pb-6 pt-4">
+      <div className="flex flex-1 flex-col gap-4 px-6 pb-6 pt-4">
         <SyncStatusBanner status={syncStatus} onDismiss={dismissSyncStatus} />
+        {selectedAccountId ? (
+          <InboxFilterSuggestions accountId={selectedAccountId} />
+        ) : null}
         <InboxBody
           selectedAccountId={selectedAccountId}
           isLoading={isLoading}
