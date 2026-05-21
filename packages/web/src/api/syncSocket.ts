@@ -52,6 +52,8 @@ function dispatchEvent(
         toast.info(
           `Found ${event.count} new mail${event.count === 1 ? "" : "s"} for ${event.account}`,
         );
+      } else {
+        toast.info(`No new mails for ${event.account}`);
       }
       qc.invalidateQueries({ queryKey: ["messages"] });
       return;

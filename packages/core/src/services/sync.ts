@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import {
   accounts,
@@ -366,8 +366,35 @@ export async function fetchAndTriage(
   log(`[${account.email}] ${hits.length} hits`);
   debug("search hits", { account: account.email, hits: hits.length });
 
+  const { db } = getDb();
+  const hitIds = hits.map((h) => h.messageId);
+  const existingIds = hitIds.length
+    ? new Set(
+        (
+          await db
+            .select({ gmailMessageId: messages.gmailMessageId })
+            .from(messages)
+            .where(
+              and(
+                eq(messages.accountId, account.id),
+                inArray(messages.gmailMessageId, hitIds),
+              ),
+            )
+        ).map((r) => r.gmailMessageId),
+      )
+    : new Set<string>();
+  const newHits = hits.filter((h) => !existingIds.has(h.messageId));
+  log(
+    `[${account.email}] ${newHits.length} new (skipping ${existingIds.size} already in db)`,
+  );
+  debug("new hits after dedupe", {
+    account: account.email,
+    newHits: newHits.length,
+    skipped: existingIds.size,
+  });
+
   const normalized: NormalizedMessage[] = [];
-  for (const hit of hits) {
+  for (const hit of newHits) {
     try {
       const msg = await gog.getMessage({
         account: account.email,
@@ -393,7 +420,7 @@ export async function fetchAndTriage(
 
   if (normalized.length === 0) {
     debug("nothing to triage", { account: account.email });
-    const { db } = getDb();
+    emit({ type: "mails.fetched", account: account.email, count: 0 });
     await db
       .update(accounts)
       .set({ lastSyncedAt: new Date() })
@@ -622,7 +649,6 @@ export async function fetchAndTriage(
     suggestedFilters: suggestedFiltersCount,
   });
 
-  const { db } = getDb();
   await db
     .update(accounts)
     .set({ lastSyncedAt: new Date() })
