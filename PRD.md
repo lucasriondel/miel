@@ -1,544 +1,214 @@
-# Miel — Gmail Triage System
+# WebSocket sync progress streaming
 
 ## Context
 
-Build an end-to-end Gmail triage system in this empty Bun + Turborepo monorepo (`/Users/lucas/miel`). The system fetches messages from multiple `gog`-authorized Gmail accounts, sends them in batches to `claude -p` for priority classification (high/medium/low) and label suggestions (apply existing / propose new), stores everything in a local Postgres, and surfaces it through a React dashboard that can apply labels, archive, trash, and generate AI-assisted replies (all routed back to Gmail via `gog`).
+Today the web app triggers a sync via `POST /sync`, blocks until the whole pipeline (fetch → triage all batches → suggest filters) finishes, then shows a `SyncStatusBanner` with totals. The user has no visibility into stages, no way to see freshly-fetched mail before triage finishes, and the Claude triage batches run strictly sequentially.
 
-The repo already has four stub packages (`@miel/core`, `@miel/api`, `@miel/cli`, `@miel/web`). `gog` (`/opt/homebrew/bin/gog`, v0.9.0) is installed and authorized for `lucasriondelpro@gmail.com`. Docker 28 + Compose v2 are installed. `claude -p` supports `--output-format=json` and `--json-schema='<schema>'`, so we can constrain output structure directly without a parser.
+We're replacing this with a WebSocket protocol where the server streams typed progress events for each stage. Triage batches and filter suggestions run **in parallel** within an account. The frontend dispatches each event to a dedicated sonner toast (one per stage) and invalidates React Query caches at the right moments so fetched-but-untriaged mail lands in the existing "Not yet triaged" section immediately. The `POST /sync` route and `SyncStatusBanner` are removed; the CLI keeps working because it calls `syncAll` directly.
 
-Decisions confirmed:
-- Triage = batched 15/call. Sync = synchronous. Web = Vite. Reply schema = `{subject, body}`.
-- Accounts auto-synced from `gog auth list`. Default window = 7d. Archive/trash hit Gmail immediately.
-- API auth = shared bearer secret. HTML body = sandboxed iframe. Styling = Tailwind.
-- Claude model is **configurable per-task** via a Settings page (DB-stored). Defaults: Haiku 4.5 for triage, Sonnet 4.6 for reply.
+## Event schema (shared via `@miel/core`)
 
----
+New file `packages/core/src/schemas/syncEvents.ts` defines a Zod discriminated union on `type`:
 
-## Library choices
+**Client → Server**
+- `sync.start` — `{ type, account?, since?, range?, max? }` (refined: not both `since` and `range`)
 
-| Concern | Pick | Why (one line) |
+**Server → Client**
+- `sync.started` — `{ type }`
+- `mails.fetched` — `{ type, account, count }`
+- `triage.started` — `{ type, account, totalBatches }`
+- `triage.batch.progress` — `{ type, account, batchIndex, totalBatches, status: "started"|"done"|"failed", error? }`
+- `filters.started` — `{ type, account }`
+- `triage.finished` — `{ type, account, triaged, suggestedNewLabels }`
+- `filters.finished` — `{ type, account, suggestedFilters }`
+- `sync.finished` — `{ type, runs: SyncRunResult[] }`
+- `sync.error` — `{ type, message }`
+
+Re-export as `syncEventSchemas` from `packages/core/src/index.ts` (mirrors the existing `apiSchemas` pattern). Keep `apiSchemas.SyncRequest` — it stays useful as the payload of `sync.start`. Delete `SyncResponse` from `packages/web/src/api/types.ts`.
+
+## Backend changes
+
+### `packages/api/src/index.ts` — WS upgrade outside Hono
+
+Bun's `server.upgrade()` needs the live `server` instance, which only exists after `Bun.serve()` returns. To avoid the chicken-and-egg with Hono's context, handle `/sync/ws` directly in the top-level `fetch` and delegate everything else to `app.fetch`:
+
+```ts
+const app = createApp();
+const server = Bun.serve({
+  port: API_PORT,
+  fetch(req, server) {
+    const url = new URL(req.url);
+    if (url.pathname === "/sync/ws") {
+      const token = url.searchParams.get("token");
+      if (token !== getEnv().API_SECRET) return new Response("unauthorized", { status: 401 });
+      const ok = server.upgrade(req, { data: { started: false } });
+      return ok ? undefined : new Response("upgrade failed", { status: 400 });
+    }
+    return app.fetch(req);
+  },
+  websocket: {
+    open(ws)    { /* wait for sync.start */ },
+    message(ws, raw) { handleSyncMessage(ws, raw); },
+    close(ws)   { /* mark cancelled */ },
+  },
+});
+```
+
+Auth uses a `?token=` query param (browsers can't set headers on WS). For a single-user local app this is fine; documented as a risk for any future deployment.
+
+### New file `packages/api/src/ws/syncSocket.ts`
+
+Holds `handleSyncMessage(ws, raw)`:
+1. Parse with `syncEventSchemas.SyncStartMessage`. Reject if a second `sync.start` arrives.
+2. Send `sync.started`.
+3. Call `syncAll({ ...input, onEvent: (e) => ws.send(JSON.stringify(e)) })`.
+4. Send `sync.finished` with the runs, or `sync.error` on throw.
+5. `ws.close(1000)`.
+
+On `close`, set `ws.data.cancelled = true`. No abort plumbing in v1 — the work continues in the background; this is documented as a known limitation.
+
+### Drop the old POST route
+
+- Delete `packages/api/src/routes/sync.ts`.
+- Remove the `syncRoutes` import and `app.route("/sync", syncRoutes)` from `packages/api/src/app.ts`.
+
+### `packages/core/src/services/sync.ts` — events + parallelism
+
+**Add a typed `onEvent` alongside the existing `log` callback.** Both can coexist — the CLI keeps using `log`, the WS handler uses `onEvent`. No behavioral change for the CLI.
+
+**Emit at these points in `fetchAndTriage` (current line numbers for orientation):**
+- After `upsertMessages(normalized)` (line 409): `mails.fetched`. Rows are in the DB with `priority=null`, ready to render in the untriaged section.
+- After `chunk(normalized, ...)` (line 439): `triage.started` with `totalBatches`.
+- Before/after each batch's claude call: `triage.batch.progress` with `started` / `done` / `failed`.
+- Before the filter suggest call (line 512): `filters.started`.
+- After all triage batches resolve: `triage.finished`.
+- After filters resolve: `filters.finished`.
+
+`sync.started` / `sync.finished` / `sync.error` are emitted by the WS wrapper, NOT by `fetchAndTriage`.
+
+**Parallelize triage batches AND the filter suggestion call.** Extract `runTriageBatch(batch, i)` returning `{ persisted, newLabelSuggestions, errors }` (no shared mutation). Then:
+
+```ts
+const batchPromise = Promise.allSettled(
+  batches.map((batch, i) => runTriageBatch(batch, i)),
+);
+const filterPromise = runFilterSuggest();  // wraps the existing try/catch around suggestFiltersForBatch
+const [batchResults, filterResult] = await Promise.all([batchPromise, filterPromise]);
+```
+
+After the awaits, reduce the per-batch results into `triagedCount`, `suggestedNewLabelsCount`, and `errors`. `Promise.allSettled` for batches so one failure doesn't poison the rest (matches today's catch behavior). Filter suggestions are correctness-safe in parallel: they depend only on `normalized` + `labelsByGmailId`, both ready before line 432.
+
+`syncAll` gets the same `onEvent?` option and forwards it.
+
+## Frontend changes
+
+### New hook `packages/web/src/api/syncSocket.ts`
+
+`useSyncStream()` exposes `{ start, isRunning }`:
+
+```ts
+ws = new WebSocket(buildSyncWsUrl());      // ws://host/api/sync/ws?token=<apiSecret>
+ws.onopen    = () => ws.send(JSON.stringify({ type: "sync.start", ...input }));
+ws.onmessage = (ev) => dispatch(SyncEvent.safeParse(JSON.parse(ev.data)).data, qc);
+ws.onerror   = () => toast.error("Sync connection error");
+ws.onclose   = () => setIsRunning(false);
+```
+
+URL builder picks `wss:` when the page is `https:`. Vite's `/api` proxy auto-upgrades WS requests, so dev works without config changes.
+
+**Event → toast dispatcher** (one toast per stage, stable IDs scoped per `(account, stage)`):
+
+| Event | Toast | Side effect |
 |---|---|---|
-| ORM | `drizzle-orm` ^0.36 | Type-safe, Bun-friendly, integrates with zod via `drizzle-zod`. |
-| Migrations | `drizzle-kit` ^0.30 | First-party migrator. |
-| PG driver | `postgres` ^3.4 | Drizzle's recommended Bun-compatible client. |
-| Validation | `zod` ^3.23 | Stay on v3 for compatibility with `zod-to-json-schema` and `drizzle-zod`. |
-| zod→JSON Schema | `zod-to-json-schema` ^3.23 | Emits the draft-07 JSON that `claude -p --json-schema` accepts. |
-| API framework | `hono` ^4.6 | Bun-native, typed routes, easy CORS + bearer middleware. |
-| CLI parser | `commander` ^12 | Just enough for 4 commands. |
-| Query client | `@tanstack/react-query` ^5 | Standard fetch/cache/mutation primitive. |
-| Router | `react-router` ^7 (data router) | Smallest router with nested layouts. |
-| Web bundler | Vite ^6 + `@vitejs/plugin-react` | User-selected; mature React HMR; proxies API to :3001. |
-| Styling | Tailwind ^3.4 + postcss + autoprefixer | Fast iteration, no CSS files to manage. |
-| Date | `date-fns` ^4 | `--since=7d` parsing. |
+| `sync.started` | (none — button spinner covers it) | — |
+| `mails.fetched` | `toast.info("Found N new mails for <account>")` | invalidate `["messages"]` |
+| `triage.started` | `toast.loading("Claude is triaging your mails…", { id: \`sync:triage:${account}\` })` | — |
+| `triage.batch.progress` | update the triage toast's description: `${done}/${total} batches` (counters in a `useRef`) | — |
+| `filters.started` | `toast.loading("Claude is finding potential new filters…", { id: \`sync:filters:${account}\` })` | — |
+| `triage.finished` | dismiss `sync:triage:${account}`, then `toast.success("Claude finished triaging <account>")` | invalidate `["messages"]` and `accounts` |
+| `filters.finished` | dismiss `sync:filters:${account}`, then `toast.success("Filters: N suggestions")` | invalidate `["filters"]` |
+| `sync.finished` | (none) | final `accounts` invalidate |
+| `sync.error` | `toast.error(\`Sync failed: ${message}\`)` | — |
 
----
+No reconnection logic in v1. Reauth detection over WS is deferred (reauth errors still surface today via the HTTP API for label/reply mutations, which is the main path).
 
-## Repo layout (new files)
+### `SyncRangeControls.tsx`
 
-```
-/Users/lucas/miel/
-  docker-compose.yml
-  .env.example
-  drizzle.config.ts
-  packages/
-    core/        # shared schemas, db, adapters, services
-    api/         # hono server on :3001
-    cli/         # commander CLI (`miel`)
-    web/         # Vite + React on :3000
-```
+Drop the `onResult` / `onError` props. Swap `useSync()` for `useSyncStream()`. `sync.mutate(...)` → `start(...)`. `sync.isPending` → `isRunning`.
 
----
+### Delete `SyncStatusBanner.tsx` and its plumbing
 
-## `packages/core`
+- Delete `packages/web/src/features/sync/SyncStatusBanner.tsx`.
+- In `packages/web/src/App.tsx`: remove `syncStatus`, `onSyncResult`, `onSyncError`, `dismissSyncStatus` from `LayoutContext`, the `useState<SyncStatus>`, and the three handlers. Trim the `useMemo` deps.
+- In `packages/web/src/pages/InboxPage.tsx`: remove the `SyncStatusBanner` import + JSX, the destructured fields, and the props passed to `<SyncRangeControls>`.
+- In `packages/web/src/pages/MessageDetailPage.tsx`: same cleanup pattern.
 
-```
-src/
-  index.ts                      # re-exports
-  env.ts                        # zod-parsed process.env (DATABASE_URL, GOG_BIN, CLAUDE_BIN, API_SECRET)
-  db/
-    client.ts                   # drizzle(postgres(DATABASE_URL))
-    schema.ts                   # ALL tables + enums + relations
-    migrate.ts                  # programmatic migrate runner
-  schemas/
-    gmail.ts                    # GogAccount, GogMessage, GogLabel zod schemas (parses gog --json output)
-    triage.ts                   # TriageInput, TriageOutput (claude triage I/O)
-    reply.ts                    # ReplyGenInput, ReplyGenOutput
-    api.ts                      # all REST request/response zod schemas
-  adapters/
-    shell.ts                    # Bun.spawn helper -> stdout JSON
-    gog.ts                      # typed wrapper over the gog binary
-    claude.ts                   # typed wrapper over claude -p (per-task model from settings)
-  services/
-    sync.ts                     # fetchAndTriage(accountEmail, since)
-    labels.ts                   # ensureLabel(account, name)
-    apply.ts                    # apply suggested labels (create+attach via gog)
-    reply.ts                    # generateReply, sendReply
-    settings.ts                 # get/set model preferences (key/value table)
-    accounts.ts                 # syncAccountsFromGog()
-  util/
-    time.ts                     # parseSince("7d") -> "newer_than:7d"
-    html.ts                     # strip + decode for body preview
-```
+### `SettingsSyncTrigger.tsx`
 
-### Drizzle schema (`packages/core/src/db/schema.ts`)
+Swap to `useSyncStream()`. Drop the per-run summary table (toasts cover it). Keep `isRunning` for the button.
 
-Tables: `accounts`, `labels`, `messages`, `message_labels`, `triages`, `triage_label_suggestions`, `suggested_labels`, `app_settings`.
+### Cleanup
 
-```ts
-import { pgTable, pgEnum, uuid, text, timestamp, boolean, jsonb, primaryKey, uniqueIndex, index } from "drizzle-orm/pg-core";
+- Remove `useSync` and `SyncInput` from `packages/web/src/api/mutations.ts`.
+- Remove `SyncResponse` from `packages/web/src/api/types.ts`. Keep `SyncRunResult` — still used by the `sync.finished` event payload.
 
-export const priorityEnum = pgEnum("priority", ["high", "medium", "low"]);
-export const suggestionStatusEnum = pgEnum("suggestion_status", ["pending", "applied", "dismissed"]);
+## Files
 
-export const accounts = pgTable("accounts", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  email: text("email").notNull().unique(),
-  displayName: text("display_name"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
-});
+**Create**
+- `packages/core/src/schemas/syncEvents.ts`
+- `packages/api/src/ws/syncSocket.ts`
+- `packages/web/src/api/syncSocket.ts`
 
-export const labels = pgTable("labels", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
-  gmailLabelId: text("gmail_label_id").notNull(),
-  name: text("name").notNull(),
-  type: text("type").notNull().default("user"),  // "user" | "system"
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => ({
-  byAccountGmailId: uniqueIndex("labels_account_gmail_id").on(t.accountId, t.gmailLabelId),
-  byAccountName: index("labels_account_name").on(t.accountId, t.name),
-}));
+**Modify**
+- `packages/core/src/index.ts` (export `syncEventSchemas`)
+- `packages/core/src/services/sync.ts`
+- `packages/api/src/index.ts`
+- `packages/api/src/app.ts`
+- `packages/web/src/App.tsx`
+- `packages/web/src/pages/InboxPage.tsx`
+- `packages/web/src/pages/MessageDetailPage.tsx`
+- `packages/web/src/features/sync/SyncRangeControls.tsx`
+- `packages/web/src/features/settings/SettingsSyncTrigger.tsx`
+- `packages/web/src/api/mutations.ts`
+- `packages/web/src/api/types.ts`
 
-export const messages = pgTable("messages", {
-  accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
-  gmailMessageId: text("gmail_message_id").notNull(),
-  gmailThreadId: text("gmail_thread_id").notNull(),
-  fromEmail: text("from_email").notNull(),
-  fromName: text("from_name"),
-  toEmails: jsonb("to_emails").$type<string[]>().notNull().default([]),
-  subject: text("subject"),
-  snippet: text("snippet"),
-  bodyText: text("body_text"),
-  bodyHtml: text("body_html"),
-  internalDate: timestamp("internal_date", { withTimezone: true }).notNull(),
-  rawHeaders: jsonb("raw_headers").$type<Record<string, string>>(),
-  isArchived: boolean("is_archived").notNull().default(false),
-  isTrashed: boolean("is_trashed").notNull().default(false),
-  fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => ({
-  pk: primaryKey({ columns: [t.accountId, t.gmailMessageId] }),
-  byThread: index("messages_thread").on(t.accountId, t.gmailThreadId),
-  byDate: index("messages_internal_date").on(t.internalDate),
-}));
+**Delete**
+- `packages/api/src/routes/sync.ts`
+- `packages/web/src/features/sync/SyncStatusBanner.tsx`
 
-export const messageLabels = pgTable("message_labels", {
-  accountId: uuid("account_id").notNull(),
-  gmailMessageId: text("gmail_message_id").notNull(),
-  labelId: uuid("label_id").notNull().references(() => labels.id, { onDelete: "cascade" }),
-}, (t) => ({
-  pk: primaryKey({ columns: [t.accountId, t.gmailMessageId, t.labelId] }),
-}));
-
-export const triages = pgTable("triages", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  accountId: uuid("account_id").notNull(),
-  gmailMessageId: text("gmail_message_id").notNull(),
-  priority: priorityEnum("priority").notNull(),
-  reasoning: text("reasoning").notNull(),
-  claudeRunId: text("claude_run_id"),
-  model: text("model"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => ({
-  byMsg: index("triages_msg").on(t.accountId, t.gmailMessageId, t.createdAt),
-}));
-
-export const triageLabelSuggestions = pgTable("triage_label_suggestions", {
-  triageId: uuid("triage_id").notNull().references(() => triages.id, { onDelete: "cascade" }),
-  labelId: uuid("label_id").notNull().references(() => labels.id, { onDelete: "cascade" }),
-  status: suggestionStatusEnum("status").notNull().default("pending"),
-}, (t) => ({
-  pk: primaryKey({ columns: [t.triageId, t.labelId] }),
-}));
-
-export const suggestedLabels = pgTable("suggested_labels", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  triageId: uuid("triage_id").notNull().references(() => triages.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  reasoning: text("reasoning"),
-  status: suggestionStatusEnum("status").notNull().default("pending"),
-  createdLabelId: uuid("created_label_id").references(() => labels.id),
-});
-
-// key/value for per-task model selection ("triage.model" -> "claude-haiku-4-5", etc.)
-export const appSettings = pgTable("app_settings", {
-  key: text("key").primaryKey(),
-  value: text("value").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
-```
-
-### Zod schemas
-
-```ts
-// schemas/triage.ts
-export const Priority = z.enum(["high", "medium", "low"]);
-
-export const TriageInputItem = z.object({
-  id: z.string(),
-  from: z.string(),
-  to: z.array(z.string()),
-  subject: z.string().nullable(),
-  snippet: z.string().nullable(),
-  body: z.string(),                  // first ~4000 chars of bodyText
-  internalDate: z.string(),
-  currentLabels: z.array(z.string()),
-});
-
-export const TriageInput = z.object({
-  account: z.string().email(),
-  existingLabels: z.array(z.string()),
-  messages: z.array(TriageInputItem).min(1).max(20),
-});
-
-export const TriageOutputItem = z.object({
-  id: z.string(),
-  priority: Priority,
-  reasoning: z.string(),
-  applyExistingLabels: z.array(z.string()),
-  suggestNewLabels: z.array(z.object({
-    name: z.string().min(1).max(40),
-    reasoning: z.string(),
-  })),
-});
-
-export const TriageOutput = z.object({ results: z.array(TriageOutputItem) });
-```
-
-```ts
-// schemas/reply.ts
-export const ReplyGenInput = z.object({
-  from: z.string(), to: z.array(z.string()), subject: z.string().nullable(),
-  body: z.string(), userInstruction: z.string(),
-});
-export const ReplyGenOutput = z.object({ subject: z.string(), body: z.string() });
-```
-
-### `gog` adapter (`packages/core/src/adapters/gog.ts`)
-
-```ts
-export interface GogAdapter {
-  listAccounts(): Promise<GogAccount[]>;
-  searchMessages(o: { account: string; query: string; max?: number }): Promise<{ messageId: string; threadId: string }[]>;
-  getMessage(o: { account: string; messageId: string }): Promise<GogMessage>;
-  listLabels(o: { account: string }): Promise<GogLabel[]>;
-  createLabel(o: { account: string; name: string }): Promise<GogLabel>;
-  batchModifyLabels(o: { account: string; messageIds: string[]; add?: string[]; remove?: string[] }): Promise<void>;
-  trashThread(o: { account: string; threadId: string }): Promise<void>;
-  archiveThread(o: { account: string; threadId: string }): Promise<void>;  // = thread modify --remove=INBOX
-  sendReply(o: { account: string; to: string[]; subject: string; body: string; replyToMessageId: string }): Promise<{ messageId: string }>;
-}
-```
-
-All commands shell out via `Bun.spawn` with `--json`; output is run through the matching zod schema in `schemas/gmail.ts`.
-
-### `claude` adapter (`packages/core/src/adapters/claude.ts`)
-
-```ts
-export interface ClaudeAdapter {
-  runTriage(input: TriageInputT): Promise<{ output: TriageOutputT; runId: string; model: string }>;
-  generateReply(input: ReplyGenInputT): Promise<{ output: ReplyGenOutputT; runId: string; model: string }>;
-}
-```
-
-Internals:
-- Reads model from `app_settings` (`triage.model`, `reply.model`); defaults `claude-haiku-4-5` and `claude-sonnet-4-6`.
-- Spawns `claude -p --output-format=json --model=<m> --json-schema='<json>' '<prompt>'`.
-- Parses outer JSON envelope → `result` string → `JSON.parse` → zod `.parse(...)`.
-- Triage prompt embeds JSON-stringified `TriageInput` and instructs Claude to return one entry per input id in `results`.
-
----
-
-## `packages/api`
-
-```
-src/
-  index.ts                      # Bun.serve({ fetch: app.fetch, port: 3001 })
-  app.ts                        # Hono app: CORS, bearer auth, routes
-  middleware/
-    auth.ts                     # checks Authorization: Bearer ${API_SECRET}
-    error.ts                    # JSON error responses
-  routes/
-    accounts.ts                 # GET /accounts, POST /accounts/sync (re-pulls from gog auth list)
-    labels.ts                   # GET /accounts/:id/labels, POST /labels
-    messages.ts                 # list/get/labels/archive/trash
-    sync.ts                     # POST /sync (synchronous)
-    reply.ts                    # generate + send
-    settings.ts                 # GET/PUT /settings  (model selections)
-  deps.ts                       # imports services from @miel/core
-```
-
-### Routes
-
-| Method | Path | Body / Query | Response |
-|---|---|---|---|
-| GET | `/accounts` | — | `Account[]` |
-| POST | `/accounts/sync` | — | `{ accounts: Account[] }` (calls gog auth list, upserts) |
-| GET | `/accounts/:accountId/labels` | — | `Label[]` |
-| POST | `/labels` | `{ accountId, name }` | `Label` (creates remote via gog) |
-| GET | `/messages` | `?account=&priority=&label=&limit=&cursor=` | `{ items, nextCursor }` (joins latest triage) |
-| GET | `/messages/:accountId/:gmailMessageId` | — | full detail + triage history |
-| POST | `/sync` | `{ account?, since?: "7d" }` | `{ runs: { account, fetched, triaged, errors }[] }` |
-| POST | `/messages/:accountId/:gmailMessageId/labels` | `{ add?, remove? }` (label UUIDs) | `{ ok: true }` |
-| POST | `/messages/:accountId/:gmailMessageId/apply-suggestions` | `{ triageId, acceptExistingLabelIds?, acceptNewSuggestionIds? }` | `{ ok, createdLabels }` |
-| POST | `/messages/:accountId/:gmailMessageId/archive` | — | `{ ok: true }` |
-| DELETE | `/messages/:accountId/:gmailMessageId` | — (trash) | `{ ok: true }` |
-| POST | `/messages/:accountId/:gmailMessageId/generate-reply` | `{ prompt }` | `{ subject, body }` |
-| POST | `/messages/:accountId/:gmailMessageId/send-reply` | `{ subject, body }` | `{ ok, sentMessageId }` |
-| GET | `/settings` | — | `{ triageModel, replyModel }` |
-| PUT | `/settings` | `{ triageModel?, replyModel? }` | updated settings |
-
-Auth: every route except a health check requires `Authorization: Bearer ${API_SECRET}`. CORS allows `http://localhost:3000`.
-
----
-
-## `packages/cli`
-
-```
-src/
-  index.ts                      # commander entry
-  commands/
-    sync.ts                     # miel sync [--account=X] [--since=7d]
-    apply.ts                    # miel apply --message-id=accountId:gmailMsgId
-    reply.ts                    # miel reply --message-id=... --prompt="..."
-    accounts.ts                 # miel accounts list | sync
-    db.ts                       # miel db migrate
-```
-
-CLI commands are thin wrappers around `@miel/core/services`.
-
----
-
-## `packages/web` (Vite + React 19 + Tailwind)
-
-```
-vite.config.ts                  # @vitejs/plugin-react; proxy /api -> http://localhost:3001
-index.html                      # root div + module script
-postcss.config.cjs              # tailwind + autoprefixer
-tailwind.config.ts              # content: ["./src/**/*.{ts,tsx}"]
-src/
-  main.tsx                      # bootstrap (QueryClientProvider + RouterProvider)
-  App.tsx                       # layout (sidebar + outlet)
-  router.tsx                    # createBrowserRouter
-  index.css                     # @tailwind directives
-  config.ts                     # reads VITE_API_BASE, VITE_API_SECRET
-  api/
-    client.ts                   # fetch wrapper (adds Bearer header)
-    queries.ts                  # useAccounts, useMessages, useMessage, useLabels, useSettings
-    mutations.ts                # useSync, useApplyLabels, useApplySuggestions, useArchive, useTrash, useGenerateReply, useSendReply, useCreateLabel, useUpdateSettings
-  components/
-    Sidebar.tsx
-    AccountPicker.tsx
-    LabelList.tsx
-    PrioritySection.tsx
-    MessageRow.tsx
-    LabelBadge.tsx
-    SuggestedLabelBadge.tsx
-    Spinner.tsx
-    Button.tsx
-    EmptyState.tsx
-  pages/
-    InboxPage.tsx               # / — messages grouped by priority for selected account
-    MessageDetailPage.tsx       # /messages/:accountId/:gmailMessageId
-    SettingsPage.tsx            # /settings — model picker, accounts, labels, sync button
-  features/
-    message-detail/
-      MessageDetailHeader.tsx
-      MessageDetailBody.tsx     # sandboxed <iframe srcdoc={bodyHtml} sandbox="">
-      MessageActions.tsx        # archive / trash / reply
-      SuggestedLabelsPanel.tsx
-      TriageHistoryPanel.tsx
-    reply/
-      ReplyComposer.tsx         # prompt textarea + Generate button
-      ReplyDraftView.tsx        # editable subject + body + Send
-    sync/
-      SyncButton.tsx
-      SyncStatusBanner.tsx
-    settings/
-      ModelPicker.tsx           # one selector per task ("triage", "reply")
-      AccountsManager.tsx
-      LabelsManager.tsx
-```
-
-Tree at runtime:
-
-```
-<App>
-  <Sidebar>           AccountPicker, LabelList, SyncButton
-  <Outlet>
-    InboxPage         SyncStatusBanner, PrioritySection×3 → MessageRow → LabelBadge + SuggestedLabelBadge
-    MessageDetailPage MessageDetailHeader, MessageDetailBody (sandboxed iframe),
-                      MessageActions, SuggestedLabelsPanel, TriageHistoryPanel,
-                      ReplyComposer → ReplyDraftView
-    SettingsPage      ModelPicker (triage), ModelPicker (reply), AccountsManager, LabelsManager
-```
-
-Vite dev proxy maps `/api/*` → `http://localhost:3001/*` so the bearer secret never enters the browser bundle directly — `client.ts` reads `VITE_API_SECRET` from `.env.local`.
-
----
-
-## Triage chunking
-
-- 15 messages per `claude -p` call.
-- Body truncated to first 4000 chars.
-- Output array matched by `id` (not index); a warning is logged if Claude drops or adds entries.
-- Calls are sequential within a sync; accounts processed sequentially.
-
-## Apply suggested new label
-
-```
-1. SELECT name FROM suggested_labels WHERE id=$1
-2. gog.createLabel({account, name})         -> { gmailLabelId, name }
-3. INSERT INTO labels ON CONFLICT (account_id, gmail_label_id) DO UPDATE
-4. UPDATE suggested_labels SET status='applied', created_label_id=...
-5. gog.batchModifyLabels({account, messageIds:[msgId], add:[gmailLabelId]})
-6. INSERT INTO message_labels ON CONFLICT DO NOTHING
-```
-
-Applying an existing-label suggestion skips steps 2-4.
-
----
-
-## Docker compose + env
-
-`docker-compose.yml`:
-```yaml
-services:
-  postgres:
-    image: postgres:16
-    container_name: miel-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: miel
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-miel}
-      POSTGRES_DB: miel
-    ports: ["5432:5432"]
-    volumes: [miel-pgdata:/var/lib/postgresql/data]
-volumes:
-  miel-pgdata:
-```
-
-`.env.example`:
-```
-DATABASE_URL=postgres://miel:miel@localhost:5432/miel
-POSTGRES_PASSWORD=miel
-GOG_BIN=/opt/homebrew/bin/gog
-CLAUDE_BIN=claude
-API_PORT=3001
-WEB_PORT=3000
-API_SECRET=change-me-to-a-random-string
-VITE_API_BASE=/api
-VITE_API_SECRET=change-me-to-a-random-string
-```
-
-`drizzle.config.ts` (root):
-```ts
-import type { Config } from "drizzle-kit";
-export default {
-  schema: "./packages/core/src/db/schema.ts",
-  out: "./packages/core/drizzle",
-  dialect: "postgresql",
-  dbCredentials: { url: process.env.DATABASE_URL! },
-} satisfies Config;
-```
-
----
+**Untouched (verify still work)**
+- `packages/cli/src/commands/sync.ts` — uses `log`, not affected
+- `packages/web/vite.config.ts` — `/api` proxy auto-upgrades WS
 
 ## Implementation order
 
-1. **Infra** ✅ DONE: deps added to each `package.json`, `docker-compose.yml`, `.env.example`, `drizzle.config.ts` written. `bun install` + `bun run typecheck` + `docker compose config` all clean.
-2. **DB schema + first migration** ✅ DONE: `env.ts`, `db/schema.ts`, `db/client.ts`, `db/migrate.ts` written; root `drizzle-kit`/`drizzle-orm`/`postgres` devDeps added so `bunx drizzle-kit generate` resolves; compose port remapped 5432→5435 to avoid a conflict with another local Postgres; migration `0000_loving_lyja.sql` applied — verified 8 tables + 2 enums via `\dt`/`\dT+`.
-3. **gog adapter + gmail zod schemas** ✅ DONE: wrote `adapters/shell.ts` (`Bun.spawn` capture + JSON parse + `ShellError`), `schemas/gmail.ts` (auth list, labels, search, message-raw with recursive payload, send), `util/gmailPayload.ts` (base64url body extraction + header parsing), and `adapters/gog.ts` exposing the typed `GogAdapter`. Re-exported from `@miel/core`. Smoke test: `gog.listAccounts()` round-tripped both authorized accounts (lucasriondelpro@gmail.com, lucasrndl@gmail.com) through the zod schema. `searchMessages`/`getMessage` calls are wired but require a non-expired OAuth token to exercise live; the local token currently returns `invalid_grant`, so those are deferred to verification time. Typecheck clean.
-4. **claude adapter + triage/reply zod schemas + settings service** ✅ DONE: wrote `schemas/triage.ts` (Priority enum + TriageInputItem + TriageInput + TriageOutputItem + TriageOutput), `schemas/reply.ts` (ReplyGenInput + ReplyGenOutput), `services/settings.ts` (SETTING_KEYS, SETTING_DEFAULTS, getSetting/setSetting/getModelSettings/updateModelSettings — defaults returned when row absent, upsert on write), and `adapters/claude.ts` (createClaudeAdapter with runTriage/generateReply: spawns `claude -p --output-format=json --model=<m> --json-schema=<json> <prompt>` via `spawnCapture`, unpacks the outer envelope → `result` string → `JSON.parse` → zod `.parse`, returns `{ output, runId, model }`). Re-exported triageSchemas/replySchemas/createClaudeAdapter/settings helpers from `@miel/core`. Smoke test: settings round-trip against live miel-postgres (defaults → set sonnet → read back → reset) and fake TriageOutput/ReplyGenOutput parsed cleanly. `zodToJsonSchema(TriageOutput)` and `(ReplyGenOutput)` produce valid draft-07 JSON. Typecheck clean. Live `claude -p` not exercised (deferred to first sync).
-5. **sync service** ✅ DONE: wrote `util/time.ts` (`parseSince` → `newer_than:<window>`), `services/accounts.ts` (`syncAccountsFromGog` upserts via gog auth list, plus `getAccountByEmail`), `services/labels.ts` (`syncLabelsForAccount` batch upserts with `excluded.*`, `getLabelsForAccount`, `getLabelsByGmailIds`, `ensureLabel` that creates remotely via gog when missing), and `services/sync.ts` (`fetchAndTriage` + `syncAll`): normalizes both decoded and raw gog message shapes via `extractBodies`/`extractHeaders`, upserts `messages` + `message_labels`, chunks into 15-item batches, calls `claude.runTriage`, logs warnings on missing/extra ids (matched by id not index), persists `triages` + `triage_label_suggestions` (against existing labels resolved by name) + `suggested_labels` (new label proposals), truncates body to 4000 chars, updates `accounts.last_synced_at`. Re-exported from `@miel/core`. Smoke test (with stubbed gog + claude adapters, live miel-postgres): 2 messages upserted, 4 message_labels written, 1 high + 1 low triage rows, 1 pending suggested label, last_synced_at populated. Typecheck clean. Live gog/claude exercise deferred to first real CLI run.
-6. **CLI commands** ✅ DONE: wrote `packages/core/src/services/apply.ts` (`applyLabels`, `applySuggestions` — implementing the PRD steps 1-6 for new-label suggestions plus existing-label attach, `archiveMessage`, `trashMessage`, `getLatestTriageForMessage`) and `packages/core/src/services/reply.ts` (`generateReply` via claude, `sendReply` via gog, with body truncated to 8000 chars for the model prompt). Re-exported all from `@miel/core`. Added `closeDb()` so CLI processes exit cleanly. Built `packages/cli/src/commands/{db,accounts,sync,apply,reply}.ts` (commander subcommands) and wired them in `packages/cli/src/index.ts` with `--help`, error→exit-code 1, and a `finally` that closes the DB connection. CLI surface: `miel db migrate`, `miel accounts list|sync`, `miel sync [--account=X] [--since=7d] [--max=N]`, `miel apply --message-id=accountEmail:gmailMessageId [--existing-only|--new-only]`, `miel reply --message-id=... --prompt="..." [--send]`. Smoke test (`packages/cli/scripts/smoke-cli.ts`, stubbed gog + claude, live miel-postgres): fetchAndTriage → 2 messages/2 triages/1 new-label suggestion; applySuggestions accept-all → existing label attached + new "SmokeNew" label created via gog stub + suggested_labels.status flipped to 'applied' + triage_label_suggestions.status flipped to 'applied'; generateReply produced subject/body; sendReply returned sentMessageId; archiveMessage + trashMessage both updated DB flags and called gog. CLI `--help`, `accounts list`, `accounts sync`, `db migrate`, `apply --message-id=missing`, and `reply --message-id=missing` all exit cleanly with correct status codes. Typecheck clean across all 4 packages.
-7. **API server** ✅ DONE: wrote `packages/core/src/schemas/api.ts` (zod request/query schemas: SyncRequest, CreateLabelRequest, ListMessagesQuery with cursor/limit/includeArchived/includeTrashed coercion, ModifyLabelsRequest, ApplySuggestionsRequest, GenerateReplyRequest, SendReplyRequest, UpdateSettingsRequest) and `packages/core/src/services/messages.ts` (`listMessages` using a `WITH latest_triage AS (SELECT DISTINCT ON … ORDER BY created_at DESC)` CTE left-joined to `messages`, with composite cursor over `(internalDate, gmailMessageId)`, optional label filter via inner join, archived/trashed defaulted to excluded; `getMessageDetail` returning headers/labels/full triage history with existing+new label suggestions joined; `listAccountsFromDb`/`getAccountById`). Re-exported `apiSchemas`, `listMessages`, `getMessageDetail`, `listAccountsFromDb`, `getAccountById`, `ListedMessage`, `MessageDetail`, `AccountSummary` from `@miel/core`. Built the Hono app: `packages/api/src/middleware/auth.ts` (Bearer match against `API_SECRET`, 401 on miss), `middleware/error.ts` (ZodError→400, ShellError→502 with stderr/exitCode, HTTPException pass-through, fallback→500), `routes/accounts.ts` (GET `/accounts`, POST `/accounts/sync`, GET `/accounts/:id/labels`, POST `/accounts/:id/labels/sync`), `routes/labels.ts` (POST `/labels` via `ensureLabel`), `routes/messages.ts` (GET list with paging, GET detail, POST labels add/remove, POST apply-suggestions, POST archive, DELETE trash, POST generate-reply, POST send-reply), `routes/sync.ts` (POST `/sync` with empty-body tolerance), `routes/settings.ts` (GET/PUT model settings), and `app.ts` mounting routes under hono/cors (`http://localhost:3000`, Auth+Content-Type headers, GET/POST/PUT/DELETE/OPTIONS), with `/health` registered before `bearerAuth` so it stays public. `src/index.ts` now boots `createApp()` via `Bun.serve({ port: API_PORT, fetch: app.fetch })`. Smoke test (`packages/api/scripts/smoke-api.ts`, in-process via `app.fetch(new Request(...))`, seeds via stubbed gog+claude through `fetchAndTriage`, live miel-postgres on 5435): no-auth `/accounts`→401, `/health` (no auth)→200, `/accounts`→2 accounts, `/accounts/:id/labels`→2 labels, `/messages?priority=high`→1 item (smoke-api-msg-1) with attached labels and priority, `/messages/:accountId/:gmailMessageId`→subject + triage history (existing+new suggestions), `/settings`→{haiku,sonnet}, PUT `/settings`→sonnet round-trip, invalid `priority=URGENT`→400 `validation_failed`, unknown account UUID→404 `account_not_found`. Apply-suggestions/archive routes correctly invoke the real `createGogAdapter()` over HTTP (no stub injection across the wire) and surface gog's `invalid_grant` failure as 502 `shell_error` with stderr — verifying the error middleware. Live `gog`+`claude` exercise of archive/apply/reply via HTTP deferred until OAuth tokens are refreshed; CLI smoke covers those paths with injected stubs. Live boot smoke: `bun run packages/api/src/index.ts` logs `miel api listening on http://localhost:3001`; `curl /accounts`→401, `curl /health`→200, `curl -H "Authorization: Bearer test-secret" /accounts`→200. `bun run typecheck` clean across all 4 packages.
-8. **Web shell** ✅ DONE: wrote `packages/web/vite.config.ts` (React plugin, port from `WEB_PORT`, `/api` proxy → `http://localhost:${API_PORT||3001}` with `rewrite` stripping `/api`), `tailwind.config.ts` (content scan + custom `miel.*` palette: bg/panel/ink/muted/line/accent + high/medium/low for priority chips), `postcss.config.cjs` (tailwind + autoprefixer), `index.html` (root + `/src/main.tsx` module), `src/index.css` (`@tailwind base/components/utilities` + body bg/ink). Bootstrap: `src/main.tsx` (`StrictMode > QueryClientProvider > RouterProvider`; QueryClient with staleTime=30s, no refetch-on-focus, retry=1), replacing the legacy `src/index.tsx`. Auth-aware fetch: `src/config.ts` (reads `VITE_API_BASE`/`VITE_API_SECRET`, warns if secret missing), `src/api/client.ts` (`apiFetch<T>` builds URL via `URL` ctor — pathname+search only — always sets `Authorization: Bearer ${VITE_API_SECRET}`, JSON-encodes body when present, throws typed `ApiError` with status+parsed body on non-2xx), `src/api/types.ts` (Account, Label, Priority, MessageLabel, ListedMessage, ListMessagesResponse, MessageDetail, SyncRunResult, SyncResponse, ModelSettings — shapes match `@miel/core`'s service exports and the API JSON responses), `src/api/queries.ts` (`useAccounts`/`useLabels(accountId)`/`useMessages(params)`/`useMessage(accountId,gmailMessageId)`/`useSettings` — typed react-query hooks keyed under `accounts | labels | messages | settings`, gated by `enabled` when ids are absent), `src/api/mutations.ts` (`useSync` posting `{account?, since?}` to `/sync`, invalidating `accounts` + `messages` on success). Routing: `src/router.tsx` creates a browser router with `App` as the layout and child routes `index → InboxPage`, `messages/:accountId/:gmailMessageId → MessageDetailPage` (Step 9 placeholder), `settings → SettingsPage` (Step 12 placeholder; read-only model display already wired). Layout: `src/App.tsx` owns `selectedAccountId`/`selectedLabelId`/`syncStatus` state, auto-selects the first account once `useAccounts` resolves, threads `{selectedAccountId, selectedLabelId}` to the `<Outlet>` via `context`, renders `Sidebar` + main column with `SyncStatusBanner`. Components: `src/components/Sidebar.tsx` (app heading, `AccountPicker`, `SyncButton`, scrollable `LabelList`, Settings NavLink — uses `react-router-dom`'s `NavLink` for active-state styling), `AccountPicker.tsx` (select bound to `useAccounts`; loading/empty/error states), `LabelList.tsx` (separates user vs system labels via `type !== 'system'`, "All messages" reset row, click to toggle `selectedLabelId`), `Button.tsx` (`primary | secondary | ghost | danger` variants), `Spinner.tsx`, `EmptyState.tsx`, `LabelBadge.tsx` (existing labels), `SuggestedLabelBadge.tsx` (existing vs new suggestion styling, takes a `kind` prop), `PrioritySection.tsx` (priority chip + count + `MessageRow` list + empty state), `MessageRow.tsx` (router `Link` to detail route, relative time via `date-fns/formatDistanceToNow`, sender/subject/snippet, INBOX label filtered out, max 6 label badges). Features: `src/features/sync/SyncButton.tsx` (uses `useSync` with `since=7d`, totals fetched/triaged/errors across runs into the layout banner), `SyncStatusBanner.tsx` (idle/ok/error states with dismiss). Inbox: `src/pages/InboxPage.tsx` reads `selectedAccountId`/`selectedLabelId` from outlet context, fetches via `useMessages({accountId, labelId, limit: 100})`, groups results into `byPriority` + an `untriaged` bucket, renders three `PrioritySection` blocks + an Untriaged section, with empty/loading/error fallbacks (and a "pick an account" CTA when no account is selected). `src/vite-env.d.ts` declares `vite/client` + `ImportMetaEnv` so `import.meta.env.VITE_*` type-checks cleanly. Verification: `bun run typecheck` → all 4 packages clean (web cache miss → success); `cd packages/web && bun run build` → vite production build (411 modules, 11.10 kB CSS, 352.25 kB JS gzip 111.10 kB) succeeds. Live boot smoke: with the API booted on `:3001` (env `DATABASE_URL=postgres://miel:miel@localhost:5435/miel API_SECRET=test-secret`) and `bun run dev` on `:3000` from `packages/web` with `VITE_API_BASE=/api VITE_API_SECRET=test-secret`: `curl http://localhost:3000/` → 200 with the wired-up index (`/src/main.tsx` + React refresh), `curl :3001/health` → `{"ok":true}` 200, `curl :3000/api/health` → `{"ok":true}` 200 (proxy works), `curl :3000/api/accounts` (no auth) → `{"error":"unauthorized"}` 401, `curl -H "Authorization: Bearer test-secret" :3000/api/accounts` → 200 with both real accounts. Detail/Settings pages are placeholder routes (Steps 9-12 will flesh them out); mutations for archive/trash/reply/apply-suggestions/labels/settings PUT are intentionally NOT yet wired — only the sync mutation needed for the sidebar's Sync button is implemented.
-9. **Detail page** ✅ DONE: wrote `packages/web/src/features/message-detail/{MessageDetailHeader,MessageDetailBody,SuggestedLabelsPanel,TriageHistoryPanel}.tsx` and rewrote `pages/MessageDetailPage.tsx` to use `useMessage(accountId, gmailMessageId)` and compose a two-column layout (body left, suggestions+history right on lg+). Header shows subject, latest-triage priority chip (or untriaged tag), From/To/Date/Account dl, and existing labels (INBOX filtered out). Body has an HTML/Text toggle (only shown when both exist), defaults to HTML when available, renders HTML inside an `<iframe sandbox="" srcDoc={bodyHtml}>` (sandbox with no allow-* flags disables scripts, popups, forms, same-origin — per PRD requirement), and text inside a `<pre>` with whitespace-pre-wrap. SuggestedLabelsPanel reads the latest triage's existingLabelSuggestions + newLabelSuggestions and renders them with status pills (pending/applied/dismissed); empty-state copy when no triage exists ("run a sync to generate suggestions"). TriageHistoryPanel renders an ordered list of every triage entry with priority chip + timestamp (date-fns `PPpp`) + model + reasoning. Loading shows Spinner + "Loading message…"; error renders EmptyState with the ApiError message. Read-only — no actions/mutations are wired (Step 10 covers archive/trash; Step 11 covers reply; apply-suggestions is also intentionally deferred). Verified: `bun run typecheck` clean across all 4 packages (web cache miss → success); `cd packages/web && bun run build` → vite production build 416 modules, 12.02 kB CSS, 372.92 kB JS gzip 115.54 kB. Live browser exercise deferred — UI components only consume the `/messages/:accountId/:gmailMessageId` JSON shape which was already validated end-to-end in Step 7's smoke test.
-10. **Actions** ✅ DONE: extended `packages/web/src/api/mutations.ts` with `useArchiveMessage` (POST `/messages/:accountId/:gmailMessageId/archive`, no body, returns `{ ok: true, threadId }`) and `useTrashMessage` (DELETE `/messages/:accountId/:gmailMessageId`), both keyed on `MessageActionInput = { accountId, gmailMessageId }`; `onSuccess` invalidates the `["messages"]` list cache and the specific `queryKeys.message(accountId, gmailMessageId)` so the detail page reflects the new `isArchived`/`isTrashed` flags. Wrote `packages/web/src/features/message-detail/MessageActions.tsx`: two `Button`s (Archive→secondary variant, Trash→danger variant) wired to the new mutations. Archive button is disabled when `message.isArchived` is already true (label flips to "Archived"); Trash button is disabled when `message.isTrashed` is already true (label flips to "Trashed"); both disable each other while either mutation is pending. Trash gates the call behind a native `confirm("Move this message to trash?")` prompt (PRD requires Gmail-immediate trash, so confirmation prevents accidental destructive action). Success handlers navigate back to `/` via `useNavigate()` so the user lands on the inbox where the now-archived/trashed message has dropped out of the default `listMessages` filter (which excludes archived+trashed by default at the SQL layer). Per-action `Spinner` shows during the pending state; errors render below the button row as red text using `ApiError.message` when available. Wired the new component into `pages/MessageDetailPage.tsx` between the `MessageDetailHeader` and `MessageDetailBody` so actions are visible above the body. Verified: `bun run typecheck` clean across all 4 packages (web cache miss → success); `cd packages/web && bun run build` → vite production build 417 modules, 12.02 kB CSS, 374.43 kB JS gzip 115.87 kB (up from 416 modules / 372.92 kB / 115.54 kB in Step 9). Live browser exercise deferred — archive/trash routes were already smoke-tested in Step 7 (with the ShellError fallback path), and the new mutations only translate the same JSON shape to react-query side effects. Apply-suggestions and reply remain deferred to Steps 11 (reply composer) and the polish pass.
-11. **Reply composer** ✅ DONE: extended `packages/web/src/api/mutations.ts` with `useGenerateReply` (POST `/messages/:accountId/:gmailMessageId/generate-reply` body `{ prompt }`, returns `{ subject, body, model, runId }`) and `useSendReply` (POST `/messages/:accountId/:gmailMessageId/send-reply` body `{ subject, body }`, returns `{ ok, sentMessageId }` — invalidates `["messages"]` and `queryKeys.message(...)` on success so the inbox + detail page reflect the sent reply). Wrote `packages/web/src/features/reply/ReplyDraftView.tsx` (editable subject/body inputs bound to controlled state from the parent, Send primary Button + Discard ghost Button, per-field disable while sending, send-error display via `describeError` ApiError fallback, model footer chip, "Sent. Gmail message id: …" success state replacing the action row once the send resolves). Wrote `packages/web/src/features/reply/ReplyComposer.tsx`: owns the `prompt` textarea + `draft` state + `sentMessageId` state, calls `useGenerateReply` on click (Generate → "Regenerate" once a draft exists), passes the resulting `{subject, body, model}` to `ReplyDraftView`, calls `useSendReply` on send, Discard resets all local state + mutation caches via `mutation.reset()`. Wired `<ReplyComposer message={…} />` into `pages/MessageDetailPage.tsx` after `<MessageDetailBody>`. Verified: `bun run typecheck` clean across all 4 packages (web cache miss → success); `cd packages/web && bun run build` → vite production build 419 modules, 12.22 kB CSS, 378.50 kB JS gzip 116.69 kB (up from 417 modules / 12.02 kB / 374.43 kB / 115.87 kB in Step 10). Live browser exercise of generate+send deferred — both routes were already smoke-tested over HTTP in Step 7 (generate-reply via stubbed claude, send-reply via the real `createGogAdapter()` which surfaces `invalid_grant` as 502 `shell_error` until OAuth tokens are refreshed).
-12. **Settings page** ✅ DONE: extended `packages/web/src/api/mutations.ts` with `useUpdateSettings` (PUT `/settings`, optimistic cache update via `qc.setQueryData(queryKeys.settings, …)`), `useSyncAccounts` (POST `/accounts/sync`, invalidates `queryKeys.accounts`), `useSyncAccountLabels` (POST `/accounts/:accountId/labels/sync`, invalidates `queryKeys.labels(accountId)`), and `useCreateLabel` (POST `/labels` with `{accountId, name}`, invalidates `queryKeys.labels(accountId)`). Wrote four feature components: `packages/web/src/features/settings/ModelPicker.tsx` (curated select of `claude-haiku-4-5` / `claude-sonnet-4-6` / `claude-opus-4-7` plus a free-text input for custom model ids — picks `__custom__` sentinel in the select when the typed value isn't one of the presets; Save button disabled until the draft differs from the prop value, calls `useUpdateSettings` with the per-task payload (`{triageModel}` or `{replyModel}`), shows inline "Saved" once the mutation lands, surfaces ApiError via `describeError`); `AccountsManager.tsx` (lists accounts from `useAccounts` with email + displayName + relative+absolute `lastSyncedAt` via date-fns `formatDistanceToNow`/`format(PPpp)`; "Import from gog" button wired to `useSyncAccounts` so the user can refresh the account list after running `gog auth add`); `LabelsManager.tsx` (per-account label viewer: select binds to `useAccounts` and defaults to the first account, `useLabels(effectiveAccountId)` fetches the labels, splits user-type from system-type into two `LabelGroup` clusters of `LabelBadge`s; "Sync labels" button calls `useSyncAccountLabels` to refresh from Gmail; inline create form calls `useCreateLabel` which hits the API's `ensureLabel` path — gog.createLabel + DB upsert — and resets the input on success); `SettingsSyncTrigger.tsx` (account picker with an "All accounts" sentinel + window picker covering 1d/7d/30d/90d + Sync now button calling `useSync({account?, since})`; renders a per-run summary block underneath with fetched/triaged/suggestedNewLabels/errors counts on success). Rewrote `pages/SettingsPage.tsx` to compose the four sections (Claude models / Sync / Accounts / Labels) under a shared header + back-to-inbox link, with section labels styled as small-caps uppercase headings. Settings query's loading/error states fall back to a Spinner + EmptyState with the parsed error message. Verified: `bun run typecheck` clean across all 4 packages (web cache miss → success); `cd packages/web && bun run build` → vite production build 423 modules (up from 419 in Step 11), 12.83 kB CSS (up from 12.22), 389.42 kB JS gzip 118.82 kB (up from 378.50 / 116.69). Live HTTP smoke (boot `packages/api/src/index.ts` against miel-postgres 5435 with `API_SECRET=test-secret`): `GET /health` → 200, `GET /settings` → `{triageModel: claude-haiku-4-5, replyModel: claude-sonnet-4-6}`, `PUT /settings {triageModel:claude-sonnet-4-6}` → `{triageModel: claude-sonnet-4-6, replyModel: claude-sonnet-4-6}` round-trip, restored to haiku, `GET /accounts` returned both authorized accounts with `lastSyncedAt` timestamps, `GET /accounts/:id/labels` returned the seeded INBOX (system) + Newsletters (user) labels — confirming every endpoint the new SettingsPage consumes. Live browser exercise of the create-label / sync-labels paths over HTTP deferred — both routes flow through `createGogAdapter()` which still surfaces `invalid_grant` on the local OAuth token (Step 7 already verified the ShellError middleware path).
-13. **Polish** ✅ DONE: wired sync errors from the sidebar `SyncButton` through the existing `SyncStatusBanner` — added `onError` prop to `SyncButton` that calls react-query's mutation `onError` with a `describeError(ApiError|Error|unknown)` fallback, threaded it through `Sidebar` (`onSyncError`) and `App.tsx` so failures from the sidebar Sync button now flip `syncStatus` into `{kind: "error", message}` instead of silently swallowing the error. Loading/empty/error states elsewhere were already shipped per-step (InboxPage: pick-an-account/loading/error/no-messages; AccountPicker: loading/error/no-accounts; LabelList: loading/error/empty; PrioritySection: per-bucket empty state; MessageDetailPage: loading/error fallbacks; SettingsPage: loading/error for the settings query; SettingsSyncTrigger: inline error string and post-run summary; ModelPicker/AccountsManager/LabelsManager: inline ApiError surfaces). Root `bun dev` via Turbo: switched root `package.json`'s `dev` script from `turbo run dev` to `turbo run dev --filter=@miel/api --filter=@miel/web` so `@miel/cli`'s no-op `dev` (which just shells `bun run src/index.ts` and exits with help) doesn't get pulled into the persistent task graph; verified via `bun run turbo run dev --filter=@miel/api --filter=@miel/web --dry` which resolves to exactly `@miel/api#dev` (`bun run --hot src/index.ts`, persistent) and `@miel/web#dev` (`vite`, persistent), with `cache: false` and no dependents. Verified: `bun run typecheck` clean across all 4 packages (web cache miss → success; core/cli/api cache hits); `cd packages/web && bun run build` → 423 modules / 12.83 kB CSS / 389.62 kB JS gzip 118.89 kB. End-to-end happy path documented in the Verification section is now reachable via the single command `bun dev` from `/Users/lucas/miel`.
+1. ~~Add `schemas/syncEvents.ts` + core export. Type-only.~~ ✅ Done 2026-05-21.
+2. Add `onEvent` to `fetchAndTriage` and `syncAll`, emit at the labeled points (no parallelism yet). Run the CLI to confirm log output unchanged.
+3. Parallelize triage batches + filter suggest. Re-run CLI; totals should match the sequential run.
+4. Add the WS handler in `api/index.ts` + `api/ws/syncSocket.ts`. Smoke-test with `wscat -c "ws://localhost:3001/sync/ws?token=$API_SECRET"` sending `{"type":"sync.start","since":"1d"}` and watching events stream.
+5. Add `useSyncStream`, wire `SyncRangeControls`. Verify toasts.
+6. Delete `SyncStatusBanner`, the POST route, `useSync`, `SyncResponse`. Trim `LayoutContext`, `InboxPage`, `MessageDetailPage`, `SettingsSyncTrigger`. Run `bun run typecheck`.
 
----
+## Verification
 
-## Critical files to modify or create
+1. `bun run dev`, open `http://localhost:3000`, pick an account with unsynced mail.
+2. Click **Sync** (preset `1d`). Observe in order:
+   - Button shows spinner + "Syncing…".
+   - Info toast: "Found N new mails…".
+   - Inbox "Not yet triaged" section populates with those N rows.
+   - Loading toast: "Claude is triaging…" (description updates as batches finish).
+   - Loading toast: "Claude is finding potential new filters…" (concurrent with triage).
+   - Success toast: "Claude finished triaging…". Untriaged rows re-grouped under high/medium/low.
+   - Success toast: "Filters: N suggestions".
+   - Button returns to idle.
+3. Multi-account run: trigger via Settings with no account filter; verify per-account toast IDs stay independent and don't clobber each other.
+4. Failure path: temporarily break `CLAUDE_BIN`; per-batch failures appear as `triage.batch.progress` with `status: "failed"`; the final triage success toast still fires but the underlying `SyncRunResult.errors` is populated.
+5. CLI regression: `bun --filter @miel/cli dev sync --account <email> --since 1d` — log output unchanged.
+6. Devtools → Network → WS tab: confirm one open frame and the event stream.
 
-- `/Users/lucas/miel/docker-compose.yml`
-- `/Users/lucas/miel/.env.example`
-- `/Users/lucas/miel/drizzle.config.ts`
-- `/Users/lucas/miel/packages/core/src/db/schema.ts`
-- `/Users/lucas/miel/packages/core/src/adapters/gog.ts`
-- `/Users/lucas/miel/packages/core/src/adapters/claude.ts`
-- `/Users/lucas/miel/packages/core/src/services/sync.ts`
-- `/Users/lucas/miel/packages/core/src/services/apply.ts`
-- `/Users/lucas/miel/packages/core/src/services/reply.ts`
-- `/Users/lucas/miel/packages/core/src/services/settings.ts`
-- `/Users/lucas/miel/packages/core/src/schemas/triage.ts`
-- `/Users/lucas/miel/packages/core/src/schemas/reply.ts`
-- `/Users/lucas/miel/packages/api/src/app.ts`
-- `/Users/lucas/miel/packages/cli/src/index.ts`
-- `/Users/lucas/miel/packages/web/vite.config.ts`
-- `/Users/lucas/miel/packages/web/src/router.tsx`
-- `/Users/lucas/miel/packages/web/src/pages/InboxPage.tsx`
-- `/Users/lucas/miel/packages/web/src/pages/MessageDetailPage.tsx`
-- `/Users/lucas/miel/packages/web/src/pages/SettingsPage.tsx`
-- `/Users/lucas/miel/packages/web/src/features/reply/ReplyComposer.tsx`
-- `/Users/lucas/miel/packages/web/src/features/settings/ModelPicker.tsx`
+## Risks
 
-## Reused existing utilities
-
-Nothing significant — the repo is a skeleton. The placeholder `greet()` in `@miel/core` is dropped. The existing `Bun.serve` in `packages/api/src/index.ts` is replaced with a Hono mount. The existing `App.tsx` in `packages/web` is replaced with the new router-aware version.
-
----
-
-## Verification (end-to-end happy path)
-
-```bash
-cd /Users/lucas/miel
-cp .env.example .env                                 # set API_SECRET to a random string
-
-# 1. Infra
-docker compose up -d
-bun install
-bunx drizzle-kit generate
-bun run packages/core/src/db/migrate.ts              # creates 8 tables
-
-# 2. Account import
-gog auth list --json                                 # confirms lucasriondelpro@gmail.com is authorized
-bun packages/cli/src/index.ts accounts sync          # upserts accounts row
-
-# 3. First triage
-bun packages/cli/src/index.ts sync --account=lucasriondelpro@gmail.com --since=7d
-# expect "Fetched N messages, ran ceil(N/15) triage batches, suggested K new labels"
-
-psql $DATABASE_URL -c "SELECT priority, count(*) FROM triages GROUP BY priority;"
-psql $DATABASE_URL -c "SELECT name FROM suggested_labels WHERE status='pending';"
-
-# 4. API
-bun --filter @miel/api dev                           # :3001
-curl -H "Authorization: Bearer $API_SECRET" http://localhost:3001/messages?priority=high
-
-# 5. Web
-bun --filter @miel/web dev                           # :3000 (Vite proxy /api -> :3001)
-
-# 6. Click-through
-# - Open http://localhost:3000
-# - Inbox: 3 priority groups appear with messages
-# - Open a high-priority message
-# - "Apply suggested labels" -> verify label appears in Gmail web UI
-# - "Archive" -> message disappears from Gmail INBOX
-# - On a different message: type "Decline politely, I'm on vacation until June" -> Generate
-# - Edit subject + body in draft view -> Send -> verify reply appears in Gmail Sent, threaded
-# - Settings -> change triage model to Sonnet -> sync again -> verify triages.model column reflects the change
-```
+- **Vite WS proxy:** auto-upgrades in practice; if not, add `ws: true` to the `/api` proxy entry in `vite.config.ts`.
+- **Cancellation:** closing the WS mid-sync does NOT abort in-flight gog/claude calls in v1. Acceptable; plumb `AbortSignal` later if it matters.
+- **API_SECRET in URL:** token appears in browser history and server logs. Fine for a local single-user app; switch to a short-lived ticket endpoint if ever deployed.
+- **Multi-tab:** two tabs = two WS = two syncs. DB writes are idempotent (upserts) and `lastSyncedAt` is last-writer-wins. Acceptable.

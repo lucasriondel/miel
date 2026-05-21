@@ -9,6 +9,7 @@ export * as triageSchemas from "./schemas/triage";
 export * as replySchemas from "./schemas/reply";
 export * as apiSchemas from "./schemas/api";
 export * as filterSuggestSchemas from "./schemas/filterSuggest";
+export * as syncEventSchemas from "./schemas/syncEvents";
 export { createGogAdapter } from "./adapters/gog";
 export type {
   GogAdapter,
