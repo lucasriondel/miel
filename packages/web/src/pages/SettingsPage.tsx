@@ -52,6 +52,12 @@ export const SettingsPage = () => {
               value={data.triageModel}
             />
             <ModelPicker
+              task="filter"
+              label="Filter model"
+              description="Used to propose Gmail filters from each synced batch."
+              value={data.filterModel}
+            />
+            <ModelPicker
               task="reply"
               label="Reply model"
               description="Used when you click Generate in the reply composer."

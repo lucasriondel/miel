@@ -232,6 +232,7 @@ export function useSendReply() {
 export interface UpdateSettingsInput {
   triageModel?: string;
   replyModel?: string;
+  filterModel?: string;
 }
 
 export function useUpdateSettings() {

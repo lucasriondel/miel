@@ -11,7 +11,7 @@ const MODEL_OPTIONS: { value: string; label: string }[] = [
 ];
 
 interface Props {
-  task: "triage" | "reply";
+  task: "triage" | "reply" | "filter";
   label: string;
   description: string;
   value: string;
@@ -77,14 +77,21 @@ export const ModelPicker = ({ task, label, description, value, onSaved }: Props)
           variant="primary"
           disabled={!dirty || update.isPending || draft.trim().length === 0}
           onClick={() => {
+            const trimmed = draft.trim();
             const payload =
               task === "triage"
-                ? { triageModel: draft.trim() }
-                : { replyModel: draft.trim() };
+                ? { triageModel: trimmed }
+                : task === "reply"
+                  ? { replyModel: trimmed }
+                  : { filterModel: trimmed };
             update.mutate(payload, {
               onSuccess: (next) => {
                 const savedValue =
-                  task === "triage" ? next.triageModel : next.replyModel;
+                  task === "triage"
+                    ? next.triageModel
+                    : task === "reply"
+                      ? next.replyModel
+                      : next.filterModel;
                 setSavedMessage("Saved");
                 onSaved?.(savedValue);
               },

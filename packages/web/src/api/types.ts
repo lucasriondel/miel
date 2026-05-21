@@ -160,4 +160,5 @@ export interface FiltersResponse {
 export interface ModelSettings {
   triageModel: string;
   replyModel: string;
+  filterModel: string;
 }

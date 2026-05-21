@@ -253,13 +253,13 @@ export function createClaudeAdapter(): ClaudeAdapter {
         messages: input.messages.length,
         existingFilters: input.existingFilters.length,
       });
-      const { triageModel } = await getModelSettings();
+      const { filterModel } = await getModelSettings();
       const jsonSchema = zodToJsonSchema(FilterSuggestOutput, {
         target: "jsonSchema7",
       });
       const result = await invokeClaude({
         prompt: buildFilterSuggestPrompt(input),
-        model: triageModel,
+        model: filterModel,
         schema: jsonSchema,
         parser: (raw) => FilterSuggestOutput.parse(raw),
         kind: "filterSuggest",

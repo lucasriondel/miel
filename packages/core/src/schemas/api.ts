@@ -79,5 +79,6 @@ export type BatchMessageActionRequestT = z.infer<
 export const UpdateSettingsRequest = z.object({
   triageModel: z.string().min(1).optional(),
   replyModel: z.string().min(1).optional(),
+  filterModel: z.string().min(1).optional(),
 });
 export type UpdateSettingsRequestT = z.infer<typeof UpdateSettingsRequest>;

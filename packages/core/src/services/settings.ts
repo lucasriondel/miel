@@ -8,16 +8,19 @@ const debug = createDebug("service:settings");
 export const SETTING_KEYS = {
   triageModel: "triage.model",
   replyModel: "reply.model",
+  filterModel: "filter.model",
 } as const;
 
 export const SETTING_DEFAULTS: Record<string, string> = {
   [SETTING_KEYS.triageModel]: "claude-haiku-4-5",
   [SETTING_KEYS.replyModel]: "claude-sonnet-4-6",
+  [SETTING_KEYS.filterModel]: "claude-haiku-4-5",
 };
 
 export interface ModelSettings {
   triageModel: string;
   replyModel: string;
+  filterModel: string;
 }
 
 export async function getSetting(key: string): Promise<string> {
@@ -52,11 +55,12 @@ export async function setSetting(key: string, value: string): Promise<void> {
 }
 
 export async function getModelSettings(): Promise<ModelSettings> {
-  const [triageModel, replyModel] = await Promise.all([
+  const [triageModel, replyModel, filterModel] = await Promise.all([
     getSetting(SETTING_KEYS.triageModel),
     getSetting(SETTING_KEYS.replyModel),
+    getSetting(SETTING_KEYS.filterModel),
   ]);
-  return { triageModel, replyModel };
+  return { triageModel, replyModel, filterModel };
 }
 
 export async function updateModelSettings(
@@ -68,6 +72,9 @@ export async function updateModelSettings(
   }
   if (patch.replyModel !== undefined) {
     ops.push(setSetting(SETTING_KEYS.replyModel, patch.replyModel));
+  }
+  if (patch.filterModel !== undefined) {
+    ops.push(setSetting(SETTING_KEYS.filterModel, patch.filterModel));
   }
   await Promise.all(ops);
   return getModelSettings();
