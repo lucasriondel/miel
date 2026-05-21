@@ -1,22 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
-import { SyncBar } from "./features/sync/SyncBar";
-import { SyncStatusBanner } from "./features/sync/SyncStatusBanner";
-import { useWeek } from "./features/sync/useWeek";
+import { useWeek, type Week } from "./features/sync/useWeek";
 import { useAccounts } from "./api/queries";
+
+export interface SyncResultInfo {
+  fetched: number;
+  triaged: number;
+  errors: string[];
+}
+
+export type SyncStatus =
+  | { kind: "idle" }
+  | { kind: "ok"; fetched: number; triaged: number; errors: string[] }
+  | { kind: "error"; message: string };
 
 export interface LayoutContext {
   selectedAccountId: string | undefined;
   selectedLabelId: string | undefined;
   weekStartIso: string;
   weekEndIso: string;
+  week: Week;
+  isCurrentWeek: boolean;
+  canGoNext: boolean;
+  goPrev: () => void;
+  goNext: () => void;
+  goToday: () => void;
+  selectedAccountEmail: string | undefined;
+  syncStatus: SyncStatus;
+  onSyncResult: (info: SyncResultInfo) => void;
+  onSyncError: (message: string) => void;
+  dismissSyncStatus: () => void;
 }
-
-type SyncStatus =
-  | { kind: "idle" }
-  | { kind: "ok"; fetched: number; triaged: number; errors: string[] }
-  | { kind: "error"; message: string };
 
 export const App = () => {
   const accounts = useAccounts();
@@ -39,8 +54,36 @@ export const App = () => {
       selectedLabelId,
       weekStartIso: week.start.toISOString(),
       weekEndIso: week.end.toISOString(),
+      week,
+      isCurrentWeek,
+      canGoNext,
+      goPrev,
+      goNext,
+      goToday,
+      selectedAccountEmail: selectedAccount?.email,
+      syncStatus,
+      onSyncResult: (info) =>
+        setSyncStatus({
+          kind: "ok",
+          fetched: info.fetched,
+          triaged: info.triaged,
+          errors: info.errors,
+        }),
+      onSyncError: (message) => setSyncStatus({ kind: "error", message }),
+      dismissSyncStatus: () => setSyncStatus({ kind: "idle" }),
     }),
-    [selectedAccountId, selectedLabelId, week.start, week.end],
+    [
+      selectedAccountId,
+      selectedLabelId,
+      week,
+      isCurrentWeek,
+      canGoNext,
+      goPrev,
+      goNext,
+      goToday,
+      selectedAccount?.email,
+      syncStatus,
+    ],
   );
 
   return (
@@ -55,29 +98,7 @@ export const App = () => {
         onSelectLabel={(id) => setSelectedLabelId(id)}
       />
       <main className="flex flex-1 flex-col overflow-hidden">
-        <SyncBar
-          week={week}
-          isCurrentWeek={isCurrentWeek}
-          canGoNext={canGoNext}
-          onPrevWeek={goPrev}
-          onNextWeek={goNext}
-          onToday={goToday}
-          accountEmail={selectedAccount?.email}
-          onSyncResult={(info) =>
-            setSyncStatus({
-              kind: "ok",
-              fetched: info.fetched,
-              triaged: info.triaged,
-              errors: info.errors,
-            })
-          }
-          onSyncError={(message) => setSyncStatus({ kind: "error", message })}
-        />
-        <div className="flex-1 overflow-y-auto px-6 pb-6 pt-4">
-          <SyncStatusBanner
-            status={syncStatus}
-            onDismiss={() => setSyncStatus({ kind: "idle" })}
-          />
+        <div className="flex flex-1 flex-col overflow-y-auto">
           <Outlet context={outletContext} />
         </div>
       </main>

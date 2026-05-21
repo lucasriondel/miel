@@ -30,17 +30,19 @@ export const FiltersPage = () => {
 
   if (accounts.isLoading || filters.isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-miel-muted">
+      <div className="flex items-center gap-2 px-6 pt-4 text-sm text-miel-muted">
         <Spinner /> Loading filters…
       </div>
     );
   }
   if (accounts.error || filters.error) {
     return (
-      <EmptyState
-        title="Failed to load filters"
-        description={describeError(accounts.error ?? filters.error)}
-      />
+      <div className="px-6 pt-4">
+        <EmptyState
+          title="Failed to load filters"
+          description={describeError(accounts.error ?? filters.error)}
+        />
+      </div>
     );
   }
 
@@ -69,7 +71,7 @@ export const FiltersPage = () => {
   const totalSuggestions = suggestionList.length;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 px-6 pb-6 pt-4">
       <div className="flex flex-col gap-1">
         <Link to="/" className="text-sm text-miel-muted underline">
           ← Back to inbox

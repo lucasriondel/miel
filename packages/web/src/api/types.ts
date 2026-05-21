@@ -92,6 +92,8 @@ export interface MessageDetail {
     existingLabelSuggestions: {
       labelId: string;
       name: string;
+      colorBg: string | null;
+      colorFg: string | null;
       status: "pending" | "applied" | "dismissed";
     }[];
     newLabelSuggestions: {

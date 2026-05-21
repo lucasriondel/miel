@@ -3,12 +3,33 @@ import { useMessages } from "../api/queries";
 import { PrioritySection } from "../components/PrioritySection";
 import { EmptyState } from "../components/EmptyState";
 import { Spinner } from "../components/Spinner";
+import { TopBar } from "../components/TopBar";
+import { WeekNav } from "../features/sync/WeekNav";
+import { SyncRangeControls } from "../features/sync/SyncRangeControls";
+import { SyncStatusBanner } from "../features/sync/SyncStatusBanner";
 import type { ListedMessage, Priority } from "../api/types";
 import type { LayoutContext } from "../App";
 
 export const InboxPage = () => {
-  const { selectedAccountId, selectedLabelId, weekStartIso, weekEndIso } =
-    useOutletContext<LayoutContext>();
+  const ctx = useOutletContext<LayoutContext>();
+  const {
+    selectedAccountId,
+    selectedLabelId,
+    weekStartIso,
+    weekEndIso,
+    selectedAccountEmail,
+    week,
+    isCurrentWeek,
+    canGoNext,
+    goPrev,
+    goNext,
+    goToday,
+    syncStatus,
+    onSyncResult,
+    onSyncError,
+    dismissSyncStatus,
+  } = ctx;
+
   const { data, isLoading, error } = useMessages({
     accountId: selectedAccountId,
     labelId: selectedLabelId,
@@ -17,6 +38,53 @@ export const InboxPage = () => {
     internalDateTo: weekEndIso,
   });
 
+  return (
+    <>
+      <TopBar
+        left={
+          <WeekNav
+            week={week}
+            isCurrentWeek={isCurrentWeek}
+            canGoNext={canGoNext}
+            onPrev={goPrev}
+            onNext={goNext}
+            onToday={goToday}
+          />
+        }
+        right={
+          <SyncRangeControls
+            accountEmail={selectedAccountEmail}
+            onResult={onSyncResult}
+            onError={onSyncError}
+          />
+        }
+      />
+      <div className="flex-1 px-6 pb-6 pt-4">
+        <SyncStatusBanner status={syncStatus} onDismiss={dismissSyncStatus} />
+        <InboxBody
+          selectedAccountId={selectedAccountId}
+          isLoading={isLoading}
+          error={error}
+          items={data?.items ?? []}
+        />
+      </div>
+    </>
+  );
+};
+
+interface InboxBodyProps {
+  selectedAccountId: string | undefined;
+  isLoading: boolean;
+  error: unknown;
+  items: ListedMessage[];
+}
+
+const InboxBody = ({
+  selectedAccountId,
+  isLoading,
+  error,
+  items,
+}: InboxBodyProps) => {
   if (!selectedAccountId) {
     return (
       <EmptyState
@@ -43,7 +111,6 @@ export const InboxPage = () => {
     );
   }
 
-  const items: ListedMessage[] = data?.items ?? [];
   if (items.length === 0) {
     return (
       <EmptyState

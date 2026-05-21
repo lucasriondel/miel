@@ -18,7 +18,7 @@ export const SettingsPage = () => {
   const { data, isLoading, error } = useSettings();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 px-6 pb-6 pt-4">
       <div className="flex flex-col gap-1">
         <Link to="/" className="text-sm text-miel-muted underline">
           ← Back to inbox

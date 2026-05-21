@@ -387,6 +387,8 @@ export interface MessageDetail {
     existingLabelSuggestions: {
       labelId: string;
       name: string;
+      colorBg: string | null;
+      colorFg: string | null;
       status: "pending" | "applied" | "dismissed";
     }[];
     newLabelSuggestions: {
@@ -484,6 +486,8 @@ export async function getMessageDetail(args: {
         triageId: triageLabelSuggestions.triageId,
         labelId: triageLabelSuggestions.labelId,
         name: labels.name,
+        colorBg: labels.colorBg,
+        colorFg: labels.colorFg,
         status: triageLabelSuggestions.status,
       })
       .from(triageLabelSuggestions)
@@ -496,7 +500,13 @@ export async function getMessageDetail(args: {
       );
     for (const es of existingSugs) {
       const list = existingByTriage.get(es.triageId) ?? [];
-      list.push({ labelId: es.labelId, name: es.name, status: es.status });
+      list.push({
+        labelId: es.labelId,
+        name: es.name,
+        colorBg: es.colorBg,
+        colorFg: es.colorFg,
+        status: es.status,
+      });
       existingByTriage.set(es.triageId, list);
     }
     const newSugs = await db

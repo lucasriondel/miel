@@ -1,41 +1,35 @@
 import { format } from "date-fns";
-import { useRemoveMessageLabel } from "../../api/mutations";
-import type { MessageDetail, Priority } from "../../api/types";
-import { LabelBadge } from "../../components/LabelBadge";
+import type { MessageDetail } from "../../api/types";
+import { MessageLabels } from "../../components/MessageLabels";
 
 interface Props {
   message: MessageDetail;
 }
 
-const priorityChipStyles: Record<Priority, string> = {
-  high: "bg-miel-high text-white",
-  medium: "bg-miel-medium text-white",
-  low: "bg-miel-low text-white",
-};
-
 export const MessageDetailHeader = ({ message }: Props) => {
-  const latestPriority = message.triageHistory[0]?.priority;
-  const visibleLabels = message.labels.filter((l) => l.gmailLabelId !== "INBOX");
-  const removeLabel = useRemoveMessageLabel();
+  const latest = message.triageHistory[0];
+  const existingSuggestions =
+    latest?.existingLabelSuggestions
+      .filter((s) => s.status === "pending")
+      .filter(
+        (s) => !message.labels.some((l) => l.id === s.labelId),
+      )
+      .map((s) => ({
+        labelId: s.labelId,
+        name: s.name,
+        colorBg: s.colorBg,
+        colorFg: s.colorFg,
+      })) ?? [];
+  const newSuggestions =
+    latest?.newLabelSuggestions
+      .filter((s) => s.status === "pending")
+      .map((s) => ({ suggestionId: s.suggestionId, name: s.name })) ?? [];
 
   return (
     <header className="flex flex-col gap-3 border-b border-miel-line pb-4">
-      <div className="flex items-start justify-between gap-4">
-        <h1 className="text-xl font-semibold text-miel-ink">
-          {message.subject ?? "(no subject)"}
-        </h1>
-        {latestPriority ? (
-          <span
-            className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${priorityChipStyles[latestPriority]}`}
-          >
-            {latestPriority}
-          </span>
-        ) : (
-          <span className="inline-flex shrink-0 items-center rounded border border-dashed border-miel-line px-2 py-0.5 text-xs font-medium text-miel-muted">
-            untriaged
-          </span>
-        )}
-      </div>
+      <h1 className="text-xl font-semibold text-miel-ink">
+        {message.subject ?? "(no subject)"}
+      </h1>
       <dl className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-miel-muted">From</dt>
         <dd className="text-miel-ink">
@@ -59,26 +53,15 @@ export const MessageDetailHeader = ({ message }: Props) => {
         <dt className="text-miel-muted">Account</dt>
         <dd className="text-miel-ink">{message.accountEmail}</dd>
       </dl>
-      {visibleLabels.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {visibleLabels.map((l) => (
-            <LabelBadge
-              key={l.id}
-              name={l.name}
-              colorBg={l.colorBg}
-              colorFg={l.colorFg}
-              removeDisabled={removeLabel.isPending}
-              onRemove={() =>
-                removeLabel.mutate({
-                  accountId: message.accountId,
-                  gmailMessageId: message.gmailMessageId,
-                  labelId: l.id,
-                })
-              }
-            />
-          ))}
-        </div>
-      ) : null}
+      <MessageLabels
+        accountId={message.accountId}
+        gmailMessageId={message.gmailMessageId}
+        triageId={latest?.id ?? null}
+        labels={message.labels}
+        existingSuggestions={existingSuggestions}
+        newSuggestions={newSuggestions}
+        variant="full"
+      />
     </header>
   );
 };
