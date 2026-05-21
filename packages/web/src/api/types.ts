@@ -157,10 +157,6 @@ export interface FiltersResponse {
   suggestions: SuggestedFilter[];
 }
 
-export interface SyncResponse {
-  runs: SyncRunResult[];
-}
-
 export interface ModelSettings {
   triageModel: string;
   replyModel: string;

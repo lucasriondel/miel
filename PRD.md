@@ -187,7 +187,7 @@ Swap to `useSyncStream()`. Drop the per-run summary table (toasts cover it). Kee
 3. ~~Parallelize triage batches + filter suggest. Re-run CLI; totals should match the sequential run.~~ ✅ Done 2026-05-21.
 4. ~~Add the WS handler in `api/index.ts` + `api/ws/syncSocket.ts`. Smoke-test with `wscat -c "ws://localhost:3001/sync/ws?token=$API_SECRET"` sending `{"type":"sync.start","since":"1d"}` and watching events stream.~~ ✅ Done 2026-05-21.
 5. ~~Add `useSyncStream`, wire `SyncRangeControls`. Verify toasts.~~ ✅ Done 2026-05-21.
-6. Delete `SyncStatusBanner`, the POST route, `useSync`, `SyncResponse`. Trim `LayoutContext`, `InboxPage`, `MessageDetailPage`, `SettingsSyncTrigger`. Run `bun run typecheck`.
+6. ~~Delete `SyncStatusBanner`, the POST route, `useSync`, `SyncResponse`. Trim `LayoutContext`, `InboxPage`, `MessageDetailPage`, `SettingsSyncTrigger`. Run `bun run typecheck`.~~ ✅ Done 2026-05-21.
 
 ## Verification
 

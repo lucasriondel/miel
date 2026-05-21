@@ -1,40 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { queryKeys } from "./queries";
-import { maybeShowReauthToast } from "../features/auth/reauthToast";
 import type {
   Account,
   Label,
   ListMessagesResponse,
   ListedMessage,
   ModelSettings,
-  SyncResponse,
 } from "./types";
-
-export interface SyncInput {
-  account?: string;
-  since?: string;
-  range?: { from: string; to: string };
-}
-
-export function useSync() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: SyncInput) =>
-      apiFetch<SyncResponse>({
-        path: "/sync",
-        method: "POST",
-        body: input,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.accounts });
-      qc.invalidateQueries({ queryKey: ["messages"] });
-    },
-    onError: (err) => {
-      maybeShowReauthToast(err);
-    },
-  });
-}
 
 export interface MessageActionResult {
   ok: true;

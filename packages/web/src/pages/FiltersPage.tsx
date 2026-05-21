@@ -6,7 +6,6 @@ import { EmptyState } from "../components/EmptyState";
 import { TopBar } from "../components/TopBar";
 import { AccountFiltersSection } from "../features/filters/AccountFiltersSection";
 import { SyncRangeControls } from "../features/sync/SyncRangeControls";
-import { SyncStatusBanner } from "../features/sync/SyncStatusBanner";
 import type { LayoutContext } from "../App";
 
 function describeError(err: unknown): string {
@@ -16,14 +15,8 @@ function describeError(err: unknown): string {
 }
 
 export const FiltersPage = () => {
-  const {
-    selectedAccountId,
-    selectedAccountEmail,
-    syncStatus,
-    onSyncResult,
-    onSyncError,
-    dismissSyncStatus,
-  } = useOutletContext<LayoutContext>();
+  const { selectedAccountId, selectedAccountEmail } =
+    useOutletContext<LayoutContext>();
   const accounts = useAccounts();
   const filters = useFilters(selectedAccountId);
   const labels = useLabels(selectedAccountId);
@@ -38,13 +31,7 @@ export const FiltersPage = () => {
           ← Back to inbox
         </Link>
       }
-      right={
-        <SyncRangeControls
-          accountEmail={selectedAccountEmail}
-          onResult={onSyncResult}
-          onError={onSyncError}
-        />
-      }
+      right={<SyncRangeControls accountEmail={selectedAccountEmail} />}
     />
   );
 
@@ -84,7 +71,6 @@ export const FiltersPage = () => {
     <>
       {topBar}
       <div className="flex flex-1 flex-col gap-6 px-6 pb-6 pt-4">
-        <SyncStatusBanner status={syncStatus} onDismiss={dismissSyncStatus} />
         <div className="flex flex-col gap-1">
           <h1 className="text-lg font-semibold">Filters</h1>
           <p className="text-sm text-miel-muted">

@@ -8,20 +8,13 @@ import { MessageDetailBody } from "../features/message-detail/MessageDetailBody"
 import { MessageDetailActions } from "../features/message-detail/MessageDetailActions";
 import { TriagePanel } from "../features/message-detail/TriagePanel";
 import { SyncRangeControls } from "../features/sync/SyncRangeControls";
-import { SyncStatusBanner } from "../features/sync/SyncStatusBanner";
 import { ReplyComposer } from "../features/reply/ReplyComposer";
 import type { LayoutContext } from "../App";
 
 export const MessageDetailPage = () => {
   const { accountId, gmailMessageId } = useParams();
   const messageQuery = useMessage(accountId, gmailMessageId);
-  const {
-    selectedAccountEmail,
-    syncStatus,
-    onSyncResult,
-    onSyncError,
-    dismissSyncStatus,
-  } = useOutletContext<LayoutContext>();
+  const { selectedAccountEmail } = useOutletContext<LayoutContext>();
 
   const message = messageQuery.data;
   const isUnread = message?.labels.some((l) => l.name === "UNREAD") ?? false;
@@ -51,16 +44,11 @@ export const MessageDetailPage = () => {
                 <div className="h-6 w-px bg-miel-line" aria-hidden />
               </>
             ) : null}
-            <SyncRangeControls
-              accountEmail={selectedAccountEmail}
-              onResult={onSyncResult}
-              onError={onSyncError}
-            />
+            <SyncRangeControls accountEmail={selectedAccountEmail} />
           </>
         }
       />
       <div className="flex-1 px-6 pb-6 pt-4">
-        <SyncStatusBanner status={syncStatus} onDismiss={dismissSyncStatus} />
         {messageQuery.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-miel-muted">
             <Spinner /> Loading message…

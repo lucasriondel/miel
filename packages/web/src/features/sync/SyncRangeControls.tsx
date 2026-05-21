@@ -7,9 +7,6 @@ type Preset = "1d" | "7d" | "30d";
 
 interface Props {
   accountEmail?: string;
-  // Legacy props — retained until Step 6 cleanup trims their call sites.
-  onResult?: (info: { fetched: number; triaged: number; errors: string[] }) => void;
-  onError?: (message: string) => void;
 }
 
 function toIsoFromInput(date: string, endOfDay: boolean): string {

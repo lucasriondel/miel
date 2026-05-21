@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../components/Button";
 import { Spinner } from "../../components/Spinner";
 import { useAccounts } from "../../api/queries";
-import { useSync } from "../../api/mutations";
-import { ApiError } from "../../api/client";
-import type { SyncRunResult } from "../../api/types";
+import { useSyncStream } from "../../api/syncSocket";
 
 const SINCE_OPTIONS = [
   { value: "1d", label: "Last 24 hours" },
@@ -13,24 +11,11 @@ const SINCE_OPTIONS = [
   { value: "90d", label: "Last 90 days" },
 ];
 
-function describeError(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof Error) return err.message;
-  return "Unknown error";
-}
-
 export const SettingsSyncTrigger = () => {
   const accounts = useAccounts();
-  const sync = useSync();
+  const { start, isRunning } = useSyncStream();
   const [accountEmail, setAccountEmail] = useState<string>("");
   const [since, setSince] = useState<string>("7d");
-  const [runs, setRuns] = useState<SyncRunResult[] | null>(null);
-
-  useEffect(() => {
-    if (accountEmail === "" && accounts.data && accounts.data.length > 0) {
-      // leave blank to default to "all accounts"
-    }
-  }, [accounts.data, accountEmail]);
 
   return (
     <div className="rounded border border-miel-line bg-miel-panel p-4">
@@ -68,54 +53,18 @@ export const SettingsSyncTrigger = () => {
         </select>
         <Button
           variant="primary"
-          disabled={sync.isPending}
+          disabled={isRunning}
           onClick={() => {
-            setRuns(null);
-            sync.mutate(
-              {
-                account: accountEmail || undefined,
-                since,
-              },
-              {
-                onSuccess: (data) => setRuns(data.runs),
-              },
-            );
+            start({
+              account: accountEmail || undefined,
+              since,
+            });
           }}
         >
-          {sync.isPending ? <Spinner size={12} /> : null}
-          {sync.isPending ? "Syncing…" : "Sync now"}
+          {isRunning ? <Spinner size={12} /> : null}
+          {isRunning ? "Syncing…" : "Sync now"}
         </Button>
       </div>
-
-      {sync.isError &&
-      !(
-        sync.error instanceof ApiError &&
-        typeof sync.error.body === "object" &&
-        sync.error.body !== null &&
-        (sync.error.body as { error?: unknown }).error === "reauth_required"
-      ) ? (
-        <p className="mt-2 text-xs text-miel-high">
-          Sync failed: {describeError(sync.error)}
-        </p>
-      ) : null}
-
-      {runs && runs.length > 0 ? (
-        <div className="mt-4 rounded border border-miel-line bg-miel-bg p-3">
-          <h4 className="text-xs font-medium text-miel-ink">Last run</h4>
-          <ul className="mt-1 flex flex-col gap-1 text-xs text-miel-muted">
-            {runs.map((r) => (
-              <li key={r.account}>
-                <span className="font-medium text-miel-ink">{r.account}</span>:{" "}
-                fetched {r.fetched}, triaged {r.triaged}, suggested{" "}
-                {r.suggestedNewLabels}
-                {r.errors.length > 0
-                  ? `, errors: ${r.errors.length}`
-                  : ""}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </div>
   );
 };

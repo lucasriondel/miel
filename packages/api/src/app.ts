@@ -7,7 +7,6 @@ import { authRoutes } from "./routes/auth";
 import { filtersRoutes } from "./routes/filters";
 import { labelsRoutes } from "./routes/labels";
 import { messagesRoutes } from "./routes/messages";
-import { syncRoutes } from "./routes/sync";
 import { settingsRoutes } from "./routes/settings";
 
 export function createApp(opts: { webOrigin?: string } = {}) {
@@ -32,7 +31,6 @@ export function createApp(opts: { webOrigin?: string } = {}) {
   app.route("/labels", labelsRoutes);
   app.route("/messages", messagesRoutes);
   app.route("/filters", filtersRoutes);
-  app.route("/sync", syncRoutes);
   app.route("/settings", settingsRoutes);
 
   app.onError(errorHandler);

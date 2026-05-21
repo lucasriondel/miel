@@ -4,17 +4,6 @@ import { Sidebar } from "./components/Sidebar";
 import { useWeek, type Week } from "./features/sync/useWeek";
 import { useAccounts } from "./api/queries";
 
-export interface SyncResultInfo {
-  fetched: number;
-  triaged: number;
-  errors: string[];
-}
-
-export type SyncStatus =
-  | { kind: "idle" }
-  | { kind: "ok"; fetched: number; triaged: number; errors: string[] }
-  | { kind: "error"; message: string };
-
 export interface LayoutContext {
   selectedAccountId: string | undefined;
   selectedLabelId: string | undefined;
@@ -27,17 +16,12 @@ export interface LayoutContext {
   goNext: () => void;
   goToday: () => void;
   selectedAccountEmail: string | undefined;
-  syncStatus: SyncStatus;
-  onSyncResult: (info: SyncResultInfo) => void;
-  onSyncError: (message: string) => void;
-  dismissSyncStatus: () => void;
 }
 
 export const App = () => {
   const accounts = useAccounts();
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>();
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ kind: "idle" });
   const { week, isCurrentWeek, canGoNext, goPrev, goNext, goToday } = useWeek();
 
   useEffect(() => {
@@ -61,16 +45,6 @@ export const App = () => {
       goNext,
       goToday,
       selectedAccountEmail: selectedAccount?.email,
-      syncStatus,
-      onSyncResult: (info) =>
-        setSyncStatus({
-          kind: "ok",
-          fetched: info.fetched,
-          triaged: info.triaged,
-          errors: info.errors,
-        }),
-      onSyncError: (message) => setSyncStatus({ kind: "error", message }),
-      dismissSyncStatus: () => setSyncStatus({ kind: "idle" }),
     }),
     [
       selectedAccountId,
@@ -82,7 +56,6 @@ export const App = () => {
       goNext,
       goToday,
       selectedAccount?.email,
-      syncStatus,
     ],
   );
 

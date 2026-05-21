@@ -6,7 +6,6 @@ import { Spinner } from "../components/Spinner";
 import { TopBar } from "../components/TopBar";
 import { WeekNav } from "../features/sync/WeekNav";
 import { SyncRangeControls } from "../features/sync/SyncRangeControls";
-import { SyncStatusBanner } from "../features/sync/SyncStatusBanner";
 import { InboxFilterSuggestions } from "../features/filters/InboxFilterSuggestions";
 import type { ListedMessage, Priority } from "../api/types";
 import type { LayoutContext } from "../App";
@@ -25,10 +24,6 @@ export const InboxPage = () => {
     goPrev,
     goNext,
     goToday,
-    syncStatus,
-    onSyncResult,
-    onSyncError,
-    dismissSyncStatus,
   } = ctx;
 
   const { data, isLoading, error } = useMessages({
@@ -52,16 +47,9 @@ export const InboxPage = () => {
             onToday={goToday}
           />
         }
-        right={
-          <SyncRangeControls
-            accountEmail={selectedAccountEmail}
-            onResult={onSyncResult}
-            onError={onSyncError}
-          />
-        }
+        right={<SyncRangeControls accountEmail={selectedAccountEmail} />}
       />
       <div className="flex flex-1 flex-col gap-4 px-6 pb-6 pt-4">
-        <SyncStatusBanner status={syncStatus} onDismiss={dismissSyncStatus} />
         {selectedAccountId ? (
           <InboxFilterSuggestions accountId={selectedAccountId} />
         ) : null}
