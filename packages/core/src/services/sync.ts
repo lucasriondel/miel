@@ -22,6 +22,7 @@ import {
   type TriageInputItemT,
   type TriageOutputItemT,
 } from "../schemas/triage";
+import type { SyncServerEventT } from "../schemas/syncEvents";
 import {
   extractBodies,
   extractHeaders,
@@ -297,6 +298,7 @@ export interface FetchAndTriageOptions {
   gog?: GogAdapter;
   claude?: ClaudeAdapter;
   log?: (msg: string) => void;
+  onEvent?: (event: SyncServerEventT) => void;
 }
 
 export async function fetchAndTriage(
@@ -305,6 +307,7 @@ export async function fetchAndTriage(
   const gog = opts.gog ?? createGogAdapter();
   const claude = opts.claude ?? createClaudeAdapter();
   const log = opts.log ?? (() => {});
+  const emit = opts.onEvent ?? (() => {});
   const max = opts.max ?? DEFAULT_SEARCH_MAX;
   const query = opts.range
     ? buildRangeQuery(opts.range)
@@ -408,6 +411,7 @@ export async function fetchAndTriage(
 
   await upsertMessages(normalized);
   debug("upserted messages", { account: account.email, rows: normalized.length });
+  emit({ type: "mails.fetched", account: account.email, count: normalized.length });
   const allGmailLabelIds = Array.from(
     new Set(normalized.flatMap((m) => m.labelIds)),
   );
@@ -440,6 +444,11 @@ export async function fetchAndTriage(
   log(
     `[${account.email}] running ${batches.length} triage batch(es) over ${normalized.length} messages`,
   );
+  emit({
+    type: "triage.started",
+    account: account.email,
+    totalBatches: batches.length,
+  });
 
   for (let i = 0; i < batches.length; i += 1) {
     const batch = batches[i];
@@ -448,6 +457,13 @@ export async function fetchAndTriage(
       account: account.email,
       existingLabels: existingLabelNames,
       messages: items,
+    });
+    emit({
+      type: "triage.batch.progress",
+      account: account.email,
+      batchIndex: i,
+      totalBatches: batches.length,
+      status: "started",
     });
     try {
       log(`[${account.email}] batch ${i + 1}/${batches.length} → claude`);
@@ -495,6 +511,13 @@ export async function fetchAndTriage(
         persisted: persisted.persisted,
         newLabelSuggestions: persisted.newLabelSuggestions,
       });
+      emit({
+        type: "triage.batch.progress",
+        account: account.email,
+        batchIndex: i,
+        totalBatches: batches.length,
+        status: "done",
+      });
     } catch (err) {
       const m = (err as Error).message;
       errors.push(`triage batch ${i + 1}: ${m}`);
@@ -504,10 +527,26 @@ export async function fetchAndTriage(
         batch: i + 1,
         error: m,
       });
+      emit({
+        type: "triage.batch.progress",
+        account: account.email,
+        batchIndex: i,
+        totalBatches: batches.length,
+        status: "failed",
+        error: m,
+      });
     }
   }
 
+  emit({
+    type: "triage.finished",
+    account: account.email,
+    triaged: triagedCount,
+    suggestedNewLabels: suggestedNewLabelsCount,
+  });
+
   let suggestedFiltersCount = 0;
+  emit({ type: "filters.started", account: account.email });
   try {
     log(`[${account.email}] running filter suggestions over ${normalized.length} messages`);
     const proposals = await suggestFiltersForBatch({
@@ -533,6 +572,11 @@ export async function fetchAndTriage(
     errors.push(`filterSuggest: ${m}`);
     log(`[${account.email}] WARN filterSuggest failed: ${m}`);
   }
+  emit({
+    type: "filters.finished",
+    account: account.email,
+    suggestedFilters: suggestedFiltersCount,
+  });
 
   const { db } = getDb();
   await db
@@ -561,6 +605,7 @@ export interface SyncAllOptions {
   gog?: GogAdapter;
   claude?: ClaudeAdapter;
   log?: (msg: string) => void;
+  onEvent?: (event: SyncServerEventT) => void;
 }
 
 export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[]> {
@@ -594,6 +639,7 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
         gog,
         claude: opts.claude,
         log: opts.log,
+        onEvent: opts.onEvent,
       }),
     );
   }
