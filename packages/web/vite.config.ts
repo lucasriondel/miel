@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
         "/api": {
           target: `http://localhost:${apiPort}`,
           changeOrigin: true,
+          ws: true,
           rewrite: (path) => path.replace(/^\/api/, ""),
         },
       },

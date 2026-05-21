@@ -9,7 +9,7 @@ const server = Bun.serve<SyncSocketData>({
   port: API_PORT,
   fetch(req, server) {
     const url = new URL(req.url);
-    if (url.pathname === "/sync/ws") {
+    if (url.pathname === "/sync/ws" || url.pathname === "/api/sync/ws") {
       const token = url.searchParams.get("token");
       if (token !== API_SECRET) {
         return new Response("unauthorized", { status: 401 });
