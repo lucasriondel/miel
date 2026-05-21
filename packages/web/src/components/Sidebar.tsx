@@ -41,17 +41,6 @@ export const Sidebar = ({
 
       <nav className="flex flex-col gap-1 border-t border-miel-line pt-3 text-sm">
         <NavLink
-          to="/filters"
-          className={({ isActive }) =>
-            `block rounded px-2 py-1 ${isActive
-              ? "bg-miel-accent/10 text-miel-ink"
-              : "text-miel-muted hover:bg-miel-line/40 hover:text-miel-ink"
-            }`
-          }
-        >
-          Filters
-        </NavLink>
-        <NavLink
           to="/settings"
           className={({ isActive }) =>
             `block rounded px-2 py-1 ${isActive

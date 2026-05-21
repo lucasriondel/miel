@@ -1,3 +1,4 @@
+import { NavLink } from "react-router-dom";
 import { useLabels } from "../api/queries";
 import type { Label } from "../api/types";
 import { LabelListRow } from "./LabelListRow";
@@ -56,6 +57,19 @@ export const LabelList = ({ accountId, selectedLabelId, onSelect }: Props) => {
       >
         <span className="truncate">All messages</span>
       </LabelListRow>
+
+      <NavLink
+        to="/filters"
+        className={({ isActive }) =>
+          `flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${
+            isActive
+              ? "bg-miel-accent/10 text-miel-ink"
+              : "text-miel-muted hover:bg-miel-line/40 hover:text-miel-ink"
+          }`
+        }
+      >
+        <span className="truncate">Filters</span>
+      </NavLink>
 
       {userLabels.length > 0 ? (
         <>
