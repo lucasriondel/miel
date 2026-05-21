@@ -12,7 +12,11 @@ import { ShellError } from "../adapters/shell";
 import type { GogFilterT } from "../schemas/gmail";
 import { FilterSuggestInput } from "../schemas/filterSuggest";
 import { createDebug } from "../util/debug";
-import { getLabelsForAccount, type LabelRow } from "./labels";
+import {
+  getLabelsForAccount,
+  syncLabelsForAccount,
+  type LabelRow,
+} from "./labels";
 
 const debug = createDebug("service:filters");
 
@@ -374,6 +378,22 @@ export async function acceptSuggestedFilter(args: {
     throw new Error(`suggestion already ${s.status}`);
   }
 
+  const remoteLabels = await gog.listLabels({ account: s.accountEmail });
+  const remoteByName = new Map(remoteLabels.map((l) => [l.name, l]));
+  let gmailLabelId = remoteByName.get(s.addLabelName)?.id;
+  if (!gmailLabelId) {
+    const created = await gog.createLabel({
+      account: s.accountEmail,
+      name: s.addLabelName,
+    });
+    gmailLabelId = created.id;
+  }
+  await syncLabelsForAccount({
+    accountId: s.accountId,
+    accountEmail: s.accountEmail,
+    gog,
+  });
+
   let createdGmailFilterId: string;
   let alreadyExisted = false;
   try {
@@ -382,7 +402,7 @@ export async function acceptSuggestedFilter(args: {
       from: s.criteriaFrom ?? undefined,
       subject: s.criteriaSubject ?? undefined,
       query: s.criteriaQuery ?? undefined,
-      addLabel: s.addLabelName,
+      addLabel: gmailLabelId,
     });
     createdGmailFilterId = created.id;
   } catch (err) {
