@@ -97,7 +97,8 @@ export type {
   SendReplyArgs,
   SendReplyResult,
 } from "./services/reply";
-export { parseSince } from "./util/time";
+export { parseSince, resolveSyncRange } from "./util/time";
+export type { ResolvedSyncRange, DateRange } from "./util/time";
 export {
   spawnCapture,
   spawnJson,

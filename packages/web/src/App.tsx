@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
-import { useWeek, type Week } from "./features/sync/useWeek";
+import { useWeek, type Week, type ViewMode } from "./features/sync/useWeek";
 import { useAccounts } from "./api/queries";
 
 export interface LayoutContext {
@@ -15,6 +15,8 @@ export interface LayoutContext {
   goPrev: () => void;
   goNext: () => void;
   goToday: () => void;
+  viewMode: ViewMode;
+  setViewMode: (mode: ViewMode) => void;
   selectedAccountEmail: string | undefined;
 }
 
@@ -22,7 +24,8 @@ export const App = () => {
   const accounts = useAccounts();
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>();
-  const { week, isCurrentWeek, canGoNext, goPrev, goNext, goToday } = useWeek();
+  const { week, isCurrentWeek, canGoNext, goPrev, goNext, goToday, viewMode, setViewMode } =
+    useWeek();
 
   useEffect(() => {
     if (!selectedAccountId && accounts.data && accounts.data.length > 0) {
@@ -44,6 +47,8 @@ export const App = () => {
       goPrev,
       goNext,
       goToday,
+      viewMode,
+      setViewMode,
       selectedAccountEmail: selectedAccount?.email,
     }),
     [
@@ -55,6 +60,8 @@ export const App = () => {
       goPrev,
       goNext,
       goToday,
+      viewMode,
+      setViewMode,
       selectedAccount?.email,
     ],
   );

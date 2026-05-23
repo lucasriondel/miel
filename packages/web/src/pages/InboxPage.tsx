@@ -4,11 +4,12 @@ import { PrioritySection } from "../components/PrioritySection";
 import { EmptyState } from "../components/EmptyState";
 import { Spinner } from "../components/Spinner";
 import { TopBar } from "../components/TopBar";
-import { WeekNav } from "../features/sync/WeekNav";
+import { InboxNav } from "../features/sync/InboxNav";
 import { SyncRangeControls } from "../features/sync/SyncRangeControls";
 import { InboxFilterSuggestions } from "../features/filters/InboxFilterSuggestions";
 import type { ListedMessage, Priority } from "../api/types";
 import type { LayoutContext } from "../App";
+import type { ViewMode } from "../features/sync/useWeek";
 
 export const InboxPage = () => {
   const ctx = useOutletContext<LayoutContext>();
@@ -24,21 +25,25 @@ export const InboxPage = () => {
     goPrev,
     goNext,
     goToday,
+    viewMode,
+    setViewMode,
   } = ctx;
 
   const { data, isLoading, error } = useMessages({
     accountId: selectedAccountId,
     labelId: selectedLabelId,
     limit: 100,
-    internalDateFrom: weekStartIso,
-    internalDateTo: weekEndIso,
+    internalDateFrom: viewMode === "week" ? weekStartIso : undefined,
+    internalDateTo: viewMode === "week" ? weekEndIso : undefined,
   });
 
   return (
     <>
       <TopBar
         left={
-          <WeekNav
+          <InboxNav
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
             week={week}
             isCurrentWeek={isCurrentWeek}
             canGoNext={canGoNext}
@@ -55,6 +60,7 @@ export const InboxPage = () => {
         ) : null}
         <InboxBody
           selectedAccountId={selectedAccountId}
+          viewMode={viewMode}
           isLoading={isLoading}
           error={error}
           items={data?.items ?? []}
@@ -66,6 +72,7 @@ export const InboxPage = () => {
 
 interface InboxBodyProps {
   selectedAccountId: string | undefined;
+  viewMode: ViewMode;
   isLoading: boolean;
   error: unknown;
   items: ListedMessage[];
@@ -73,6 +80,7 @@ interface InboxBodyProps {
 
 const InboxBody = ({
   selectedAccountId,
+  viewMode,
   isLoading,
   error,
   items,
@@ -104,10 +112,15 @@ const InboxBody = ({
   }
 
   if (items.length === 0) {
-    return (
+    return viewMode === "week" ? (
       <EmptyState
         title="No messages this week"
         description="Navigate to another week or run Sync to fetch messages for this range."
+      />
+    ) : (
+      <EmptyState
+        title="No messages"
+        description="Run Sync to fetch messages for this account."
       />
     );
   }

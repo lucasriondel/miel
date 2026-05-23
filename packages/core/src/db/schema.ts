@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   boolean,
+  integer,
   jsonb,
   primaryKey,
   uniqueIndex,
@@ -22,6 +23,12 @@ export const filterSuggestionStatusEnum = pgEnum("filter_suggestion_status", [
   "pending",
   "accepted",
   "dismissed",
+]);
+
+export const syncWindowStatusEnum = pgEnum("sync_window_status", [
+  "running",
+  "completed",
+  "failed",
 ]);
 
 export const accounts = pgTable("accounts", {
@@ -201,6 +208,34 @@ export const suggestedFilters = pgTable(
   },
   (t) => ({
     byAccount: index("suggested_filters_account").on(t.accountId, t.status),
+  }),
+);
+
+export const syncWindows = pgTable(
+  "sync_windows",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    rangeFrom: timestamp("range_from", { withTimezone: true }).notNull(),
+    rangeTo: timestamp("range_to", { withTimezone: true }).notNull(),
+    query: text("query").notNull(),
+    status: syncWindowStatusEnum("status").notNull().default("running"),
+    messagesFetched: integer("messages_fetched").notNull().default(0),
+    messagesNew: integer("messages_new").notNull().default(0),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byAccountRange: index("sync_windows_account_range").on(
+      t.accountId,
+      t.rangeFrom,
+      t.rangeTo,
+    ),
   }),
 );
 

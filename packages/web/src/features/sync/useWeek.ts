@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
+export type ViewMode = "week" | "all";
+
 export interface Week {
   /** Monday 00:00 in local time. */
   start: Date;
@@ -50,6 +52,8 @@ export function useWeek(): {
   goPrev: () => void;
   goNext: () => void;
   goToday: () => void;
+  viewMode: ViewMode;
+  setViewMode: (mode: ViewMode) => void;
 } {
   const [params, setParams] = useSearchParams();
   const currentWeekStart = useMemo(() => startOfWeek(new Date()), []);
@@ -58,10 +62,22 @@ export function useWeek(): {
     return buildWeek(fromUrl ?? currentWeekStart);
   }, [params, currentWeekStart]);
 
+  const viewMode: ViewMode = params.get("view") === "all" ? "all" : "week";
+
   const setWeek = useCallback(
     (start: Date) => {
       const next = new URLSearchParams(params);
       next.set("week", toKey(start));
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
+
+  const setViewMode = useCallback(
+    (mode: ViewMode) => {
+      const next = new URLSearchParams(params);
+      if (mode === "all") next.set("view", "all");
+      else next.delete("view");
       setParams(next, { replace: true });
     },
     [params, setParams],
@@ -77,5 +93,5 @@ export function useWeek(): {
   }, [setWeek, week.start, canGoNext]);
   const goToday = useCallback(() => setWeek(currentWeekStart), [setWeek, currentWeekStart]);
 
-  return { week, isCurrentWeek, canGoNext, goPrev, goNext, goToday };
+  return { week, isCurrentWeek, canGoNext, goPrev, goNext, goToday, viewMode, setViewMode };
 }

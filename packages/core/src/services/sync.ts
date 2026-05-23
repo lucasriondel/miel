@@ -5,6 +5,7 @@ import {
   messageLabels,
   messages,
   suggestedLabels,
+  syncWindows,
   triageLabelSuggestions,
   triages,
 } from "../db/schema";
@@ -31,7 +32,7 @@ import {
   parseInternalDate,
 } from "../util/gmailPayload";
 import { createDebug } from "../util/debug";
-import { buildRangeQuery, parseSince, type DateRange } from "../util/time";
+import { resolveSyncRange, type DateRange } from "../util/time";
 import { getAccountByEmail, syncAccountsFromGog } from "./accounts";
 import {
   getLabelsByGmailIds,
@@ -309,9 +310,8 @@ export async function fetchAndTriage(
   const log = opts.log ?? (() => {});
   const emit = opts.onEvent ?? (() => {});
   const max = opts.max ?? DEFAULT_SEARCH_MAX;
-  const query = opts.range
-    ? buildRangeQuery(opts.range)
-    : parseSince(opts.since ?? "7d");
+  const resolved = resolveSyncRange({ since: opts.since, range: opts.range });
+  const { query } = resolved;
   const errors: string[] = [];
 
   debug("fetchAndTriage start", {
@@ -329,6 +329,26 @@ export async function fetchAndTriage(
       `Account not synced: ${opts.accountEmail}. Run accounts sync first.`,
     );
   }
+
+  const { db } = getDb();
+  const [{ id: syncWindowId }] = await db
+    .insert(syncWindows)
+    .values({
+      accountId: account.id,
+      rangeFrom: resolved.from,
+      rangeTo: resolved.to,
+      query,
+    })
+    .returning({ id: syncWindows.id });
+  debug("sync window opened", {
+    id: syncWindowId,
+    from: resolved.from.toISOString(),
+    to: resolved.to.toISOString(),
+  });
+
+  let messagesFetched = 0;
+  let messagesNew = 0;
+  try {
 
   log(`[${account.email}] syncing labels`);
   debug("syncing labels", { account: account.email });
@@ -366,7 +386,6 @@ export async function fetchAndTriage(
   log(`[${account.email}] ${hits.length} hits`);
   debug("search hits", { account: account.email, hits: hits.length });
 
-  const { db } = getDb();
   const hitIds = hits.map((h) => h.messageId);
   const existingIds = hitIds.length
     ? new Set(
@@ -418,6 +437,9 @@ export async function fetchAndTriage(
     count: normalized.length,
   });
 
+  messagesFetched = hits.length;
+  messagesNew = normalized.length;
+
   if (normalized.length === 0) {
     debug("nothing to triage", { account: account.email });
     emit({ type: "mails.fetched", account: account.email, count: 0 });
@@ -425,6 +447,15 @@ export async function fetchAndTriage(
       .update(accounts)
       .set({ lastSyncedAt: new Date() })
       .where(eq(accounts.id, account.id));
+    await db
+      .update(syncWindows)
+      .set({
+        status: "completed",
+        messagesFetched,
+        messagesNew,
+        finishedAt: new Date(),
+      })
+      .where(eq(syncWindows.id, syncWindowId));
     return {
       account: account.email,
       fetched: 0,
@@ -654,6 +685,17 @@ export async function fetchAndTriage(
     .set({ lastSyncedAt: new Date() })
     .where(eq(accounts.id, account.id));
 
+  await db
+    .update(syncWindows)
+    .set({
+      status: "completed",
+      messagesFetched,
+      messagesNew,
+      error: errors.length > 0 ? errors.join("\n") : null,
+      finishedAt: new Date(),
+    })
+    .where(eq(syncWindows.id, syncWindowId));
+
   const result = {
     account: account.email,
     fetched: normalized.length,
@@ -665,6 +707,21 @@ export async function fetchAndTriage(
   };
   debug("fetchAndTriage done", result);
   return result;
+  } catch (err) {
+    const message = (err as Error).message ?? String(err);
+    debug("fetchAndTriage failed", { account: opts.accountEmail, error: message });
+    await db
+      .update(syncWindows)
+      .set({
+        status: "failed",
+        messagesFetched,
+        messagesNew,
+        error: message,
+        finishedAt: new Date(),
+      })
+      .where(eq(syncWindows.id, syncWindowId));
+    throw err;
+  }
 }
 
 export interface SyncAllOptions {
