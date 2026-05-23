@@ -10,6 +10,7 @@ const EnvSchema = z.object({
   API_SECRET: z.string().min(1).default("change-me-to-a-random-string"),
   API_PORT: z.coerce.number().int().positive().default(3001),
   WEB_PORT: z.coerce.number().int().positive().default(3000),
+  WEB_ORIGIN: z.string().default("http://localhost:3000"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -24,6 +25,7 @@ export function getEnv(): Env {
     CLAUDE_BIN: cached.CLAUDE_BIN,
     API_PORT: cached.API_PORT,
     WEB_PORT: cached.WEB_PORT,
+    WEB_ORIGIN: cached.WEB_ORIGIN,
   });
   return cached;
 }

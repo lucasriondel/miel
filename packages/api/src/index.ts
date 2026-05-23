@@ -1,9 +1,18 @@
-import { getEnv } from "@miel/core";
+import { getEnv, runMigrations } from "@miel/core";
 import { createApp } from "./app";
 import { handleSyncMessage, type SyncSocketData } from "./ws/syncSocket";
 
-const app = createApp();
-const { API_PORT, API_SECRET } = getEnv();
+const { API_PORT, API_SECRET, WEB_ORIGIN } = getEnv();
+
+try {
+  await runMigrations();
+  console.log("miel api: migrations applied");
+} catch (err) {
+  console.error("miel api: migrations failed", err);
+  process.exit(1);
+}
+
+const app = createApp({ webOrigin: WEB_ORIGIN });
 
 const server = Bun.serve<SyncSocketData>({
   port: API_PORT,
