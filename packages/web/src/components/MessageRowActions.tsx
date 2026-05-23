@@ -1,4 +1,4 @@
-import type { MouseEvent, ComponentType, SVGProps } from "react";
+import type { ComponentType, SVGProps } from "react";
 import { Archive, Mail, MailOpen, Trash2 } from "lucide-react";
 import {
   useArchiveMessage,
@@ -23,46 +23,32 @@ export const MessageRowActions = ({
 
   const input = { accountId, gmailMessageId };
 
-  const onToggleRead = (e: MouseEvent) => {
-    stop(e);
-    setRead.mutate({ ...input, read: isUnread });
-  };
-
-  const onArchive = (e: MouseEvent) => {
-    stop(e);
-    archive.mutate(input);
-  };
-
-  const onTrash = (e: MouseEvent) => {
-    stop(e);
-    trash.mutate(input);
-  };
-
   return (
-    <div
-      className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-1 bg-gradient-to-l from-miel-bg via-miel-bg/95 to-transparent pl-12 pr-3 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100"
-      onClick={stop}
-    >
+    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-1 bg-gradient-to-l from-miel-bg via-miel-bg/95 to-transparent pl-12 pr-3 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
       <ActionButton
         Icon={isUnread ? MailOpen : Mail}
         label={isUnread ? "Mark as read" : "Mark as unread"}
-        onClick={onToggleRead}
+        onClick={() => setRead.mutate({ ...input, read: isUnread })}
       />
-      <ActionButton Icon={Archive} label="Archive" onClick={onArchive} />
-      <ActionButton Icon={Trash2} label="Delete" onClick={onTrash} danger />
+      <ActionButton
+        Icon={Archive}
+        label="Archive"
+        onClick={() => archive.mutate(input)}
+      />
+      <ActionButton
+        Icon={Trash2}
+        label="Delete"
+        onClick={() => trash.mutate(input)}
+        danger
+      />
     </div>
   );
 };
 
-function stop(e: MouseEvent) {
-  e.preventDefault();
-  e.stopPropagation();
-}
-
 interface ActionButtonProps {
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
   label: string;
-  onClick: (e: MouseEvent) => void;
+  onClick: () => void;
   danger?: boolean;
 }
 

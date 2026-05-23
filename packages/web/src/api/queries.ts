@@ -16,7 +16,7 @@ export const queryKeys = {
     ["accounts", accountId ?? "_", "labels"] as const,
   messages: (params: ListMessagesParams) => ["messages", params] as const,
   message: (accountId: string, gmailMessageId: string) =>
-    ["messages", accountId, gmailMessageId] as const,
+    ["message", accountId, gmailMessageId] as const,
   settings: ["settings"] as const,
   filters: (accountId: string | undefined) =>
     ["filters", accountId ?? "_all"] as const,
