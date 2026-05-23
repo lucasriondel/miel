@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { useWeek, type Week, type ViewMode } from "./features/sync/useWeek";
+import { useFocusSync } from "./features/sync/useFocusSync";
 import { useAccounts } from "./api/queries";
 
 export interface LayoutContext {
@@ -34,6 +35,8 @@ export const App = () => {
   }, [accounts.data, selectedAccountId]);
 
   const selectedAccount = accounts.data?.find((a) => a.id === selectedAccountId);
+
+  useFocusSync(selectedAccount?.email);
 
   const outletContext = useMemo<LayoutContext>(
     () => ({

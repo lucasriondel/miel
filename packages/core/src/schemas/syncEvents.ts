@@ -26,6 +26,12 @@ export const SyncStartMessage = z
   });
 export type SyncStartMessageT = z.infer<typeof SyncStartMessage>;
 
+export const TriageStartMessage = z.object({
+  type: z.literal("triage.start"),
+  account: z.string().email(),
+});
+export type TriageStartMessageT = z.infer<typeof TriageStartMessage>;
+
 export const SyncStartedEvent = z.object({
   type: z.literal("sync.started"),
 });

@@ -1,5 +1,9 @@
 import type { ServerWebSocket } from "bun";
-import { syncAll, syncEventSchemas } from "@miel/core";
+import {
+  syncAll,
+  syncEventSchemas,
+  triageUntriagedForAccount,
+} from "@miel/core";
 import type { z } from "zod";
 
 type SyncServerEventT = z.infer<typeof syncEventSchemas.SyncServerEvent>;
@@ -34,20 +38,31 @@ export async function handleSyncMessage(ws: SyncWs, raw: string | Buffer) {
     return;
   }
 
-  const result = syncEventSchemas.SyncStartMessage.safeParse(parsed);
-  if (!result.success) {
-    send(ws, {
-      type: "sync.error",
-      message: `invalid sync.start payload: ${result.error.message}`,
-    });
+  const syncResult = syncEventSchemas.SyncStartMessage.safeParse(parsed);
+  if (syncResult.success) {
+    ws.data.started = true;
+    await runSync(ws, syncResult.data);
     return;
   }
 
-  ws.data.started = true;
-  const input = result.data;
+  const triageResult = syncEventSchemas.TriageStartMessage.safeParse(parsed);
+  if (triageResult.success) {
+    ws.data.started = true;
+    await runTriage(ws, triageResult.data);
+    return;
+  }
 
+  send(ws, {
+    type: "sync.error",
+    message: `invalid start payload: ${syncResult.error.message}`,
+  });
+}
+
+async function runSync(
+  ws: SyncWs,
+  input: z.infer<typeof syncEventSchemas.SyncStartMessage>,
+) {
   send(ws, { type: "sync.started" });
-
   try {
     const runs = await syncAll({
       accountEmail: input.account,
@@ -62,6 +77,37 @@ export async function handleSyncMessage(ws: SyncWs, raw: string | Buffer) {
     });
     if (ws.readyState === 1) {
       send(ws, { type: "sync.finished", runs });
+    }
+  } catch (err) {
+    if (ws.readyState === 1) {
+      send(ws, {
+        type: "sync.error",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } finally {
+    if (ws.readyState === 1) {
+      ws.close(1000);
+    }
+  }
+}
+
+async function runTriage(
+  ws: SyncWs,
+  input: z.infer<typeof syncEventSchemas.TriageStartMessage>,
+) {
+  send(ws, { type: "sync.started" });
+  try {
+    await triageUntriagedForAccount({
+      accountEmail: input.account,
+      onEvent: (event) => {
+        if (ws.readyState === 1) {
+          send(ws, event);
+        }
+      },
+    });
+    if (ws.readyState === 1) {
+      send(ws, { type: "sync.finished", runs: [] });
     }
   } catch (err) {
     if (ws.readyState === 1) {

@@ -54,11 +54,17 @@ export type {
   SuggestedFilterRow,
   SuggestedFilterWithAccount,
 } from "./services/filters";
-export { fetchAndTriage, syncAll } from "./services/sync";
+export {
+  fetchAndTriage,
+  syncAll,
+  triageUntriagedForAccount,
+} from "./services/sync";
 export type {
   SyncRunResult,
   FetchAndTriageOptions,
   SyncAllOptions,
+  TriageUntriagedOptions,
+  TriageUntriagedResult,
 } from "./services/sync";
 export {
   applyLabels,

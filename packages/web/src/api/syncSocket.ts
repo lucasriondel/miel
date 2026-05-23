@@ -124,6 +124,7 @@ function dispatchEvent(
 
 export interface UseSyncStream {
   start: (input: SyncStreamInput) => void;
+  startTriage: (input: { account: string }) => void;
   isRunning: boolean;
 }
 
@@ -142,8 +143,8 @@ export function useSyncStream(): UseSyncStream {
     };
   }, []);
 
-  const start = useCallback(
-    (input: SyncStreamInput) => {
+  const openSocket = useCallback(
+    (startPayload: object) => {
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -155,7 +156,7 @@ export function useSyncStream(): UseSyncStream {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: "sync.start", ...input }));
+        ws.send(JSON.stringify(startPayload));
       };
       ws.onmessage = (ev) => {
         let parsed: unknown;
@@ -179,5 +180,19 @@ export function useSyncStream(): UseSyncStream {
     [qc],
   );
 
-  return { start, isRunning };
+  const start = useCallback(
+    (input: SyncStreamInput) => {
+      openSocket({ type: "sync.start", ...input });
+    },
+    [openSocket],
+  );
+
+  const startTriage = useCallback(
+    (input: { account: string }) => {
+      openSocket({ type: "triage.start", account: input.account });
+    },
+    [openSocket],
+  );
+
+  return { start, startTriage, isRunning };
 }

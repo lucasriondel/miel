@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import {
   accounts,
@@ -291,6 +291,176 @@ async function persistTriageResults(args: {
   return { persisted, newLabelSuggestions };
 }
 
+interface RunTriageBatchesArgs {
+  accountId: string;
+  accountEmail: string;
+  batches: NormalizedMessage[][];
+  labelsByGmailId: Map<string, LabelRow>;
+  labelsByName: Map<string, LabelRow>;
+  existingLabelNames: string[];
+  claude: ClaudeAdapter;
+  log: (msg: string) => void;
+  emit: (event: SyncServerEventT) => void;
+}
+
+interface RunTriageBatchesResult {
+  triaged: number;
+  suggestedNewLabels: number;
+  errors: string[];
+}
+
+async function runTriageBatches(
+  args: RunTriageBatchesArgs,
+): Promise<RunTriageBatchesResult> {
+  const {
+    accountId,
+    accountEmail,
+    batches,
+    labelsByGmailId,
+    labelsByName,
+    existingLabelNames,
+    claude,
+    log,
+    emit,
+  } = args;
+
+  emit({
+    type: "triage.started",
+    account: accountEmail,
+    totalBatches: batches.length,
+  });
+
+  interface BatchOutcome {
+    persisted: number;
+    newLabelSuggestions: number;
+    errors: string[];
+  }
+
+  const runOne = async (
+    batch: NormalizedMessage[],
+    i: number,
+  ): Promise<BatchOutcome> => {
+    const items = buildTriageItems(batch, labelsByGmailId);
+    const input = TriageInput.parse({
+      account: accountEmail,
+      existingLabels: existingLabelNames,
+      messages: items,
+    });
+    emit({
+      type: "triage.batch.progress",
+      account: accountEmail,
+      batchIndex: i,
+      totalBatches: batches.length,
+      status: "started",
+    });
+    const localErrors: string[] = [];
+    try {
+      log(`[${accountEmail}] batch ${i + 1}/${batches.length} → claude`);
+      debug("triage batch start", {
+        account: accountEmail,
+        batch: i + 1,
+        of: batches.length,
+        items: items.length,
+      });
+      const { output, runId, model } = await claude.runTriage(input);
+      debug("triage batch returned", {
+        account: accountEmail,
+        batch: i + 1,
+        results: output.results.length,
+        runId,
+        model,
+      });
+      const byId = new Map(batch.map((m) => [m.gmailMessageId, m]));
+      const returnedIds = new Set(output.results.map((r) => r.id));
+      const missing = items.filter((m) => !returnedIds.has(m.id));
+      if (missing.length > 0) {
+        const m = `triage batch ${i + 1} dropped ids: ${missing.map((x) => x.id).join(",")}`;
+        localErrors.push(m);
+        log(`[${accountEmail}] WARN ${m}`);
+      }
+      const extras = output.results.filter((r) => !byId.has(r.id));
+      if (extras.length > 0) {
+        const m = `triage batch ${i + 1} returned unknown ids: ${extras.map((x) => x.id).join(",")}`;
+        localErrors.push(m);
+        log(`[${accountEmail}] WARN ${m}`);
+      }
+      const persisted = await persistTriageResults({
+        accountId,
+        model,
+        runId,
+        byMessageId: byId,
+        labelsByName,
+        items: output.results.filter((r) => byId.has(r.id)),
+      });
+      debug("triage batch persisted", {
+        account: accountEmail,
+        batch: i + 1,
+        persisted: persisted.persisted,
+        newLabelSuggestions: persisted.newLabelSuggestions,
+      });
+      emit({
+        type: "triage.batch.progress",
+        account: accountEmail,
+        batchIndex: i,
+        totalBatches: batches.length,
+        status: "done",
+      });
+      return {
+        persisted: persisted.persisted,
+        newLabelSuggestions: persisted.newLabelSuggestions,
+        errors: localErrors,
+      };
+    } catch (err) {
+      const m = (err as Error).message;
+      localErrors.push(`triage batch ${i + 1}: ${m}`);
+      log(`[${accountEmail}] ERROR triage batch ${i + 1}: ${m}`);
+      debug("triage batch failed", {
+        account: accountEmail,
+        batch: i + 1,
+        error: m,
+      });
+      emit({
+        type: "triage.batch.progress",
+        account: accountEmail,
+        batchIndex: i,
+        totalBatches: batches.length,
+        status: "failed",
+        error: m,
+      });
+      return { persisted: 0, newLabelSuggestions: 0, errors: localErrors };
+    }
+  };
+
+  const results = await Promise.allSettled(
+    batches.map((batch, i) => runOne(batch, i)),
+  );
+
+  let triaged = 0;
+  let suggestedNewLabels = 0;
+  const errors: string[] = [];
+  for (let i = 0; i < results.length; i += 1) {
+    const r = results[i];
+    if (r.status === "fulfilled") {
+      triaged += r.value.persisted;
+      suggestedNewLabels += r.value.newLabelSuggestions;
+      errors.push(...r.value.errors);
+    } else {
+      const m = (r.reason as Error)?.message ?? String(r.reason);
+      errors.push(`triage batch ${i + 1}: ${m}`);
+      log(`[${accountEmail}] ERROR triage batch ${i + 1} rejected: ${m}`);
+    }
+  }
+
+  emit({
+    type: "triage.finished",
+    account: accountEmail,
+    triaged,
+    suggestedNewLabels,
+  });
+
+  return { triaged, suggestedNewLabels, errors };
+}
+
 export interface FetchAndTriageOptions {
   accountEmail: string;
   since?: string;
@@ -500,112 +670,18 @@ export async function fetchAndTriage(
   log(
     `[${account.email}] running ${batches.length} triage batch(es) over ${normalized.length} messages (in parallel with filter suggest)`,
   );
-  emit({
-    type: "triage.started",
-    account: account.email,
-    totalBatches: batches.length,
+
+  const batchPromise = runTriageBatches({
+    accountId: account.id,
+    accountEmail: account.email,
+    batches,
+    labelsByGmailId,
+    labelsByName,
+    existingLabelNames,
+    claude,
+    log,
+    emit,
   });
-
-  interface BatchOutcome {
-    persisted: number;
-    newLabelSuggestions: number;
-    errors: string[];
-  }
-
-  const runTriageBatch = async (
-    batch: NormalizedMessage[],
-    i: number,
-  ): Promise<BatchOutcome> => {
-    const items = buildTriageItems(batch, labelsByGmailId);
-    const input = TriageInput.parse({
-      account: account.email,
-      existingLabels: existingLabelNames,
-      messages: items,
-    });
-    emit({
-      type: "triage.batch.progress",
-      account: account.email,
-      batchIndex: i,
-      totalBatches: batches.length,
-      status: "started",
-    });
-    const localErrors: string[] = [];
-    try {
-      log(`[${account.email}] batch ${i + 1}/${batches.length} → claude`);
-      debug("triage batch start", {
-        account: account.email,
-        batch: i + 1,
-        of: batches.length,
-        items: items.length,
-      });
-      const { output, runId, model } = await claude.runTriage(input);
-      debug("triage batch returned", {
-        account: account.email,
-        batch: i + 1,
-        results: output.results.length,
-        runId,
-        model,
-      });
-      const byId = new Map(batch.map((m) => [m.gmailMessageId, m]));
-      const returnedIds = new Set(output.results.map((r) => r.id));
-      const missing = items.filter((m) => !returnedIds.has(m.id));
-      if (missing.length > 0) {
-        const m = `triage batch ${i + 1} dropped ids: ${missing.map((x) => x.id).join(",")}`;
-        localErrors.push(m);
-        log(`[${account.email}] WARN ${m}`);
-      }
-      const extras = output.results.filter((r) => !byId.has(r.id));
-      if (extras.length > 0) {
-        const m = `triage batch ${i + 1} returned unknown ids: ${extras.map((x) => x.id).join(",")}`;
-        localErrors.push(m);
-        log(`[${account.email}] WARN ${m}`);
-      }
-      const persisted = await persistTriageResults({
-        accountId: account.id,
-        model,
-        runId,
-        byMessageId: byId,
-        labelsByName,
-        items: output.results.filter((r) => byId.has(r.id)),
-      });
-      debug("triage batch persisted", {
-        account: account.email,
-        batch: i + 1,
-        persisted: persisted.persisted,
-        newLabelSuggestions: persisted.newLabelSuggestions,
-      });
-      emit({
-        type: "triage.batch.progress",
-        account: account.email,
-        batchIndex: i,
-        totalBatches: batches.length,
-        status: "done",
-      });
-      return {
-        persisted: persisted.persisted,
-        newLabelSuggestions: persisted.newLabelSuggestions,
-        errors: localErrors,
-      };
-    } catch (err) {
-      const m = (err as Error).message;
-      localErrors.push(`triage batch ${i + 1}: ${m}`);
-      log(`[${account.email}] ERROR triage batch ${i + 1}: ${m}`);
-      debug("triage batch failed", {
-        account: account.email,
-        batch: i + 1,
-        error: m,
-      });
-      emit({
-        type: "triage.batch.progress",
-        account: account.email,
-        batchIndex: i,
-        totalBatches: batches.length,
-        status: "failed",
-        error: m,
-      });
-      return { persisted: 0, newLabelSuggestions: 0, errors: localErrors };
-    }
-  };
 
   const runFilterSuggest = async (): Promise<{
     suggestedFilters: number;
@@ -641,36 +717,15 @@ export async function fetchAndTriage(
     }
   };
 
-  const batchPromise = Promise.allSettled(
-    batches.map((batch, i) => runTriageBatch(batch, i)),
-  );
   const filterPromise = runFilterSuggest();
-  const [batchResults, filterResult] = await Promise.all([
+  const [triageResult, filterResult] = await Promise.all([
     batchPromise,
     filterPromise,
   ]);
 
-  let triagedCount = 0;
-  let suggestedNewLabelsCount = 0;
-  for (let i = 0; i < batchResults.length; i += 1) {
-    const r = batchResults[i];
-    if (r.status === "fulfilled") {
-      triagedCount += r.value.persisted;
-      suggestedNewLabelsCount += r.value.newLabelSuggestions;
-      errors.push(...r.value.errors);
-    } else {
-      const m = (r.reason as Error)?.message ?? String(r.reason);
-      errors.push(`triage batch ${i + 1}: ${m}`);
-      log(`[${account.email}] ERROR triage batch ${i + 1} rejected: ${m}`);
-    }
-  }
-
-  emit({
-    type: "triage.finished",
-    account: account.email,
-    triaged: triagedCount,
-    suggestedNewLabels: suggestedNewLabelsCount,
-  });
+  const triagedCount = triageResult.triaged;
+  const suggestedNewLabelsCount = triageResult.suggestedNewLabels;
+  errors.push(...triageResult.errors);
 
   const suggestedFiltersCount = filterResult.suggestedFilters;
   errors.push(...filterResult.errors);
@@ -772,4 +827,159 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
   }
   debug("syncAll done", { runs: results.length });
   return results;
+}
+
+export interface TriageUntriagedOptions {
+  accountEmail: string;
+  claude?: ClaudeAdapter;
+  log?: (msg: string) => void;
+  onEvent?: (event: SyncServerEventT) => void;
+}
+
+export interface TriageUntriagedResult {
+  account: string;
+  candidates: number;
+  triaged: number;
+  suggestedNewLabels: number;
+  errors: string[];
+}
+
+export async function triageUntriagedForAccount(
+  opts: TriageUntriagedOptions,
+): Promise<TriageUntriagedResult> {
+  const claude = opts.claude ?? createClaudeAdapter();
+  const log = opts.log ?? (() => {});
+  const emit = opts.onEvent ?? (() => {});
+
+  const account = await getAccountByEmail(opts.accountEmail);
+  if (!account) {
+    throw new Error(
+      `Account not synced: ${opts.accountEmail}. Run accounts sync first.`,
+    );
+  }
+
+  const { db } = getDb();
+
+  const allLabels = await getLabelsForAccount(account.id);
+  const labelsByName = new Map(allLabels.map((l) => [l.name, l]));
+  const existingLabelNames = allLabels
+    .filter((l) => l.type === "user")
+    .map((l) => l.name);
+
+  // Untriaged = no row in `triages` for that (account, gmailMessageId).
+  // We exclude archived/trashed to avoid wasting Claude calls on dead mail.
+  const rows = await db
+    .select({
+      gmailMessageId: messages.gmailMessageId,
+      gmailThreadId: messages.gmailThreadId,
+      fromEmail: messages.fromEmail,
+      fromName: messages.fromName,
+      toEmails: messages.toEmails,
+      subject: messages.subject,
+      snippet: messages.snippet,
+      bodyText: messages.bodyText,
+      bodyHtml: messages.bodyHtml,
+      internalDate: messages.internalDate,
+      rawHeaders: messages.rawHeaders,
+    })
+    .from(messages)
+    .leftJoin(
+      triages,
+      and(
+        eq(triages.accountId, messages.accountId),
+        eq(triages.gmailMessageId, messages.gmailMessageId),
+      ),
+    )
+    .where(
+      and(
+        eq(messages.accountId, account.id),
+        eq(messages.isArchived, false),
+        eq(messages.isTrashed, false),
+        isNull(triages.id),
+      ),
+    );
+
+  log(`[${account.email}] ${rows.length} untriaged message(s) to triage`);
+  debug("triageUntriagedForAccount candidates", {
+    account: account.email,
+    count: rows.length,
+  });
+
+  if (rows.length === 0) {
+    emit({ type: "triage.started", account: account.email, totalBatches: 0 });
+    emit({
+      type: "triage.finished",
+      account: account.email,
+      triaged: 0,
+      suggestedNewLabels: 0,
+    });
+    return {
+      account: account.email,
+      candidates: 0,
+      triaged: 0,
+      suggestedNewLabels: 0,
+      errors: [],
+    };
+  }
+
+  const gmailMessageIds = rows.map((r) => r.gmailMessageId);
+  const labelLinks = await db
+    .select({
+      gmailMessageId: messageLabels.gmailMessageId,
+      labelId: messageLabels.labelId,
+    })
+    .from(messageLabels)
+    .where(
+      and(
+        eq(messageLabels.accountId, account.id),
+        inArray(messageLabels.gmailMessageId, gmailMessageIds),
+      ),
+    );
+  const labelById = new Map(allLabels.map((l) => [l.id, l]));
+  const labelsByMsg = new Map<string, string[]>();
+  for (const link of labelLinks) {
+    const label = labelById.get(link.labelId);
+    if (!label) continue;
+    const list = labelsByMsg.get(link.gmailMessageId) ?? [];
+    list.push(label.gmailLabelId);
+    labelsByMsg.set(link.gmailMessageId, list);
+  }
+  const labelsByGmailId = new Map(allLabels.map((l) => [l.gmailLabelId, l]));
+
+  const normalized: NormalizedMessage[] = rows.map((r) => ({
+    accountId: account.id,
+    gmailMessageId: r.gmailMessageId,
+    gmailThreadId: r.gmailThreadId,
+    fromEmail: r.fromEmail,
+    fromName: r.fromName,
+    toEmails: r.toEmails,
+    subject: r.subject,
+    snippet: r.snippet,
+    bodyText: r.bodyText ?? "",
+    bodyHtml: r.bodyHtml ?? "",
+    internalDate: r.internalDate,
+    rawHeaders: r.rawHeaders ?? {},
+    labelIds: labelsByMsg.get(r.gmailMessageId) ?? [],
+  }));
+
+  const batches = chunk(normalized, TRIAGE_BATCH_SIZE);
+  const result = await runTriageBatches({
+    accountId: account.id,
+    accountEmail: account.email,
+    batches,
+    labelsByGmailId,
+    labelsByName,
+    existingLabelNames,
+    claude,
+    log,
+    emit,
+  });
+
+  return {
+    account: account.email,
+    candidates: normalized.length,
+    triaged: result.triaged,
+    suggestedNewLabels: result.suggestedNewLabels,
+    errors: result.errors,
+  };
 }
