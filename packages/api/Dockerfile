@@ -34,7 +34,7 @@ RUN set -eux; \
     /usr/local/bin/gog version
 
 # Install JS deps (root + workspaces) using only the manifests for cache friendliness
-COPY package.json bun.lock turbo.json ./
+COPY package.json bun.lock turbo.json tsconfig.base.json ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/api/package.json  packages/api/package.json
 COPY packages/web/package.json  packages/web/package.json
