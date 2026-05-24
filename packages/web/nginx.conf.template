@@ -1,0 +1,44 @@
+server {
+  listen 80;
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # Docker's embedded DNS. Using a resolver + variable upstream defers name
+  # resolution to request time, so nginx still boots if the API container is
+  # not up yet (avoids "host not found in upstream" crashes during deploys).
+  resolver 127.0.0.11 valid=10s ipv6=off;
+
+  # Same-origin API proxy. The web is served at https://miel.gousse.cool and the
+  # API is reached under /api on the same host, so the browser never makes a
+  # cross-origin request -> no CORS, no credential-less preflight for Cloudflare
+  # Access to reject. The /api prefix is stripped because the API mounts its
+  # REST routes at root (/accounts, not /api/accounts); the WS handler accepts
+  # both /sync/ws and /api/sync/ws, so the stripped /sync/ws works too.
+  location /api/ {
+    set $api_upstream ${API_UPSTREAM};
+    proxy_pass http://$api_upstream/;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # WebSocket upgrade for the sync stream (/api/sync/ws -> /sync/ws).
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  }
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+
+  location ~* \.(?:js|css|woff2?|ttf|eot|ico|png|jpg|jpeg|gif|svg|webp|avif)$ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+    try_files $uri =404;
+  }
+}
