@@ -19,17 +19,20 @@ export interface ApiRequest {
 }
 
 function buildUrl(path: string, query?: ApiRequest["query"]): string {
-  const url = new URL(
-    `${apiBase}${path.startsWith("/") ? path : `/${path}`}`,
-    window.location.origin,
-  );
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  // apiBase may be a full URL (cross-origin API, e.g. prod) or a path (dev
+  // proxy, e.g. "/api"). Resolve against window.location.origin so a path-only
+  // base stays same-origin; a full URL keeps its own host.
+  const url = new URL(`${apiBase}${normalizedPath}`, window.location.origin);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null || value === "") continue;
       url.searchParams.set(key, String(value));
     }
   }
-  return url.pathname + url.search;
+  // When apiBase is same-origin we could return a relative path, but returning
+  // the absolute href works in both cases and preserves a cross-origin host.
+  return url.href;
 }
 
 export async function apiFetch<T>(req: ApiRequest): Promise<T> {
