@@ -35,6 +35,11 @@ export function isInvalidGrantStderr(stderr: string): boolean {
   return /invalid_grant/i.test(stderr);
 }
 
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max)}… (+${s.length - max} more)`;
+}
+
 async function readAll(stream: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) return "";
   const reader = stream.getReader();
@@ -84,6 +89,12 @@ export async function spawnCapture(opts: SpawnJsonOptions): Promise<{
     ms: Date.now() - startedAt,
     stdoutBytes: stdout.length,
     stderrBytes: stderr.length,
+    ...(exitCode !== 0
+      ? {
+          stderr: truncate(stderr.trim(), 2000),
+          stdout: truncate(stdout.trim(), 500),
+        }
+      : {}),
   });
 
   return { stdout, stderr, exitCode };

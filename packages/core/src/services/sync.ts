@@ -10,6 +10,7 @@ import {
   triages,
 } from "../db/schema";
 import { createGogAdapter, type GogAdapter } from "../adapters/gog";
+import { ShellError } from "../adapters/shell";
 import {
   createClaudeAdapter,
   type ClaudeAdapter,
@@ -764,7 +765,17 @@ export async function fetchAndTriage(
   return result;
   } catch (err) {
     const message = (err as Error).message ?? String(err);
-    debug("fetchAndTriage failed", { account: opts.accountEmail, error: message });
+    debug("fetchAndTriage failed", {
+      account: opts.accountEmail,
+      error: message,
+      ...(err instanceof ShellError
+        ? {
+            exitCode: err.exitCode,
+            cmd: err.cmd.join(" "),
+            stderr: err.stderr.trim() || "(empty)",
+          }
+        : {}),
+    });
     await db
       .update(syncWindows)
       .set({
