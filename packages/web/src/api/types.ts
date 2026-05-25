@@ -162,3 +162,14 @@ export interface ModelSettings {
   replyModel: string;
   filterModel: string;
 }
+
+export interface ClaudeAuthStatus {
+  loggedIn: boolean;
+  authMethod?: string;
+  email?: string;
+}
+
+export interface StartClaudeLoginResult {
+  sessionId: string;
+  url: string;
+}

@@ -4,6 +4,7 @@ import { Spinner } from "../components/Spinner";
 import { EmptyState } from "../components/EmptyState";
 import { ApiError } from "../api/client";
 import { ModelPicker } from "../features/settings/ModelPicker";
+import { ClaudeAuthManager } from "../features/settings/ClaudeAuthManager";
 import { AccountsManager } from "../features/settings/AccountsManager";
 import { LabelsManager } from "../features/settings/LabelsManager";
 import { SettingsSyncTrigger } from "../features/settings/SettingsSyncTrigger";
@@ -65,6 +66,13 @@ export const SettingsPage = () => {
             />
           </div>
         ) : null}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-miel-muted">
+          Claude login
+        </h2>
+        <ClaudeAuthManager />
       </section>
 
       <section className="flex flex-col gap-3">
