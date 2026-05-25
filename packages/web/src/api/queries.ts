@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import type {
   Account,
+  ClaudeAuthStatus,
   FiltersResponse,
   Label,
   ListMessagesResponse,
@@ -20,6 +21,7 @@ export const queryKeys = {
   settings: ["settings"] as const,
   filters: (accountId: string | undefined) =>
     ["filters", accountId ?? "_all"] as const,
+  claudeAuth: ["claudeAuth"] as const,
 };
 
 export function useAccounts() {
@@ -104,5 +106,13 @@ export function useFilters(accountId: string | undefined) {
         path: "/filters",
         query: { accountId: accountId ?? undefined },
       }),
+  });
+}
+
+export function useClaudeAuthStatus() {
+  return useQuery({
+    queryKey: queryKeys.claudeAuth,
+    queryFn: async () =>
+      apiFetch<ClaudeAuthStatus>({ path: "/auth/claude/status" }),
   });
 }

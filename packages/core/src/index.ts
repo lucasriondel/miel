@@ -20,6 +20,13 @@ export type {
 export { createClaudeAdapter } from "./adapters/claude";
 export type { ClaudeAdapter, ClaudeRunResult } from "./adapters/claude";
 export {
+  getClaudeAuthStatus,
+  startClaudeLoginSession,
+  submitClaudeLoginCode,
+} from "./adapters/claudeAuth";
+export type { ClaudeLoginSession } from "./adapters/claudeAuth";
+export * as claudeAuthSchemas from "./schemas/claudeAuth";
+export {
   SETTING_KEYS,
   SETTING_DEFAULTS,
   getSetting,

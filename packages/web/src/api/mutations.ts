@@ -7,6 +7,7 @@ import type {
   ListMessagesResponse,
   ListedMessage,
   ModelSettings,
+  StartClaudeLoginResult,
 } from "./types";
 
 export interface MessageActionResult {
@@ -524,6 +525,36 @@ export function useCreateLabel() {
       }),
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: queryKeys.labels(input.accountId) });
+    },
+  });
+}
+
+export function useStartClaudeLogin() {
+  return useMutation({
+    mutationFn: async () =>
+      apiFetch<StartClaudeLoginResult>({
+        path: "/auth/claude/login",
+        method: "POST",
+      }),
+  });
+}
+
+export interface SubmitClaudeLoginCodeInput {
+  sessionId: string;
+  code: string;
+}
+
+export function useSubmitClaudeLoginCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SubmitClaudeLoginCodeInput) =>
+      apiFetch<{ ok: true }>({
+        path: "/auth/claude/login/code",
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.claudeAuth });
     },
   });
 }
