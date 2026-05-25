@@ -17,7 +17,11 @@ server {
   # both /sync/ws and /api/sync/ws, so the stripped /sync/ws works too.
   location /api/ {
     set $api_upstream ${API_UPSTREAM};
-    proxy_pass http://$api_upstream/;
+    # Strip the /api prefix explicitly. A variable in proxy_pass disables
+    # nginx's automatic location-based URI rewrite (the trailing-slash trick),
+    # so without this rewrite the API would receive /api/accounts and 404.
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass http://$api_upstream;
 
     proxy_http_version 1.1;
     proxy_set_header Host $host;
