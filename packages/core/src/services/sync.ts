@@ -10,7 +10,7 @@ import {
   triages,
 } from "../db/schema";
 import { createGogAdapter, type GogAdapter } from "../adapters/gog";
-import { ShellError } from "../adapters/shell";
+import { ReauthRequiredError, ShellError } from "../adapters/shell";
 import {
   createClaudeAdapter,
   type ClaudeAdapter,
@@ -821,20 +821,73 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
 
   debug("syncAll targets", { count: targets.length });
 
+  const log = opts.log ?? (() => {});
+  const emit = opts.onEvent;
+
   const results: SyncRunResult[] = [];
   for (const target of targets) {
-    results.push(
-      await fetchAndTriage({
-        accountEmail: target.email,
-        since: opts.since,
-        range: opts.range,
-        max: opts.max,
-        gog,
-        claude: opts.claude,
-        log: opts.log,
-        onEvent: opts.onEvent,
-      }),
-    );
+    try {
+      results.push(
+        await fetchAndTriage({
+          accountEmail: target.email,
+          since: opts.since,
+          range: opts.range,
+          max: opts.max,
+          gog,
+          claude: opts.claude,
+          log: opts.log,
+          onEvent: opts.onEvent,
+        }),
+      );
+    } catch (err) {
+      if (!(err instanceof ReauthRequiredError)) throw err;
+      // One stale account shouldn't block the rest. Use error.account as the
+      // source of truth (PRD decision 13) and dev-warn on mismatch.
+      const account = err.account;
+      if (account !== target.email) {
+        debug("WARN reauth account mismatch", {
+          errorAccount: account,
+          target: target.email,
+        });
+      }
+      log(`[${account}] needs re-authentication`);
+      const reauthErrors = [`reauth_required: ${err.message}`];
+
+      if (emit) {
+        // Eager: spawn the manual reauth session, await its URL, ship it in the
+        // event. On spawn/URL-timeout failure, emit signal-only (PRD decision 9).
+        try {
+          const session = await gog.startReauth({ account });
+          // The proc lives until the user pastes back (or the TTL evicts it).
+          session.done.catch(() => {
+            /* surfaced via the paste-back result or a re-sync */
+          });
+          emit({
+            type: "sync.reauth_required",
+            account,
+            sessionId: session.sessionId,
+            url: session.url,
+          });
+        } catch (spawnErr) {
+          debug("startReauth failed; signal-only", {
+            account,
+            error: (spawnErr as Error).message,
+          });
+          emit({ type: "sync.reauth_required", account });
+        }
+      }
+
+      results.push({
+        account,
+        fetched: 0,
+        triaged: 0,
+        suggestedNewLabels: 0,
+        filtersSynced: 0,
+        suggestedFilters: 0,
+        errors: reauthErrors,
+      });
+      continue;
+    }
   }
   debug("syncAll done", { runs: results.length });
   return results;

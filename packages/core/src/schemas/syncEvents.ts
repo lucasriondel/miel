@@ -94,6 +94,17 @@ export const SyncErrorEvent = z.object({
 });
 export type SyncErrorEventT = z.infer<typeof SyncErrorEvent>;
 
+// Emitted when a gog call throws invalid_grant for an account mid-sync. With
+// `sessionId`+`url` the web shows a paste-back toast directly; signal-only (no
+// url/sessionId) falls back to a click-to-start REST button.
+export const SyncReauthRequiredEvent = z.object({
+  type: z.literal("sync.reauth_required"),
+  account: z.string(),
+  sessionId: z.string().optional(),
+  url: z.string().url().optional(),
+});
+export type SyncReauthRequiredEventT = z.infer<typeof SyncReauthRequiredEvent>;
+
 export const SyncServerEvent = z.discriminatedUnion("type", [
   SyncStartedEvent,
   MailsFetchedEvent,
@@ -104,6 +115,7 @@ export const SyncServerEvent = z.discriminatedUnion("type", [
   FiltersFinishedEvent,
   SyncFinishedEvent,
   SyncErrorEvent,
+  SyncReauthRequiredEvent,
 ]);
 export type SyncServerEventT = z.infer<typeof SyncServerEvent>;
 

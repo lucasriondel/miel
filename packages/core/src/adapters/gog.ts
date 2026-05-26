@@ -21,6 +21,11 @@ import {
   spawnJson,
   spawnVoid,
 } from "./shell";
+import {
+  createPasteBackLoginSession,
+  submitPasteBackCode,
+  type PasteBackResult,
+} from "./pasteBackSession";
 
 const debug = createDebug("adapter:gog");
 
@@ -45,8 +50,9 @@ export interface SendResult {
 }
 
 export interface ReauthSession {
+  sessionId: string;
   url: string;
-  done: Promise<{ ok: true } | { ok: false; error: string }>;
+  done: Promise<PasteBackResult>;
 }
 
 export interface GogAdapter {
@@ -135,87 +141,38 @@ function normalizeSearchHits(
 
 const AUTH_URL_RE = /https:\/\/accounts\.google\.com\/o\/oauth2\/auth\?[^\s]+/;
 
+// Matches Claude login's TTL (PRD decision 17).
+const REAUTH_TTL_MS = 5 * 60_000;
+// Eager spawn blocks the syncAll loop up to this long for the failing account;
+// the signal-only fallback covers a timeout (PRD risk: URL-timeout blocking).
+const REAUTH_URL_TIMEOUT_MS = 10_000;
+
+/**
+ * Spawns `gog auth add <account> --manual --no-input`, which prints the OAuth
+ * URL and then waits on stdin for the full pasted redirect URL. The localhost
+ * callback flow can't work server-side (Dokploy VPS), so we use `--manual`,
+ * which works identically locally and on the VPS.
+ */
 async function spawnReauthSession(account: string): Promise<ReauthSession> {
-  const proc = Bun.spawn({
-    cmd: [bin(), "auth", "add", account, "--no-input"],
-    stdout: "pipe",
-    stderr: "pipe",
-    stdin: "ignore",
-    env: { ...process.env },
+  return createPasteBackLoginSession({
+    key: account,
+    cmd: [bin(), "auth", "add", account, "--manual", "--no-input"],
+    urlRegex: AUTH_URL_RE,
+    ttlMs: REAUTH_TTL_MS,
+    urlTimeoutMs: REAUTH_URL_TIMEOUT_MS,
+    label: "gog auth add",
   });
+}
 
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  async function* lines(stream: ReadableStream<Uint8Array> | null) {
-    if (!stream) return;
-    const reader = stream.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      yield decoder.decode(value, { stream: true });
-    }
-  }
-
-  const url = await new Promise<string>((resolve, reject) => {
-    let settled = false;
-    const fail = (msg: string) => {
-      if (settled) return;
-      settled = true;
-      try {
-        proc.kill();
-      } catch {}
-      reject(new Error(msg));
-    };
-    const ok = (u: string) => {
-      if (settled) return;
-      settled = true;
-      resolve(u);
-    };
-
-    (async () => {
-      try {
-        for await (const chunk of lines(
-          proc.stdout as ReadableStream<Uint8Array> | null,
-        )) {
-          buffer += chunk;
-          const m = AUTH_URL_RE.exec(buffer);
-          if (m) return ok(m[0]);
-        }
-      } catch (err) {
-        fail(`stdout error: ${(err as Error).message}`);
-      }
-    })();
-
-    (async () => {
-      try {
-        for await (const chunk of lines(
-          proc.stderr as ReadableStream<Uint8Array> | null,
-        )) {
-          buffer += chunk;
-          const m = AUTH_URL_RE.exec(buffer);
-          if (m) return ok(m[0]);
-        }
-      } catch (err) {
-        fail(`stderr error: ${(err as Error).message}`);
-      }
-    })();
-
-    proc.exited.then((code) => {
-      if (!settled) fail(`gog auth add exited (${code}) before printing URL`);
-    });
-
-    setTimeout(() => fail("timed out waiting for auth URL"), 10_000);
-  });
-
-  const done = proc.exited.then((code) =>
-    code === 0
-      ? ({ ok: true } as const)
-      : ({ ok: false as const, error: `gog auth add exit ${code}` }),
-  );
-
-  debug("reauth url ready", { account });
-  return { url, done };
+/**
+ * Completes a reauth session by submitting the full redirect URL the user
+ * pasted from their browser. Delegates to the shared paste-back registry.
+ */
+export async function submitReauthCode(
+  sessionId: string,
+  code: string,
+): Promise<PasteBackResult> {
+  return submitPasteBackCode(sessionId, code);
 }
 
 export function createGogAdapter(): GogAdapter {

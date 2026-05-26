@@ -10,13 +10,14 @@ export * as replySchemas from "./schemas/reply";
 export * as apiSchemas from "./schemas/api";
 export * as filterSuggestSchemas from "./schemas/filterSuggest";
 export * as syncEventSchemas from "./schemas/syncEvents";
-export { createGogAdapter } from "./adapters/gog";
+export { createGogAdapter, submitReauthCode } from "./adapters/gog";
 export type {
   GogAdapter,
   SearchHit,
   SendResult,
   ReauthSession,
 } from "./adapters/gog";
+export type { PasteBackResult } from "./adapters/pasteBackSession";
 export { createClaudeAdapter } from "./adapters/claude";
 export type { ClaudeAdapter, ClaudeRunResult } from "./adapters/claude";
 export {

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import * as syncEventSchemas from "@miel/core/schemas/syncEvents";
 import { apiBase, apiSecret } from "../config";
 import { queryKeys } from "./queries";
+import { handleSyncReauth } from "../features/auth/handleSyncReauth";
 
 type SyncServerEventT = ReturnType<
   typeof syncEventSchemas.SyncServerEvent.parse
@@ -118,6 +119,9 @@ function dispatchEvent(
     }
     case "sync.error":
       toast.error(`Sync failed: ${event.message}`);
+      return;
+    case "sync.reauth_required":
+      handleSyncReauth(event, qc);
       return;
   }
 }

@@ -173,3 +173,8 @@ export interface StartClaudeLoginResult {
   sessionId: string;
   url: string;
 }
+
+export interface StartReauthResult {
+  sessionId: string;
+  url: string;
+}

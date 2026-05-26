@@ -1,5 +1,6 @@
 import type { ServerWebSocket } from "bun";
 import {
+  ReauthRequiredError,
   syncAll,
   syncEventSchemas,
   triageUntriagedForAccount,
@@ -80,10 +81,17 @@ async function runSync(
     }
   } catch (err) {
     if (ws.readyState === 1) {
-      send(ws, {
-        type: "sync.error",
-        message: err instanceof Error ? err.message : String(err),
-      });
+      // Safety net (PRD decision 16): a ReauthRequiredError should be handled
+      // per-account inside syncAll, but if one ever escapes, surface it as a
+      // signal-only reauth event rather than a generic sync.error.
+      if (err instanceof ReauthRequiredError) {
+        send(ws, { type: "sync.reauth_required", account: err.account });
+      } else {
+        send(ws, {
+          type: "sync.error",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   } finally {
     if (ws.readyState === 1) {

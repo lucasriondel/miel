@@ -1,5 +1,6 @@
-import { toast } from "sonner";
-import { ApiError, apiFetch } from "../../api/client";
+import type { QueryClient } from "@tanstack/react-query";
+import { ApiError } from "../../api/client";
+import { handleSyncReauth } from "./handleSyncReauth";
 
 interface ReauthErrorBody {
   error: "reauth_required";
@@ -21,52 +22,23 @@ function parseReauthError(err: unknown): ReauthErrorBody | null {
   };
 }
 
-async function startReauth(account: string): Promise<string> {
-  const res = await apiFetch<{ url: string }>({
-    path: "/auth/reauth",
-    method: "POST",
-    body: { account },
-  });
-  return res.url;
-}
-
 /**
+ * Detects a `409 reauth_required` body from a REST mutation (label/reply/etc.)
+ * and shows the click-to-start reauth toast. Since `/auth/reauth` is now a
+ * manual paste-back flow, the button renders a PasteBackToast from its
+ * {sessionId,url} response (delegated to handleSyncReauth's signal-only path).
+ *
  * Returns true if the error was a reauth_required error and a toast was shown.
  * Callers should bail out of their normal error UI in that case.
  */
-export function maybeShowReauthToast(err: unknown): boolean {
+export function maybeShowReauthToast(
+  err: unknown,
+  qc: QueryClient,
+): boolean {
   const reauth = parseReauthError(err);
   if (!reauth) return false;
-
-  toast.error(`Re-authenticate ${reauth.account}`, {
-    id: `reauth:${reauth.account}`,
-    description:
-      "Google rejected the stored credentials for this account. Click below to start the OAuth flow.",
-    duration: Infinity,
-    action: {
-      label: "Re-authenticate",
-      onClick: async () => {
-        const pending = toast.loading(`Starting OAuth for ${reauth.account}…`, {
-          id: `reauth-start:${reauth.account}`,
-        });
-        try {
-          const url = await startReauth(reauth.account);
-          toast.dismiss(pending);
-          toast.dismiss(`reauth:${reauth.account}`);
-          window.open(url, "_blank", "noopener,noreferrer");
-          toast.success(
-            `Opened Google sign-in for ${reauth.account}. Try syncing again once you've finished.`,
-          );
-        } catch (e) {
-          toast.dismiss(pending);
-          toast.error(
-            `Could not start re-auth: ${
-              e instanceof Error ? e.message : "unknown error"
-            }`,
-          );
-        }
-      },
-    },
-  });
+  // Signal-only: no eager session from a REST error, so this drives the
+  // click-to-start button path that POSTs /auth/reauth then pastes back.
+  handleSyncReauth({ account: reauth.account }, qc);
   return true;
 }
