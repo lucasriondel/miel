@@ -33,6 +33,20 @@ authRoutes.post("/reauth", async (c) => {
   return c.json({ sessionId: session.sessionId, url: session.url });
 });
 
+// Maps a paste-back failure reason to a message the toast can show verbatim
+// (the web client surfaces the `error` field directly).
+function reauthErrorMessage(reason: string): string {
+  if (reason === "session_not_found")
+    return "This sign-in expired or was superseded. Click re-authenticate to start a fresh one.";
+  if (reason === "state_mismatch")
+    return "This URL is from a different sign-in attempt. Open the link from THIS toast, then paste the URL it redirects to.";
+  if (reason === "no_code_in_url")
+    return "That doesn't look like the redirect URL — paste the full http://localhost… address you were redirected to (it must contain a code).";
+  if (reason.startsWith("oauth_error:"))
+    return `Google rejected the sign-in (${reason.slice("oauth_error:".length)}). Try re-authenticating.`;
+  return `Re-authentication failed: ${reason}`;
+}
+
 // Submit the full pasted redirect URL to the waiting reauth process.
 authRoutes.post("/reauth/code", async (c) => {
   const raw = await c.req.json().catch(() => ({}));
@@ -40,7 +54,7 @@ authRoutes.post("/reauth/code", async (c) => {
   const result = await submitReauthCode(sessionId, code);
   if (!result.ok) {
     return c.json(
-      { error: "reauth_failed", reason: result.error },
+      { error: reauthErrorMessage(result.error), reason: result.error },
       result.error === "session_not_found" ? 410 : 400,
     );
   }

@@ -161,6 +161,10 @@ async function spawnReauthSession(account: string): Promise<ReauthSession> {
     ttlMs: REAUTH_TTL_MS,
     urlTimeoutMs: REAUTH_URL_TIMEOUT_MS,
     label: "gog auth add",
+    // gog's --manual flow rejects a pasted redirect whose `state` differs from
+    // the one it printed (a stale tab / wrong login attempt). Catch that before
+    // the CLI does so the UI shows a clear reason instead of "exit 1".
+    verifyState: true,
   });
 }
 

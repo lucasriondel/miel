@@ -18,9 +18,39 @@ interface RegistryEntry {
   key: string;
   proc: PasteBackProc;
   url: string;
+  /**
+   * OAuth `state` from the URL this process printed, when the flow carries one
+   * (gog reauth). The pasted redirect must echo the same `state`, otherwise the
+   * code belongs to a different login attempt and the CLI would exit non-zero.
+   * Undefined for flows without a verifiable state (Claude login).
+   */
+  expectedState?: string;
   done: Promise<PasteBackResult>;
   createdAt: number;
   timer: ReturnType<typeof setTimeout>;
+}
+
+/** Pull the `state` query param out of an OAuth URL or pasted redirect. */
+export function extractState(s: string): string | undefined {
+  const m = /[?&]state=([^&\s]+)/.exec(s);
+  return m ? decodeURIComponent(m[1]) : undefined;
+}
+
+/**
+ * Validate a pasted redirect URL against the `state` the CLI printed, before
+ * feeding it to the process. Returns an error reason, or null if it's good to
+ * submit. Pure — exported for unit testing.
+ */
+export function validatePastedRedirect(
+  pasted: string,
+  expectedState: string,
+): string | null {
+  const trimmed = pasted.trim();
+  const oauthError = /[?&]error=([^&\s]+)/.exec(trimmed);
+  if (oauthError) return `oauth_error:${decodeURIComponent(oauthError[1])}`;
+  if (!/[?&]code=[^&\s]+/.test(trimmed)) return "no_code_in_url";
+  if (extractState(trimmed) !== expectedState) return "state_mismatch";
+  return null;
 }
 
 // Single API instance (Bun.serve) -> module-level state is safe and shared
@@ -56,6 +86,11 @@ export interface CreatePasteBackSessionOptions {
   urlTimeoutMs?: number;
   /** Defaults to `${cmd[0]} exited` in error messages. */
   label?: string;
+  /**
+   * When true, capture the `state` from the printed URL and require the pasted
+   * redirect to echo it (gog reauth). Leave false for code-only flows.
+   */
+  verifyState?: boolean;
 }
 
 const DEFAULT_URL_TIMEOUT_MS = 15_000;
@@ -141,6 +176,7 @@ export async function createPasteBackLoginSession(
   });
 
   const sessionId = crypto.randomUUID();
+  const expectedState = opts.verifyState ? extractState(url) : undefined;
   const done = proc.exited.then((code) =>
     code === 0
       ? ({ ok: true } as const)
@@ -161,12 +197,17 @@ export async function createPasteBackLoginSession(
     key: opts.key,
     proc,
     url,
+    expectedState,
     done,
     createdAt: Date.now(),
     timer,
   });
 
-  debug("paste-back url ready", { sessionId, key: opts.key });
+  debug("paste-back url ready", {
+    sessionId,
+    key: opts.key,
+    hasState: expectedState !== undefined,
+  });
   return { sessionId, url, done };
 }
 
@@ -182,6 +223,16 @@ export async function submitPasteBackCode(
   if (!entry) {
     // expired, already completed, or unknown id
     return { ok: false, error: "session_not_found" };
+  }
+  // For state-bearing flows (gog reauth) validate the pasted redirect *before*
+  // feeding it to the CLI, so a stale tab or a code from a different login
+  // attempt fails fast with a clear reason instead of an opaque CLI exit 1.
+  if (entry.expectedState !== undefined) {
+    const reason = validatePastedRedirect(code, entry.expectedState);
+    if (reason) {
+      debug("paste-back rejected", { sessionId, reason });
+      return { ok: false, error: reason };
+    }
   }
   const stdin = entry.proc.stdin;
   if (!stdin) {
