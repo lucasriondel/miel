@@ -118,7 +118,18 @@ function dispatchEvent(
       return;
     }
     case "sync.error":
-      toast.error(`Sync failed: ${event.message}`);
+      if (event.message.includes("OAuth client credentials missing")) {
+        toast.error("Google OAuth credentials not configured", {
+          description: "Add your client_secret JSON in Settings → Google OAuth.",
+          action: {
+            label: "Go to Settings",
+            onClick: () => window.location.assign("/settings"),
+          },
+          duration: 10000,
+        });
+      } else {
+        toast.error(`Sync failed: ${event.message}`);
+      }
       return;
     case "sync.reauth_required":
       handleSyncReauth(event, qc);

@@ -1,6 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import {
   ReauthRequiredError,
+  ShellError,
   syncAll,
   syncEventSchemas,
   triageUntriagedForAccount,
@@ -20,6 +21,13 @@ function send(ws: SyncWs, event: SyncServerEventT) {
   ws.send(JSON.stringify(event));
 }
 
+function syncErrorMessage(err: unknown): string {
+  if (err instanceof ShellError && err.stderr) {
+    return `${err.message} stderr=${err.stderr}`;
+  }
+  return syncErrorMessage(err);
+}
+
 export async function handleSyncMessage(ws: SyncWs, raw: string | Buffer) {
   const text = typeof raw === "string" ? raw : raw.toString("utf8");
 
@@ -34,7 +42,7 @@ export async function handleSyncMessage(ws: SyncWs, raw: string | Buffer) {
   } catch (err) {
     send(ws, {
       type: "sync.error",
-      message: `invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      message: `invalid JSON: ${syncErrorMessage(err)}`,
     });
     return;
   }
@@ -89,7 +97,7 @@ async function runSync(
       } else {
         send(ws, {
           type: "sync.error",
-          message: err instanceof Error ? err.message : String(err),
+          message: syncErrorMessage(err),
         });
       }
     }
@@ -121,7 +129,7 @@ async function runTriage(
     if (ws.readyState === 1) {
       send(ws, {
         type: "sync.error",
-        message: err instanceof Error ? err.message : String(err),
+        message: syncErrorMessage(err),
       });
     }
   } finally {
