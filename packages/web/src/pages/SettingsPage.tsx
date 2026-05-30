@@ -6,6 +6,7 @@ import { ApiError } from "../api/client";
 import { ModelPicker } from "../features/settings/ModelPicker";
 import { ClaudeAuthManager } from "../features/settings/ClaudeAuthManager";
 import { AccountsManager } from "../features/settings/AccountsManager";
+import { GogCredentialsManager } from "../features/settings/GogCredentialsManager";
 import { LabelsManager } from "../features/settings/LabelsManager";
 import { SettingsSyncTrigger } from "../features/settings/SettingsSyncTrigger";
 
@@ -73,6 +74,13 @@ export const SettingsPage = () => {
           Claude login
         </h2>
         <ClaudeAuthManager />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-miel-muted">
+          Google OAuth
+        </h2>
+        <GogCredentialsManager />
       </section>
 
       <section className="flex flex-col gap-3">

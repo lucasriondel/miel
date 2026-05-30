@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createGogAdapter,
   getClaudeAuthStatus,
+  setGogCredentials,
   startClaudeLoginSession,
   submitClaudeLoginCode,
   submitReauthCode,
@@ -12,12 +13,23 @@ const ReauthBody = z.object({
   account: z.string().email(),
 });
 
+const GogCredentialsBody = z.object({
+  credentialsJson: z.string().min(1),
+});
+
 const PasteBackCodeBody = z.object({
   sessionId: z.string().min(1),
   code: z.string().min(1),
 });
 
 export const authRoutes = new Hono();
+
+authRoutes.post("/gog-credentials", async (c) => {
+  const raw = await c.req.json().catch(() => ({}));
+  const { credentialsJson } = GogCredentialsBody.parse(raw);
+  await setGogCredentials(credentialsJson);
+  return c.json({ ok: true });
+});
 
 authRoutes.post("/reauth", async (c) => {
   const raw = await c.req.json().catch(() => ({}));

@@ -1,3 +1,4 @@
+import { writeFile, unlink } from "node:fs/promises";
 import { getEnv } from "../env";
 import {
   GogAuthList,
@@ -177,6 +178,16 @@ export async function submitReauthCode(
   code: string,
 ): Promise<PasteBackResult> {
   return submitPasteBackCode(sessionId, code);
+}
+
+export async function setGogCredentials(credentialsJson: string): Promise<void> {
+  const tmpPath = "/tmp/miel-gog-credentials.json";
+  try {
+    await writeFile(tmpPath, credentialsJson, "utf8");
+    await spawnVoid({ cmd: [bin(), "auth", "credentials", tmpPath] });
+  } finally {
+    try { await unlink(tmpPath); } catch {}
+  }
 }
 
 export function createGogAdapter(): GogAdapter {

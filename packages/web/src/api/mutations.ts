@@ -558,3 +558,14 @@ export function useSubmitClaudeLoginCode() {
     },
   });
 }
+
+export function useUploadGogCredentials() {
+  return useMutation({
+    mutationFn: (credentialsJson: string) =>
+      apiFetch<{ ok: true }>({
+        path: "/auth/gog-credentials",
+        method: "POST",
+        body: { credentialsJson },
+      }),
+  });
+}
