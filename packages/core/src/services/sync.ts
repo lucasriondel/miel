@@ -10,11 +10,16 @@ import {
   triages,
 } from "../db/schema";
 import { createGogAdapter, type GogAdapter } from "../adapters/gog";
-import { ReauthRequiredError, ShellError } from "../adapters/shell";
+import {
+  ClaudeNotLoggedInError,
+  ReauthRequiredError,
+  ShellError,
+} from "../adapters/shell";
 import {
   createClaudeAdapter,
   type ClaudeAdapter,
 } from "../adapters/claude";
+import { startClaudeLoginForEvent } from "../adapters/claudeAuth";
 import {
   GogMessageDecoded,
   type GogMessageT,
@@ -412,6 +417,10 @@ async function runTriageBatches(
         errors: localErrors,
       };
     } catch (err) {
+      // Claude not being logged in is global, not a per-batch failure: let it
+      // escape so syncAll can drive a single login flow (like ReauthRequiredError
+      // for gog). Marking the batch "failed" would bury it as a generic error.
+      if (err instanceof ClaudeNotLoggedInError) throw err;
       const m = (err as Error).message;
       localErrors.push(`triage batch ${i + 1}: ${m}`);
       log(`[${accountEmail}] ERROR triage batch ${i + 1}: ${m}`);
@@ -446,6 +455,10 @@ async function runTriageBatches(
       suggestedNewLabels += r.value.newLabelSuggestions;
       errors.push(...r.value.errors);
     } else {
+      // Propagate a not-logged-in rejection up to syncAll, which spawns the login
+      // flow once for the whole run. Don't emit triage.finished in this case —
+      // the web's claude-login handler dismisses the in-flight triage toast.
+      if (r.reason instanceof ClaudeNotLoggedInError) throw r.reason;
       const m = (r.reason as Error)?.message ?? String(r.reason);
       errors.push(`triage batch ${i + 1}: ${m}`);
       log(`[${accountEmail}] ERROR triage batch ${i + 1} rejected: ${m}`);
@@ -712,6 +725,9 @@ export async function fetchAndTriage(
       );
       return { suggestedFilters: proposals.created, errors: [] };
     } catch (err) {
+      // Like the triage path: a not-logged-in error is global, not a filter
+      // failure — let it escape so syncAll can drive the login flow.
+      if (err instanceof ClaudeNotLoggedInError) throw err;
       const m = (err as Error).message;
       log(`[${account.email}] WARN filterSuggest failed: ${m}`);
       return { suggestedFilters: 0, errors: [`filterSuggest: ${m}`] };
@@ -719,10 +735,32 @@ export async function fetchAndTriage(
   };
 
   const filterPromise = runFilterSuggest();
-  const [triageResult, filterResult] = await Promise.all([
+  // allSettled (not Promise.all) so a triage rejection never leaves the filter
+  // promise detached as an unhandled rejection — both can reject with
+  // ClaudeNotLoggedInError. We re-throw the not-logged-in signal so syncAll can
+  // drive the login flow; any other triage rejection re-throws too (the outer
+  // catch marks the sync window failed, preserving prior behavior).
+  const [triageSettled, filterSettled] = await Promise.allSettled([
     batchPromise,
     filterPromise,
   ]);
+
+  if (triageSettled.status === "rejected") throw triageSettled.reason;
+  if (
+    filterSettled.status === "rejected" &&
+    filterSettled.reason instanceof ClaudeNotLoggedInError
+  ) {
+    throw filterSettled.reason;
+  }
+
+  const triageResult = triageSettled.value;
+  const filterResult =
+    filterSettled.status === "fulfilled"
+      ? filterSettled.value
+      : {
+          suggestedFilters: 0,
+          errors: [`filterSuggest: ${(filterSettled.reason as Error).message}`],
+        };
 
   const triagedCount = triageResult.triaged;
   const suggestedNewLabelsCount = triageResult.suggestedNewLabels;
@@ -840,6 +878,27 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
         }),
       );
     } catch (err) {
+      if (err instanceof ClaudeNotLoggedInError) {
+        // Claude login is global: every remaining account would fail the same
+        // way, so prompt once and stop. The triage toast for this account is
+        // dismissed by the web's claude-login handler.
+        log(`[${target.email}] Claude CLI is not logged in`);
+        if (emit) {
+          // Eager spawn the login session ({} on failure → signal-only event).
+          const session = await startClaudeLoginForEvent();
+          emit({ type: "sync.claude_login_required", ...session });
+        }
+        results.push({
+          account: target.email,
+          fetched: 0,
+          triaged: 0,
+          suggestedNewLabels: 0,
+          filtersSynced: 0,
+          suggestedFilters: 0,
+          errors: [`claude_not_logged_in: ${err.message}`],
+        });
+        break;
+      }
       if (!(err instanceof ReauthRequiredError)) throw err;
       // One stale account shouldn't block the rest. Use error.account as the
       // source of truth (PRD decision 13) and dev-warn on mismatch.

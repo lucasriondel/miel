@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "../../components/Button";
 import { Spinner } from "../../components/Spinner";
 import {
@@ -6,6 +7,7 @@ import {
   useSendReply,
 } from "../../api/mutations";
 import { ApiError } from "../../api/client";
+import { maybeShowClaudeLoginToast } from "../auth/claudeLoginErrorToast";
 import type { MessageDetail } from "../../api/types";
 import { ReplyDraftView } from "./ReplyDraftView";
 
@@ -29,7 +31,11 @@ export const ReplyComposer = ({ message }: Props) => {
   const [prompt, setPrompt] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [sentMessageId, setSentMessageId] = useState<string | null>(null);
+  // True while a Claude-login toast is handling a not-logged-in generate error,
+  // so we hide the inline "Generation failed" message in favour of the toast.
+  const [awaitingClaudeLogin, setAwaitingClaudeLogin] = useState(false);
 
+  const qc = useQueryClient();
   const generate = useGenerateReply();
   const send = useSendReply();
 
@@ -38,17 +44,31 @@ export const ReplyComposer = ({ message }: Props) => {
     gmailMessageId: message.gmailMessageId,
   };
 
-  const onGenerate = () => {
-    if (!prompt.trim()) return;
-    setSentMessageId(null);
+  const runGenerate = (instruction: string) => {
     generate.mutate(
-      { ...input, prompt },
+      { ...input, prompt: instruction },
       {
         onSuccess: (data) => {
+          setAwaitingClaudeLogin(false);
           setDraft({ subject: data.subject, body: data.body, model: data.model });
+        },
+        onError: (err) => {
+          // If Claude isn't logged in, drive the login flow and retry the same
+          // generation on success instead of showing a generic error.
+          const handled = maybeShowClaudeLoginToast(err, qc, () =>
+            runGenerate(instruction),
+          );
+          setAwaitingClaudeLogin(handled);
         },
       },
     );
+  };
+
+  const onGenerate = () => {
+    if (!prompt.trim()) return;
+    setSentMessageId(null);
+    setAwaitingClaudeLogin(false);
+    runGenerate(prompt);
   };
 
   const onSend = () => {
@@ -104,7 +124,7 @@ export const ReplyComposer = ({ message }: Props) => {
           </span>
         ) : null}
       </div>
-      {generate.error ? (
+      {generate.error && !awaitingClaudeLogin ? (
         <p className="text-xs text-miel-high">
           Generation failed: {describeError(generate.error)}
         </p>

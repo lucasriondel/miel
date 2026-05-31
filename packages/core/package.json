@@ -12,6 +12,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "test": "bash ./scripts/test-with-db.sh",
     "lint": "echo 'no lint configured'"
   },
   "dependencies": {

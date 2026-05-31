@@ -5,6 +5,7 @@ import * as syncEventSchemas from "@miel/core/schemas/syncEvents";
 import { apiBase, apiSecret } from "../config";
 import { queryKeys } from "./queries";
 import { handleSyncReauth } from "../features/auth/handleSyncReauth";
+import { handleClaudeLoginRequired } from "../features/auth/handleClaudeLoginRequired";
 
 type SyncServerEventT = ReturnType<
   typeof syncEventSchemas.SyncServerEvent.parse
@@ -44,6 +45,7 @@ function dispatchEvent(
   event: SyncServerEventT,
   qc: QueryClient,
   batchCounts: Map<string, BatchCounters>,
+  retriage: (accounts: string[]) => void,
 ) {
   switch (event.type) {
     case "sync.started":
@@ -134,6 +136,21 @@ function dispatchEvent(
     case "sync.reauth_required":
       handleSyncReauth(event, qc);
       return;
+    case "sync.claude_login_required": {
+      // Accounts that began triaging this run are the ones whose work was cut
+      // short; dismiss their hung loading toasts (triage + filters, since
+      // filters.finished never fires when sync bails for login) and retriage
+      // them after login. Dismissing a never-shown toast id is a no-op.
+      const accounts = Array.from(batchCounts.keys());
+      handleClaudeLoginRequired(event, qc, {
+        dismissToastIds: [
+          ...accounts.map(triageToastId),
+          ...accounts.map(filtersToastId),
+        ],
+        onLoggedIn: () => retriage(accounts),
+      });
+      return;
+    }
   }
 }
 
@@ -148,6 +165,9 @@ export function useSyncStream(): UseSyncStream {
   const [isRunning, setIsRunning] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const batchCountsRef = useRef<Map<string, BatchCounters>>(new Map());
+  // Triage runs queued after a Claude login: each opens once the previous closes,
+  // since the transport is one account per socket.
+  const triageQueueRef = useRef<string[]>([]);
 
   useEffect(() => {
     return () => {
@@ -157,6 +177,24 @@ export function useSyncStream(): UseSyncStream {
       }
     };
   }, []);
+
+  const openSocketRef = useRef<(startPayload: object) => void>(() => {});
+
+  const drainTriageQueue = useCallback(() => {
+    const next = triageQueueRef.current.shift();
+    if (next) openSocketRef.current({ type: "triage.start", account: next });
+  }, []);
+
+  // Queue triage runs for the given accounts and start the first (used to
+  // auto-retriage after a Claude login interrupted a sync).
+  const retriage = useCallback(
+    (accounts: string[]) => {
+      if (accounts.length === 0) return;
+      triageQueueRef.current.push(...accounts);
+      if (!wsRef.current) drainTriageQueue();
+    },
+    [drainTriageQueue],
+  );
 
   const openSocket = useCallback(
     (startPayload: object) => {
@@ -181,8 +219,13 @@ export function useSyncStream(): UseSyncStream {
           return;
         }
         const result = syncEventSchemas.SyncServerEvent.safeParse(parsed);
-        if (!result.success) return;
-        dispatchEvent(result.data, qc, batchCountsRef.current);
+        if (!result.success) {
+          // A malformed/unrecognized event is dropped; warn so an unparseable
+          // login/reauth prompt doesn't fail completely silently.
+          console.warn("[sync] dropping unparseable event", result.error.issues);
+          return;
+        }
+        dispatchEvent(result.data, qc, batchCountsRef.current, retriage);
       };
       ws.onerror = () => {
         toast.error("Sync connection error");
@@ -190,10 +233,16 @@ export function useSyncStream(): UseSyncStream {
       ws.onclose = () => {
         setIsRunning(false);
         if (wsRef.current === ws) wsRef.current = null;
+        // Start the next queued retriage, if any.
+        drainTriageQueue();
       };
     },
-    [qc],
+    [qc, retriage, drainTriageQueue],
   );
+
+  // Keep the ref pointed at the latest openSocket so drainTriageQueue (declared
+  // earlier, for the onclose handler) can call it without a circular dep.
+  openSocketRef.current = openSocket;
 
   const start = useCallback(
     (input: SyncStreamInput) => {

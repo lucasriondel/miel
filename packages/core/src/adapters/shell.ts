@@ -31,6 +31,17 @@ export class ReauthRequiredError extends Error {
   }
 }
 
+// Thrown when the Claude CLI reports it isn't logged in (the `claude -p` envelope
+// comes back with is_error + "Not logged in · Please run /login"). The login is
+// global (not per-account), so this carries no account — the web drives a single
+// `claude auth login` paste-back flow, mirroring ReauthRequiredError for gog.
+export class ClaudeNotLoggedInError extends Error {
+  constructor(public readonly cause: ShellError) {
+    super("Claude CLI is not logged in");
+    this.name = "ClaudeNotLoggedInError";
+  }
+}
+
 export function isInvalidGrantStderr(stderr: string): boolean {
   return /invalid_grant/i.test(stderr);
 }

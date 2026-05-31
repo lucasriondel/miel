@@ -1,7 +1,11 @@
 import type { ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
-import { ReauthRequiredError, ShellError } from "@miel/core";
+import {
+  ClaudeNotLoggedInError,
+  ReauthRequiredError,
+  ShellError,
+} from "@miel/core";
 
 export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof HTTPException) {
@@ -18,6 +22,15 @@ export const errorHandler: ErrorHandler = (err, c) => {
       {
         error: "reauth_required",
         account: err.account,
+        message: err.message,
+      },
+      409,
+    );
+  }
+  if (err instanceof ClaudeNotLoggedInError) {
+    return c.json(
+      {
+        error: "claude_not_logged_in",
         message: err.message,
       },
       409,

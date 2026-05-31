@@ -105,6 +105,19 @@ export const SyncReauthRequiredEvent = z.object({
 });
 export type SyncReauthRequiredEventT = z.infer<typeof SyncReauthRequiredEvent>;
 
+// Emitted when the Claude CLI reports it isn't logged in during triage. The
+// login is global (not per-account), so this carries no account and is emitted
+// at most once per run. With `sessionId`+`url` the web shows a paste-back toast
+// directly; signal-only falls back to a click-to-start button.
+export const SyncClaudeLoginRequiredEvent = z.object({
+  type: z.literal("sync.claude_login_required"),
+  sessionId: z.string().optional(),
+  url: z.string().url().optional(),
+});
+export type SyncClaudeLoginRequiredEventT = z.infer<
+  typeof SyncClaudeLoginRequiredEvent
+>;
+
 export const SyncServerEvent = z.discriminatedUnion("type", [
   SyncStartedEvent,
   MailsFetchedEvent,
@@ -116,6 +129,7 @@ export const SyncServerEvent = z.discriminatedUnion("type", [
   SyncFinishedEvent,
   SyncErrorEvent,
   SyncReauthRequiredEvent,
+  SyncClaudeLoginRequiredEvent,
 ]);
 export type SyncServerEventT = z.infer<typeof SyncServerEvent>;
 

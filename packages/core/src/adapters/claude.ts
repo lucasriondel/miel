@@ -17,7 +17,8 @@ import {
 } from "../schemas/filterSuggest";
 import { getModelSettings } from "../services/settings";
 import { createDebug } from "../util/debug";
-import { spawnCapture, ShellError } from "./shell";
+import { spawnCapture, ShellError, ClaudeNotLoggedInError } from "./shell";
+import { isClaudeNotLoggedInResult } from "./claudeAuth";
 
 const debug = createDebug("adapter:claude");
 
@@ -138,7 +139,18 @@ async function invokeClaude<T>(args: {
     ms: Date.now() - startedAt,
     stdoutBytes: stdout.length,
   });
+  // "Not logged in" surfaces as exitCode 1 with a JSON envelope on stdout
+  // (is_error:true, result:"Not logged in · Please run /login"). Detect it before
+  // any other ShellError so it can drive the web login flow, not a generic error.
+  const throwIfNotLoggedIn = (): void => {
+    if (isClaudeNotLoggedInResult(stdout) || isClaudeNotLoggedInResult(stderr)) {
+      throw new ClaudeNotLoggedInError(
+        new ShellError("claude is not logged in", exitCode, stderr, stdout, cmd),
+      );
+    }
+  };
   if (exitCode !== 0) {
+    throwIfNotLoggedIn();
     throw new ShellError(
       `claude exited with ${exitCode}`,
       exitCode,
@@ -170,6 +182,7 @@ async function invokeClaude<T>(args: {
     );
   }
   if (envelope.is_error) {
+    throwIfNotLoggedIn();
     throw new ShellError(
       `claude reported error: ${envelope.result ?? "(no result string)"}`,
       exitCode,

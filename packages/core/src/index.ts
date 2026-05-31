@@ -24,6 +24,8 @@ export {
   getClaudeAuthStatus,
   startClaudeLoginSession,
   submitClaudeLoginCode,
+  isClaudeNotLoggedInResult,
+  startClaudeLoginForEvent,
 } from "./adapters/claudeAuth";
 export type { ClaudeLoginSession } from "./adapters/claudeAuth";
 export * as claudeAuthSchemas from "./schemas/claudeAuth";
@@ -119,6 +121,7 @@ export {
   spawnVoid,
   ShellError,
   ReauthRequiredError,
+  ClaudeNotLoggedInError,
   isInvalidGrantStderr,
 } from "./adapters/shell";
 export {

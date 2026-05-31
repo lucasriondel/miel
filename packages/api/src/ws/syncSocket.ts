@@ -1,7 +1,9 @@
 import type { ServerWebSocket } from "bun";
 import {
+  ClaudeNotLoggedInError,
   ReauthRequiredError,
   ShellError,
+  startClaudeLoginForEvent,
   syncAll,
   syncEventSchemas,
   triageUntriagedForAccount,
@@ -94,6 +96,11 @@ async function runSync(
       // signal-only reauth event rather than a generic sync.error.
       if (err instanceof ReauthRequiredError) {
         send(ws, { type: "sync.reauth_required", account: err.account });
+      } else if (err instanceof ClaudeNotLoggedInError) {
+        // Same: syncAll handles this internally, but if it escapes, drive the
+        // login flow rather than a generic sync.error.
+        const session = await startClaudeLoginForEvent();
+        send(ws, { type: "sync.claude_login_required", ...session });
       } else {
         send(ws, {
           type: "sync.error",
@@ -127,10 +134,17 @@ async function runTriage(
     }
   } catch (err) {
     if (ws.readyState === 1) {
-      send(ws, {
-        type: "sync.error",
-        message: syncErrorMessage(err),
-      });
+      // triageUntriagedForAccount lets a not-logged-in error escape (unlike
+      // syncAll). Drive the login flow instead of a generic sync.error.
+      if (err instanceof ClaudeNotLoggedInError) {
+        const session = await startClaudeLoginForEvent();
+        send(ws, { type: "sync.claude_login_required", ...session });
+      } else {
+        send(ws, {
+          type: "sync.error",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   } finally {
     if (ws.readyState === 1) {
