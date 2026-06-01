@@ -78,6 +78,9 @@ function makeGog(account: string): GogAdapter {
     async startReauth() {
       throw new Error("unexpected startReauth");
     },
+    async addAccount() {
+      throw new Error("unexpected addAccount");
+    },
     async searchMessages() {
       return [{ messageId: message.id, threadId: message.threadId }];
     },

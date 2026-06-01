@@ -484,6 +484,13 @@ export interface FetchAndTriageOptions {
   claude?: ClaudeAdapter;
   log?: (msg: string) => void;
   onEvent?: (event: SyncServerEventT) => void;
+  /**
+   * When false, fetch + sync labels/filters + upsert messages only; skip all
+   * Claude calls (triage batches and filter suggestions). The Sync button uses
+   * this; triage is then triggered manually via `triageUntriagedForAccount`.
+   * Defaults to true.
+   */
+  triage?: boolean;
 }
 
 export async function fetchAndTriage(
@@ -680,6 +687,46 @@ export async function fetchAndTriage(
     .filter((l) => l.type === "user")
     .map((l) => l.name);
 
+  // Fetch-only mode (Sync button): messages + labels + filters are now in the
+  // DB; stop before any Claude call. Finalize the account/window exactly like
+  // the normal completion path so the next sync dedupes correctly. Triage is
+  // run later, on demand, via `triageUntriagedForAccount`.
+  if (opts.triage === false) {
+    await db
+      .update(accounts)
+      .set({ lastSyncedAt: new Date() })
+      .where(eq(accounts.id, account.id));
+    await db
+      .update(syncWindows)
+      .set({
+        status: "completed",
+        messagesFetched,
+        messagesNew,
+        error: errors.length > 0 ? errors.join("\n") : null,
+        finishedAt: new Date(),
+      })
+      .where(eq(syncWindows.id, syncWindowId));
+    debug("fetchAndTriage done (fetch-only)", {
+      account: account.email,
+      fetched: normalized.length,
+      filtersSynced: filtersSyncedCount,
+    });
+    return {
+      account: account.email,
+      fetched: normalized.length,
+      triaged: 0,
+      suggestedNewLabels: 0,
+      filtersSynced: filtersSyncedCount,
+      suggestedFilters: 0,
+      errors,
+    };
+  }
+
+  // NOTE: the triage batches AND filter suggestions below only run when
+  // triage:true. No current caller sets that (the Sync button passes
+  // triage:false; the Triage button uses triageUntriagedForAccount, which never
+  // ran filter suggestions). Kept intact for the wire contract / future
+  // re-enable rather than deleted.
   const batches = chunk(normalized, TRIAGE_BATCH_SIZE);
   log(
     `[${account.email}] running ${batches.length} triage batch(es) over ${normalized.length} messages (in parallel with filter suggest)`,
@@ -837,6 +884,8 @@ export interface SyncAllOptions {
   claude?: ClaudeAdapter;
   log?: (msg: string) => void;
   onEvent?: (event: SyncServerEventT) => void;
+  /** Forwarded to fetchAndTriage; false = fetch-only (no Claude). Default true. */
+  triage?: boolean;
 }
 
 export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[]> {
@@ -875,6 +924,7 @@ export async function syncAll(opts: SyncAllOptions = {}): Promise<SyncRunResult[
           claude: opts.claude,
           log: opts.log,
           onEvent: opts.onEvent,
+          triage: opts.triage,
         }),
       );
     } catch (err) {

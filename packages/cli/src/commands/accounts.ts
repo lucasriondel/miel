@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { getDb, schema, syncAccountsFromGog } from "@miel/core";
+import { getDb, schema, setAccountAlias, syncAccountsFromGog } from "@miel/core";
 
 export function accountsCommand(): Command {
   const cmd = new Command("accounts").description("Manage Gmail accounts");
@@ -38,6 +38,14 @@ export function accountsCommand(): Command {
         console.log(`${a.email}\t${tag}`);
       }
       console.log(`Done. ${synced.length} account(s).`);
+    });
+
+  cmd
+    .command("alias <alias> <email>")
+    .description("Set a short alias for an authorized account (gog auth alias set)")
+    .action(async (alias: string, email: string) => {
+      await setAccountAlias({ alias, email });
+      console.log(`Aliased ${email} as ${alias}`);
     });
 
   return cmd;

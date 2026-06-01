@@ -13,6 +13,10 @@ const ReauthBody = z.object({
   account: z.string().email(),
 });
 
+const AddAccountBody = z.object({
+  account: z.string().email(),
+});
+
 const GogCredentialsBody = z.object({
   credentialsJson: z.string().min(1),
 });
@@ -41,6 +45,22 @@ authRoutes.post("/reauth", async (c) => {
   const session = await gog.startReauth({ account });
   session.done.catch(() => {
     /* surfaced via the /code result or a subsequent sync */
+  });
+  return c.json({ sessionId: session.sessionId, url: session.url });
+});
+
+// Authorize a brand-new Gmail account: spawns `gog auth add <email> --services
+// gmail --manual ...` and returns the OAuth URL + sessionId, exactly like
+// /reauth. The user pastes the redirect URL back via the shared POST
+// /auth/reauth/code (same registry + submitReauthCode). On success the web
+// imports the now-authorized account into the DB via POST /accounts/sync.
+authRoutes.post("/add-account", async (c) => {
+  const raw = await c.req.json().catch(() => ({}));
+  const { account } = AddAccountBody.parse(raw);
+  const gog = createGogAdapter();
+  const session = await gog.addAccount({ account, services: ["gmail"] });
+  session.done.catch(() => {
+    /* surfaced via the /code result or a subsequent accounts sync */
   });
   return c.json({ sessionId: session.sessionId, url: session.url });
 });

@@ -48,6 +48,9 @@ function makeGog(opts: {
         done: Promise.resolve({ ok: true } as const),
       };
     },
+    async addAccount() {
+      throw new Error("unexpected addAccount");
+    },
     async searchMessages({ account }) {
       if (account === STALE) throw makeReauthError(STALE);
       return [];

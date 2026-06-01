@@ -59,6 +59,7 @@ export interface ReauthSession {
 export interface GogAdapter {
   listAccounts(): Promise<GogAccountT[]>;
   startReauth(o: { account: string }): Promise<ReauthSession>;
+  addAccount(o: { account: string; services?: string[] }): Promise<ReauthSession>;
   searchMessages(o: {
     account: string;
     query: string;
@@ -149,15 +150,32 @@ const REAUTH_TTL_MS = 5 * 60_000;
 const REAUTH_URL_TIMEOUT_MS = 10_000;
 
 /**
- * Spawns `gog auth add <account> --manual --no-input`, which prints the OAuth
- * URL and then waits on stdin for the full pasted redirect URL. The localhost
- * callback flow can't work server-side (Dokploy VPS), so we use `--manual`,
- * which works identically locally and on the VPS.
+ * Spawns `gog auth add <account> [--services <svcs>] --manual --no-input`, which
+ * prints the OAuth URL and then waits on stdin for the full pasted redirect URL.
+ * The localhost callback flow can't work server-side (Dokploy VPS), so we use
+ * `--manual`, which works identically locally and on the VPS.
+ *
+ * Reauth re-grants an existing account and omits `--services` (keeps whatever
+ * scopes it had); adding a brand-new account passes `--services` to request the
+ * initial grant. Both share this one helper so the argv stays in lockstep.
  */
-async function spawnReauthSession(account: string): Promise<ReauthSession> {
+async function spawnGogAuthSession(
+  account: string,
+  services?: string[],
+): Promise<ReauthSession> {
   return createPasteBackLoginSession({
     key: account,
-    cmd: [bin(), "auth", "add", account, "--manual", "--no-input"],
+    cmd: [
+      bin(),
+      "auth",
+      "add",
+      account,
+      ...(services && services.length > 0
+        ? ["--services", services.join(",")]
+        : []),
+      "--manual",
+      "--no-input",
+    ],
     urlRegex: AUTH_URL_RE,
     ttlMs: REAUTH_TTL_MS,
     urlTimeoutMs: REAUTH_URL_TIMEOUT_MS,
@@ -190,6 +208,19 @@ export async function setGogCredentials(credentialsJson: string): Promise<void> 
   }
 }
 
+/**
+ * Sets a short alias for an authorized account: `gog auth alias set <alias>
+ * <email>`. Quickstart step 5 — lets `--account <alias>` stand in for the email.
+ */
+export async function setAccountAlias(o: {
+  alias: string;
+  email: string;
+}): Promise<void> {
+  await spawnVoid({
+    cmd: [bin(), "auth", "alias", "set", o.alias, o.email],
+  });
+}
+
 export function createGogAdapter(): GogAdapter {
   return {
     async listAccounts() {
@@ -202,7 +233,12 @@ export function createGogAdapter(): GogAdapter {
 
     async startReauth({ account }) {
       debug("startReauth", { account });
-      return spawnReauthSession(account);
+      return spawnGogAuthSession(account);
+    },
+
+    async addAccount({ account, services }) {
+      debug("addAccount", { account, services });
+      return spawnGogAuthSession(account, services ?? ["gmail"]);
     },
 
     async searchMessages({ account, query, max = 50 }) {

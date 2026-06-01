@@ -80,6 +80,9 @@ async function runSync(
       since: input.since,
       range: input.range,
       max: input.max,
+      // The Sync button fetches only: pull new mail + sync labels/filters into
+      // the DB, no Claude. Triage is a separate manual action (runTriage below).
+      triage: false,
       onEvent: (event) => {
         if (ws.readyState === 1) {
           send(ws, event);

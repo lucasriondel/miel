@@ -5,6 +5,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { useAccounts } from "../../api/queries";
 import { useSyncAccounts } from "../../api/mutations";
 import { ApiError } from "../../api/client";
+import { AddAccountForm } from "./AddAccountForm";
 
 function describeError(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -40,6 +41,10 @@ export const AccountsManager = () => {
           Failed to import accounts: {describeError(syncAccounts.error)}
         </p>
       ) : null}
+
+      <div className="mt-4">
+        <AddAccountForm />
+      </div>
 
       <div className="mt-4">
         {accounts.isLoading ? (

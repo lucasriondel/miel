@@ -10,7 +10,12 @@ export * as replySchemas from "./schemas/reply";
 export * as apiSchemas from "./schemas/api";
 export * as filterSuggestSchemas from "./schemas/filterSuggest";
 export * as syncEventSchemas from "./schemas/syncEvents";
-export { createGogAdapter, submitReauthCode, setGogCredentials } from "./adapters/gog";
+export {
+  createGogAdapter,
+  submitReauthCode,
+  setGogCredentials,
+  setAccountAlias,
+} from "./adapters/gog";
 export type {
   GogAdapter,
   SearchHit,

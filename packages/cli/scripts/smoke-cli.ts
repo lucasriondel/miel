@@ -69,6 +69,10 @@ const fakeGog: GogAdapter = {
     console.log(`  [gog.sendReply]`, { to: o.to, subject: o.subject });
     return { messageId: "smoke-sent-1" };
   },
+  async addAccount(o) {
+    console.log(`  [gog.addAccount]`, o);
+    return { sessionId: "smoke-add", url: "https://accounts.google.com/o/oauth2/auth?state=x", done: Promise.resolve({ ok: true } as const) };
+  },
 };
 
 const fakeClaude: ClaudeAdapter = {
