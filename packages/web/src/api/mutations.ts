@@ -37,17 +37,36 @@ function matches(m: ListedMessage, input: MessageActionInput): boolean {
   );
 }
 
+// Archiving/trashing acts on the whole thread (gog archives/trashes the
+// thread, and the backend now marks every message in it). Mirror that here so
+// sibling messages of the same thread disappear immediately instead of
+// re-appearing when the refetch lands.
 function removeFromMessageLists(
   qc: ReturnType<typeof useQueryClient>,
   input: MessageActionInput,
 ) {
+  const threadIds = new Set<string>();
+  qc.getQueriesData<ListMessagesResponse>({ queryKey: ["messages"] }).forEach(
+    ([, data]) => {
+      data?.items.forEach((m) => {
+        if (matches(m, input)) threadIds.add(m.gmailThreadId);
+      });
+    },
+  );
+
   qc.setQueriesData<ListMessagesResponse>(
     { queryKey: ["messages"] },
     (data) => {
       if (!data) return data;
       return {
         ...data,
-        items: data.items.filter((m) => !matches(m, input)),
+        items: data.items.filter(
+          (m) =>
+            !(
+              m.accountId === input.accountId &&
+              threadIds.has(m.gmailThreadId)
+            ),
+        ),
       };
     },
   );
@@ -71,15 +90,12 @@ export function useArchiveMessage() {
         method: "POST",
       }),
     onMutate: async (input) => {
-      await qc.cancelQueries({ queryKey: ["messages"] });
-      const snapshot = snapshotMessageLists(qc);
       removeFromMessageLists(qc, input);
-      return { snapshot };
     },
-    onError: (_err, _input, context) => {
-      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
-    },
-    onSettled: (_data, _err, input) => {
+    // Don't refetch on success: the optimistic removal is authoritative, and a
+    // refetch racing a second in-flight delete/archive would briefly re-add
+    // rows. Only re-sync from the server when the call actually failed.
+    onError: (_err, input) => {
       qc.invalidateQueries({ queryKey: ["messages"] });
       qc.invalidateQueries({
         queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
@@ -97,15 +113,10 @@ export function useTrashMessage() {
         method: "DELETE",
       }),
     onMutate: async (input) => {
-      await qc.cancelQueries({ queryKey: ["messages"] });
-      const snapshot = snapshotMessageLists(qc);
       removeFromMessageLists(qc, input);
-      return { snapshot };
     },
-    onError: (_err, _input, context) => {
-      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
-    },
-    onSettled: (_data, _err, input) => {
+    // See useArchiveMessage: only refetch on error, never on success.
+    onError: (_err, input) => {
       qc.invalidateQueries({ queryKey: ["messages"] });
       qc.invalidateQueries({
         queryKey: queryKeys.message(input.accountId, input.gmailMessageId),
@@ -311,8 +322,6 @@ export function useBatchMessageAction() {
         },
       }),
     onMutate: async (input) => {
-      await qc.cancelQueries({ queryKey: ["messages"] });
-      const snapshot = snapshotMessageLists(qc);
       const ids = new Set(input.gmailMessageIds);
       qc.setQueriesData<ListMessagesResponse>(
         { queryKey: ["messages"] },
@@ -341,12 +350,10 @@ export function useBatchMessageAction() {
           };
         },
       );
-      return { snapshot };
     },
-    onError: (_err, _input, context) => {
-      if (context?.snapshot) restoreMessageLists(qc, context.snapshot);
-    },
-    onSettled: (_data, _err, input) => {
+    // Only re-sync from the server on failure; a success refetch would race
+    // other in-flight mutations and momentarily re-add removed rows.
+    onError: (_err, input) => {
       qc.invalidateQueries({ queryKey: ["messages"] });
       for (const id of input.gmailMessageIds) {
         qc.invalidateQueries({

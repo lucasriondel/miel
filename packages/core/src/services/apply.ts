@@ -361,13 +361,16 @@ export async function archiveMessage(args: {
     account: ctx.accountEmail,
     threadId: row[0].gmailThreadId,
   });
+  // gog archives the whole thread, so mark every message in the thread
+  // archived — otherwise sibling messages linger in the list and look like
+  // the just-archived message reappeared.
   await db
     .update(messages)
     .set({ isArchived: true })
     .where(
       and(
         eq(messages.accountId, ctx.accountId),
-        eq(messages.gmailMessageId, ctx.gmailMessageId),
+        eq(messages.gmailThreadId, row[0].gmailThreadId),
       ),
     );
   debug("archiveMessage done", {
@@ -409,13 +412,16 @@ export async function trashMessage(args: {
     account: ctx.accountEmail,
     threadId: row[0].gmailThreadId,
   });
+  // gog trashes the whole thread, so mark every message in the thread trashed
+  // — otherwise sibling messages linger in the list and look like the
+  // just-deleted message reappeared.
   await db
     .update(messages)
     .set({ isTrashed: true })
     .where(
       and(
         eq(messages.accountId, ctx.accountId),
-        eq(messages.gmailMessageId, ctx.gmailMessageId),
+        eq(messages.gmailThreadId, row[0].gmailThreadId),
       ),
     );
   debug("trashMessage done", {
