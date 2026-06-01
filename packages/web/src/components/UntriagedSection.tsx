@@ -1,6 +1,7 @@
 import { Sparkles } from "lucide-react";
 import type { ListedMessage } from "../api/types";
 import { useSyncStream } from "../api/syncSocket";
+import { MessageRow } from "./MessageRow";
 import { Spinner } from "./Spinner";
 
 interface Props {
@@ -34,14 +35,9 @@ export const UntriagedSection = ({ messages, accountEmail }: Props) => {
           />
         </div>
       </header>
-      <div className="flex flex-col gap-2">
+      <div className="overflow-hidden rounded-md border border-miel-line bg-miel-panel">
         {messages.map((m) => (
-          <div
-            key={`${m.accountId}:${m.gmailMessageId}`}
-            className="rounded-md border border-dashed border-miel-line bg-miel-panel px-3 py-2 text-sm text-miel-muted"
-          >
-            {m.fromName ?? m.fromEmail} — {m.subject ?? "(no subject)"}
-          </div>
+          <MessageRow key={`${m.accountId}:${m.gmailMessageId}`} message={m} />
         ))}
       </div>
     </section>
