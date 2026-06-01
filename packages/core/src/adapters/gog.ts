@@ -3,7 +3,7 @@ import { getEnv } from "../env";
 import {
   GogAuthList,
   GogCreateLabelResponse,
-  GogFilter,
+  GogFilterCreateResponse,
   GogFilterListResponse,
   GogLabelListResponse,
   GogMessage,
@@ -463,9 +463,10 @@ export function createGogAdapter(): GogAdapter {
         if (query) cmd.push(`--query=${query}`);
         if (addLabel) cmd.push(`--add-label=${addLabel}`);
         const raw = await spawnJson({ cmd });
-        const parsed = GogFilter.parse(raw);
-        debug("createFilter done", { account, id: parsed.id });
-        return parsed;
+        const parsed = GogFilterCreateResponse.parse(raw);
+        const filter = "filter" in parsed ? parsed.filter : parsed;
+        debug("createFilter done", { account, id: filter.id });
+        return filter;
       });
     },
   };

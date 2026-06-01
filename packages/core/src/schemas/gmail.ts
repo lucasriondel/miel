@@ -151,6 +151,12 @@ export const GogFilter = z.object({
 });
 export type GogFilterT = z.infer<typeof GogFilter>;
 
+// `gog gmail filters create` wraps the new filter under a `filter` key.
+export const GogFilterCreateResponse = z.union([
+  z.object({ filter: GogFilter }),
+  GogFilter,
+]);
+
 export const GogFilterListResponse = z.union([
   z.object({ filters: z.array(GogFilter).optional() }),
   z.array(GogFilter),
