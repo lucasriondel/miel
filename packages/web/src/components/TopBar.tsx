@@ -6,7 +6,7 @@ interface Props {
 }
 
 export const TopBar = ({ left, right }: Props) => (
-  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-miel-line bg-miel-panel px-6 py-3">
+  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-miel-line bg-miel-panel px-3 py-3 sm:px-6">
     {left}
     <div className="flex items-center gap-2">{right}</div>
   </div>

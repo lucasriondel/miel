@@ -4,6 +4,7 @@ import { ApiError } from "../api/client";
 import { Spinner } from "../components/Spinner";
 import { EmptyState } from "../components/EmptyState";
 import { TopBar } from "../components/TopBar";
+import { SidebarToggleButton } from "../components/SidebarToggleButton";
 import { AccountFiltersSection } from "../features/filters/AccountFiltersSection";
 import { SyncRangeControls } from "../features/sync/SyncRangeControls";
 import type { LayoutContext } from "../App";
@@ -15,22 +16,27 @@ function describeError(err: unknown): string {
 }
 
 export const FiltersPage = () => {
-  const { selectedAccountId, selectedAccountEmail } =
+  const { selectedAccountId, selectedAccountEmail, sidebarCollapsed, onToggleSidebar } =
     useOutletContext<LayoutContext>();
   const accounts = useAccounts();
   const filters = useFilters(selectedAccountId);
   const labels = useLabels(selectedAccountId);
 
+  const backLink = (
+    <div className="flex items-center gap-2">
+      {sidebarCollapsed && <SidebarToggleButton onToggle={onToggleSidebar} />}
+      <Link
+        to="/"
+        className="inline-flex items-center gap-1 text-sm text-miel-muted hover:text-miel-ink"
+      >
+        ← Back to inbox
+      </Link>
+    </div>
+  );
+
   const topBar = (
     <TopBar
-      left={
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1 text-sm text-miel-muted hover:text-miel-ink"
-        >
-          ← Back to inbox
-        </Link>
-      }
+      left={backLink}
       right={<SyncRangeControls accountEmail={selectedAccountEmail} />}
     />
   );
@@ -39,7 +45,7 @@ export const FiltersPage = () => {
     return (
       <>
         {topBar}
-        <div className="flex items-center gap-2 px-6 pt-4 text-sm text-miel-muted">
+        <div className="flex items-center gap-2 px-3 pt-4 text-sm text-miel-muted sm:px-6">
           <Spinner /> Loading filters…
         </div>
       </>
@@ -49,7 +55,7 @@ export const FiltersPage = () => {
     return (
       <>
         {topBar}
-        <div className="px-6 pt-4">
+        <div className="px-3 pt-4 sm:px-6">
           <EmptyState
             title="Failed to load filters"
             description={describeError(accounts.error ?? filters.error)}
@@ -70,7 +76,7 @@ export const FiltersPage = () => {
   return (
     <>
       {topBar}
-      <div className="flex flex-1 flex-col gap-6 px-6 pb-6 pt-4">
+      <div className="flex flex-1 flex-col gap-6 px-3 pb-6 pt-4 sm:px-6">
         <div className="flex flex-col gap-1">
           <h1 className="text-lg font-semibold">Filters</h1>
           <p className="text-sm text-miel-muted">

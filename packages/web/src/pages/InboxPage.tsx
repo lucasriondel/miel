@@ -5,6 +5,7 @@ import { UntriagedSection } from "../components/UntriagedSection";
 import { EmptyState } from "../components/EmptyState";
 import { Spinner } from "../components/Spinner";
 import { TopBar } from "../components/TopBar";
+import { SidebarToggleButton } from "../components/SidebarToggleButton";
 import { InboxNav } from "../features/sync/InboxNav";
 import { SyncRangeControls } from "../features/sync/SyncRangeControls";
 import { InboxFilterSuggestions } from "../features/filters/InboxFilterSuggestions";
@@ -28,6 +29,8 @@ export const InboxPage = () => {
     goToday,
     viewMode,
     setViewMode,
+    sidebarCollapsed,
+    onToggleSidebar,
   } = ctx;
 
   const { data, isLoading, error } = useMessages({
@@ -42,20 +45,23 @@ export const InboxPage = () => {
     <>
       <TopBar
         left={
-          <InboxNav
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            week={week}
-            isCurrentWeek={isCurrentWeek}
-            canGoNext={canGoNext}
-            onPrev={goPrev}
-            onNext={goNext}
-            onToday={goToday}
-          />
+          <div className="flex items-center gap-2">
+            {sidebarCollapsed && <SidebarToggleButton onToggle={onToggleSidebar} />}
+            <InboxNav
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              week={week}
+              isCurrentWeek={isCurrentWeek}
+              canGoNext={canGoNext}
+              onPrev={goPrev}
+              onNext={goNext}
+              onToday={goToday}
+            />
+          </div>
         }
         right={<SyncRangeControls accountEmail={selectedAccountEmail} />}
       />
-      <div className="flex flex-1 flex-col gap-4 px-6 pb-6 pt-4">
+      <div className="flex flex-1 flex-col gap-4 px-3 pb-6 pt-4 sm:px-6">
         {selectedAccountId ? (
           <InboxFilterSuggestions accountId={selectedAccountId} />
         ) : null}

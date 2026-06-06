@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { AccountPicker } from "./AccountPicker";
 import { LabelList } from "./LabelList";
@@ -9,60 +8,20 @@ interface Props {
   onSelectAccount: (id: string) => void;
   selectedLabelId: string | undefined;
   onSelectLabel: (id: string | undefined) => void;
-}
-
-const STORAGE_KEY = "miel.sidebar.collapsed";
-
-const useCollapsed = () => {
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem(STORAGE_KEY) === "1",
-  );
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
-  }, [collapsed]);
-  return [collapsed, setCollapsed] as const;
-};
-
-const CollapseToggle = ({
-  collapsed,
-  onToggle,
-}: {
   collapsed: boolean;
   onToggle: () => void;
-}) => (
-  <button
-    type="button"
-    onClick={onToggle}
-    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-    aria-expanded={!collapsed}
-    title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-    className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-miel-muted hover:bg-miel-line/40 hover:text-miel-ink"
-  >
-    <span aria-hidden className="text-sm leading-none">
-      {collapsed ? "»" : "«"}
-    </span>
-  </button>
-);
+}
 
 export const Sidebar = ({
   selectedAccountId,
   onSelectAccount,
   selectedLabelId,
   onSelectLabel,
+  collapsed,
+  onToggle,
 }: Props) => {
-  const [collapsed, setCollapsed] = useCollapsed();
-
   if (collapsed) {
-    return (
-      <aside className="flex h-full w-14 shrink-0 flex-col items-center gap-4 border-r border-miel-line bg-miel-panel p-2">
-        <NavLink to="/" className="mt-1" title="miel">
-          <img src="/miel.webp" alt="miel" className="h-6 w-6 shrink-0" />
-        </NavLink>
-        <CollapseToggle collapsed onToggle={() => setCollapsed(false)} />
-        <div className="flex-1" />
-        <ThemeToggle />
-      </aside>
-    );
+    return <aside className="w-0 shrink-0 overflow-hidden" aria-hidden />;
   }
 
   return (
@@ -77,7 +36,16 @@ export const Sidebar = ({
         </NavLink>
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <CollapseToggle collapsed={false} onToggle={() => setCollapsed(true)} />
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label="Collapse sidebar"
+            aria-expanded
+            title="Collapse sidebar"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-miel-muted hover:bg-miel-line/40 hover:text-miel-ink"
+          >
+            <span aria-hidden className="text-sm leading-none">«</span>
+          </button>
         </div>
       </div>
 

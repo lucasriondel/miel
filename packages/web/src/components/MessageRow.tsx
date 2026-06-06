@@ -19,13 +19,18 @@ export const MessageRow = ({ message }: Props) => {
   const href = `/messages/${message.accountId}/${message.gmailMessageId}`;
 
   return (
-    <div className="group relative flex items-center gap-3 border-b border-miel-line bg-miel-panel px-3 py-1.5 text-sm transition-colors last:border-b-0 hover:bg-miel-bg">
-      <Link
-        to={href}
-        className={`w-44 shrink-0 truncate text-miel-ink hover:underline ${isUnread ? "font-semibold" : "font-normal"}`}
-      >
-        {sender}
-      </Link>
+    <div className="group relative flex flex-col border-b border-miel-line bg-miel-panel px-3 py-1.5 text-sm transition-colors last:border-b-0 hover:bg-miel-bg sm:flex-row sm:items-center sm:gap-3">
+      {/* Mobile: row 1 (sender + date). Desktop: sender joins parent flex via sm:contents */}
+      <div className="flex items-baseline justify-between gap-2 sm:contents">
+        <Link
+          to={href}
+          className={`truncate text-miel-ink hover:underline sm:w-44 sm:shrink-0 ${isUnread ? "font-semibold" : "font-normal"}`}
+        >
+          {sender}
+        </Link>
+        <span className="shrink-0 text-xs text-miel-muted sm:hidden">{relative}</span>
+      </div>
+      {/* Mobile: row 2 (labels + subject). Desktop: flex-1 content area */}
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <MessageLabels
           accountId={message.accountId}
@@ -45,7 +50,7 @@ export const MessageRow = ({ message }: Props) => {
           ) : null}
         </Link>
       </div>
-      <span className="shrink-0 text-xs text-miel-muted">{relative}</span>
+      <span className="hidden shrink-0 text-xs text-miel-muted sm:inline">{relative}</span>
       <MessageRowActions
         accountId={message.accountId}
         gmailMessageId={message.gmailMessageId}

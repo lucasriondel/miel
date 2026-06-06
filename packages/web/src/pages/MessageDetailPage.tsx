@@ -2,6 +2,7 @@ import { Link, useOutletContext, useParams } from "react-router-dom";
 import { EmptyState } from "../components/EmptyState";
 import { Spinner } from "../components/Spinner";
 import { TopBar } from "../components/TopBar";
+import { SidebarToggleButton } from "../components/SidebarToggleButton";
 import { useMessage } from "../api/queries";
 import { MessageDetailHeader } from "../features/message-detail/MessageDetailHeader";
 import { MessageDetailBody } from "../features/message-detail/MessageDetailBody";
@@ -14,7 +15,8 @@ import type { LayoutContext } from "../App";
 export const MessageDetailPage = () => {
   const { accountId, gmailMessageId } = useParams();
   const messageQuery = useMessage(accountId, gmailMessageId);
-  const { selectedAccountEmail } = useOutletContext<LayoutContext>();
+  const { selectedAccountEmail, sidebarCollapsed, onToggleSidebar } =
+    useOutletContext<LayoutContext>();
 
   const message = messageQuery.data;
   const isUnread = message?.labels.some((l) => l.name === "UNREAD") ?? false;
@@ -23,12 +25,15 @@ export const MessageDetailPage = () => {
     <>
       <TopBar
         left={
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1 text-sm text-miel-muted hover:text-miel-ink"
-          >
-            ← Back to inbox
-          </Link>
+          <div className="flex items-center gap-2">
+            {sidebarCollapsed && <SidebarToggleButton onToggle={onToggleSidebar} />}
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1 text-sm text-miel-muted hover:text-miel-ink"
+            >
+              ← Back to inbox
+            </Link>
+          </div>
         }
         right={
           <>
@@ -48,7 +53,7 @@ export const MessageDetailPage = () => {
           </>
         }
       />
-      <div className="flex-1 px-6 pb-6 pt-4">
+      <div className="flex-1 px-3 pb-6 pt-4 sm:px-6">
         {messageQuery.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-miel-muted">
             <Spinner /> Loading message…

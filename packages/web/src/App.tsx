@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { useWeek, type Week, type ViewMode } from "./features/sync/useWeek";
@@ -19,6 +19,8 @@ export interface LayoutContext {
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   selectedAccountEmail: string | undefined;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
 }
 
 export const App = () => {
@@ -27,6 +29,16 @@ export const App = () => {
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>();
   const { week, isCurrentWeek, canGoNext, goPrev, goNext, goToday, viewMode, setViewMode } =
     useWeek();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("miel.sidebar.collapsed") === "1",
+  );
+  const onToggleSidebar = useCallback(() => {
+    setSidebarCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem("miel.sidebar.collapsed", next ? "1" : "0");
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!selectedAccountId && accounts.data && accounts.data.length > 0) {
@@ -53,6 +65,8 @@ export const App = () => {
       viewMode,
       setViewMode,
       selectedAccountEmail: selectedAccount?.email,
+      sidebarCollapsed,
+      onToggleSidebar,
     }),
     [
       selectedAccountId,
@@ -66,6 +80,8 @@ export const App = () => {
       viewMode,
       setViewMode,
       selectedAccount?.email,
+      sidebarCollapsed,
+      onToggleSidebar,
     ],
   );
 
@@ -79,6 +95,8 @@ export const App = () => {
         }}
         selectedLabelId={selectedLabelId}
         onSelectLabel={(id) => setSelectedLabelId(id)}
+        collapsed={sidebarCollapsed}
+        onToggle={onToggleSidebar}
       />
       <main className="flex flex-1 flex-col overflow-hidden">
         <div className="flex flex-1 flex-col overflow-y-auto">
