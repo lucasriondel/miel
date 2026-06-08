@@ -6,17 +6,20 @@ export type PriorityT = z.infer<typeof Priority>;
 export const TriageInputItem = z.object({
   id: z.string(),
   from: z.string(),
-  to: z.array(z.string()),
   subject: z.string().nullable(),
   snippet: z.string().nullable(),
-  body: z.string(),
-  internalDate: z.string(),
   currentLabels: z.array(z.string()),
+  // Optional: the slim triage prompt omits these. The model fetches the body
+  // on demand via the API. Kept optional so a fuller payload still validates.
+  to: z.array(z.string()).optional(),
+  body: z.string().optional(),
+  internalDate: z.string().optional(),
 });
 export type TriageInputItemT = z.infer<typeof TriageInputItem>;
 
 export const TriageInput = z.object({
   account: z.string().email(),
+  accountId: z.string(),
   existingLabels: z.array(z.string()),
   messages: z.array(TriageInputItem).min(1).max(20),
 });

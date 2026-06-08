@@ -35,6 +35,7 @@ function mockSpawn(result: SpawnResult): void {
 
 const TRIAGE_INPUT: TriageInputT = {
   account: "user@example.com",
+  accountId: "acct-1",
   existingLabels: ["Work"],
   messages: [
     {

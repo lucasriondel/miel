@@ -54,7 +54,6 @@ import {
 const debug = createDebug("service:sync");
 
 const TRIAGE_BATCH_SIZE = 15;
-const BODY_TRUNCATION = 4000;
 const DEFAULT_SEARCH_MAX = 200;
 
 export interface SyncRunResult {
@@ -83,9 +82,6 @@ interface NormalizedMessage {
   labelIds: string[];
 }
 
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n) : s;
-}
 
 function normalizeMessage(
   accountId: string,
@@ -226,14 +222,13 @@ function buildTriageItems(
   rows: NormalizedMessage[],
   labelsByGmailId: Map<string, LabelRow>,
 ): TriageInputItemT[] {
+  // Slim payload: sender + subject + snippet + current labels only. The model
+  // fetches the full body on demand (see buildTriagePrompt) when it can't decide.
   return rows.map((r) => ({
     id: r.gmailMessageId,
     from: r.fromEmail,
-    to: r.toEmails,
     subject: r.subject,
     snippet: r.snippet,
-    body: truncate(r.bodyText, BODY_TRUNCATION),
-    internalDate: r.internalDate.toISOString(),
     currentLabels: r.labelIds
       .map((id) => labelsByGmailId.get(id)?.name)
       .filter((n): n is string => Boolean(n)),
@@ -349,6 +344,7 @@ async function runTriageBatches(
     const items = buildTriageItems(batch, labelsByGmailId);
     const input = TriageInput.parse({
       account: accountEmail,
+      accountId,
       existingLabels: existingLabelNames,
       messages: items,
     });

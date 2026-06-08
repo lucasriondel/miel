@@ -51,6 +51,7 @@ interface ClaudeEnvelope {
 }
 
 function buildTriagePrompt(input: TriageInputT): string {
+  const { API_SECRET, API_PORT } = getEnv();
   return [
     "You are an email triage assistant. Classify each message and return strict JSON matching the provided schema.",
     "",
@@ -63,6 +64,18 @@ function buildTriagePrompt(input: TriageInputT): string {
     "- applyExistingLabels: zero or more names drawn EXACTLY from the existing labels list above (case-sensitive).",
     "- suggestNewLabels: propose new labels only when no existing label fits and the theme is recurring. Keep names short (<=40 chars). Reasoning is one sentence.",
     "- reasoning: one or two sentences explaining the priority choice.",
+    "",
+    "Each message gives you only sender (from), subject, snippet, and current labels.",
+    "This is enough for almost every message. ONLY when you genuinely cannot decide",
+    "priority/labels from these (ambiguous sender, empty subject, newsletter-vs-real,",
+    "etc.) may you fetch the full message body via the local API:",
+    "",
+    `  curl -s -H "Authorization: Bearer ${API_SECRET}" \\`,
+    `    http://localhost:${API_PORT}/api/messages/${input.accountId}/<id>`,
+    "",
+    "Use the message's id field as <id>. The response is JSON with bodyText/bodyHtml.",
+    "Do NOT fetch bodies you do not need — each fetch is slow and costly. If a fetch",
+    "fails, classify from sender + subject anyway; a body is never required for a result.",
     "",
     "Messages JSON:",
     JSON.stringify(input.messages),
@@ -116,6 +129,9 @@ async function invokeClaude<T>(args: {
   schema: object;
   parser: (raw: unknown) => T;
   kind: string;
+  // Tools to allow in this headless run. In `-p` mode an un-allowlisted tool
+  // call is denied (not prompted), so this must be set for the model to curl.
+  allowedTools?: string[];
 }): Promise<ClaudeRunResult<T>> {
   const { CLAUDE_BIN } = getEnv();
   const cmd = [
@@ -124,6 +140,9 @@ async function invokeClaude<T>(args: {
     "--output-format=json",
     `--model=${args.model}`,
     `--json-schema=${JSON.stringify(args.schema)}`,
+    ...(args.allowedTools && args.allowedTools.length > 0
+      ? ["--allowedTools", args.allowedTools.join(",")]
+      : []),
     args.prompt,
   ];
   debug("invoke", {
@@ -252,6 +271,9 @@ export function createClaudeAdapter(): ClaudeAdapter {
         schema: jsonSchema,
         parser: (raw) => TriageOutput.parse(raw),
         kind: "triage",
+        // Allow Bash so the model can curl the body API when it can't decide
+        // from sender + subject alone (see buildTriagePrompt escape hatch).
+        allowedTools: ["Bash"],
       });
       debug("runTriage done", {
         account: input.account,
