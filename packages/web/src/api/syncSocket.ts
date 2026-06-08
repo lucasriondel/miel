@@ -37,6 +37,17 @@ function triageToastId(account: string): string {
   return `sync:triage:${account}`;
 }
 
+// Human-friendly elapsed time for the triage-finished toast.
+// <1s → "0.4s", <60s → "12s", else "1m 05s".
+function formatElapsed(ms: number): string {
+  if (ms < 1000) return `${(ms / 1000).toFixed(1)}s`;
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
 function filtersToastId(account: string): string {
   return `sync:filters:${account}`;
 }
@@ -95,11 +106,12 @@ function dispatchEvent(
       return;
     case "triage.finished": {
       toast.dismiss(triageToastId(event.account));
+      const elapsed = formatElapsed(event.elapsedMs);
       toast.success(`Claude finished triaging ${event.account}`, {
         description:
           event.suggestedNewLabels > 0
-            ? `${event.triaged} triaged, ${event.suggestedNewLabels} new label suggestion${event.suggestedNewLabels === 1 ? "" : "s"}`
-            : `${event.triaged} triaged`,
+            ? `${event.triaged} triaged in ${elapsed}, ${event.suggestedNewLabels} new label suggestion${event.suggestedNewLabels === 1 ? "" : "s"}`
+            : `${event.triaged} triaged in ${elapsed}`,
       });
       qc.invalidateQueries({ queryKey: ["messages"] });
       qc.invalidateQueries({ queryKey: queryKeys.accounts });

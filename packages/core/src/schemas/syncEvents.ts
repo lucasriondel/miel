@@ -72,6 +72,7 @@ export const TriageFinishedEvent = z.object({
   account: z.string(),
   triaged: z.number().int().nonnegative(),
   suggestedNewLabels: z.number().int().nonnegative(),
+  elapsedMs: z.number().int().nonnegative(),
 });
 export type TriageFinishedEventT = z.infer<typeof TriageFinishedEvent>;
 

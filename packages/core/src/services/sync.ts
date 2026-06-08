@@ -325,6 +325,7 @@ async function runTriageBatches(
     emit,
   } = args;
 
+  const triageStartMs = Date.now();
   emit({
     type: "triage.started",
     account: accountEmail,
@@ -466,6 +467,7 @@ async function runTriageBatches(
     account: accountEmail,
     triaged,
     suggestedNewLabels,
+    elapsedMs: Date.now() - triageStartMs,
   });
 
   return { triaged, suggestedNewLabels, errors };
@@ -1081,6 +1083,7 @@ export async function triageUntriagedForAccount(
       account: account.email,
       triaged: 0,
       suggestedNewLabels: 0,
+      elapsedMs: 0,
     });
     return {
       account: account.email,
