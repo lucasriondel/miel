@@ -1,0 +1,25 @@
+# The problem field comes first deliberately (#102): a request stated as a
+# solution hides the need behind it, which is the part worth discussing.
+name: Feature request
+description: Suggest something miel should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that miel makes hard or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+      description: Your idea of a fix, if you have one. Skip it if you do not.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today
+      description: The workaround, or the other tool you reach for.

@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: miel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-miel}
+      POSTGRES_DB: miel
+    volumes:
+      - miel-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U miel -d miel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://miel:${POSTGRES_PASSWORD:-miel}@postgres:5432/miel
+      API_SECRET: ${API_SECRET:-change-me-to-a-random-string}
+      API_PORT: 3001
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      CLAUDE_BIN: ${CLAUDE_BIN:-claude}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3001/auth/google/callback}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+      # No AI or worp credentials here on purpose: every one of them (the three
+      # vendor keys, worp's key and headers, and the Claude Code token) is a
+      # runtime secret pasted in Settings and stored encrypted in Postgres. The
+      # container reads none of them from its environment, so a value set here
+      # would be ignored rather than used.
+    ports:
+      - "${API_PORT:-3001}:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+      # Baked into the Vite bundle at image-build time — changing these at
+      # runtime has no effect, so they're build args, not `environment:`.
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+        VITE_API_SECRET: ${VITE_API_SECRET:-change-me-to-a-random-string}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Docker Compose service DNS name for the API container, resolved by
+      # nginx at request time (see packages/web/nginx.conf.template).
+      API_UPSTREAM: api:3001
+    ports:
+      - "${WEB_PORT:-3000}:80"
+
+volumes:
+  miel-pgdata:

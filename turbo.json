@@ -1,0 +1,39 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [".oxlintrc.json", ".oxfmtrc.json", "tsconfig.base.json"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "format": {
+      "cache": false
+    },
+    "format:check": {
+      "cache": false
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "@miel/landing-page#build": {
+      "dependsOn": [],
+      "outputs": ["dist/**"]
+    },
+    "@miel/landing-page#test": {
+      "dependsOn": []
+    },
+    "@miel/landing-page#typecheck": {
+      "dependsOn": []
+    }
+  }
+}

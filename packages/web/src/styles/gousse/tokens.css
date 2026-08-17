@@ -1,0 +1,45 @@
+/* Design-system token contract owned by gousse-ui.
+   Values ported verbatim from packages/web/src/index.css :root / .dark blocks.
+   Plain (unlayered) rules: this sheet is imported standalone (via main.tsx,
+   before index.css / @tailwind base), so it can't sit in Tailwind's `base`
+   layer. Custom properties don't conflict with utility declarations, so being
+   unlayered is correct — the vars are simply defined ahead of every consumer. */
+:root {
+  --gousse-bg: 249 247 244; /* rgb(249, 247, 244) */
+  --gousse-panel: 255 255 255; /* rgb(255, 255, 255) */
+  --gousse-ink: 17 16 14; /* rgb(17, 16, 14) */
+  --gousse-muted: 120 120 116; /* rgb(120, 120, 116) */
+  --gousse-line: 226 222 215; /* rgb(226, 222, 215) */
+  --gousse-accent: 220 120 40; /* rgb(220, 120, 40) */
+  --gousse-high: 220 71 50; /* rgb(220, 71, 50) */
+  --gousse-medium: 245 158 11; /* rgb(245, 158, 11) */
+  --gousse-low: 74 168 97; /* rgb(74, 168, 97) */
+  --gousse-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --gousse-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --gousse-shadow-lg: 0 6px 16px rgba(0, 0, 0, 0.1);
+  --gousse-shadow-xl: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.dark {
+  --gousse-bg: 13 13 12; /* rgb(13, 13, 12) */
+  --gousse-panel: 23 23 22; /* rgb(23, 23, 22) */
+  --gousse-ink: 245 245 242; /* rgb(245, 245, 242) */
+  --gousse-muted: 156 156 150; /* rgb(156, 156, 150) */
+  --gousse-line: 68 66 60; /* rgb(68, 66, 60) */
+  --gousse-accent: 251 146 60; /* rgb(251, 146, 60) */
+  --gousse-high: 255 107 80; /* rgb(255, 107, 80) */
+  --gousse-medium: 250 192 38; /* rgb(250, 192, 38) */
+  --gousse-low: 134 194 122; /* rgb(134, 194, 122) */
+  --gousse-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --gousse-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --gousse-shadow-lg: 0 6px 16px rgba(0, 0, 0, 0.5);
+  --gousse-shadow-xl: 0 10px 24px rgba(0, 0, 0, 0.6);
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}

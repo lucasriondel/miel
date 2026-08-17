@@ -1,0 +1,331 @@
+/* Tailwind v4 CSS-first entry. Order matters: tokens.css defines the `--gousse-*`
+   channel vars (:root/.dark), theme.css maps them onto Tailwind theme variables
+   (bg-gousse-*, shadow-gousse-*, animate-*), effects.css carries the rainbow-glow
+   / sheen keyframes, sidebar-chrome.css the hue-driven sidebar row surfaces that
+   ship with the `sidebar` registry item. `@import "tailwindcss"` first pulls in
+   the v4 engine. The gousse sheets are vendored registry source (see DESIGN.md
+   §10) — they are ours to edit, like the components beside them. */
+@import "tailwindcss";
+@import "./styles/gousse/tokens.css";
+@import "./styles/gousse/theme.css";
+@import "./styles/gousse/effects.css";
+@import "./styles/gousse/sidebar-chrome.css";
+
+/* Web accent override — tokens.css ships a default; we tint miel honey-yellow,
+   the same pair the landing page uses (`--accent` in
+   packages/landing-page/src/styles.ts): a deep amber on light so text and
+   focus rings keep contrast, a brighter one on dark. Layered after the imports
+   so it wins. */
+:root {
+  --gousse-accent: 148 100 10; /* #94640a — web override, honey (light) */
+}
+
+.dark {
+  --gousse-accent: 237 182 75; /* #edb64b — web override, honey (dark) */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Kill mobile rubber-band/overscroll bounce past scroll limits. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+body {
+  @apply bg-gousse-bg text-gousse-ink font-sans antialiased;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   TOP BAR — animations that Tailwind can't express cleanly
+   (rotating conic gradient, scroll-fade shell). Surfaces use
+   the --gousse-* tokens so they track the active theme.
+   ============================================================ */
+
+/* The Triage-button rainbow halo and the sync-button hover sheen now live in
+   gousse-ui (`RainbowGlow` / `Sheen` + `gousse-ui/effects.css`). */
+
+/* Pulsing accent glow while a sync is running. */
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 6px 16px rgb(var(--gousse-accent) / 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 24px rgb(var(--gousse-accent) / 0.6);
+  }
+}
+.sync-running {
+  animation: pulseGlow 1.6s ease-in-out infinite;
+}
+
+/* ============================================================
+   FILTERS PAGE — the "Proposed by AI" group is edged with a
+   static rainbow hairline (the calm cousin of the Triage pill's
+   rotating halo: same spectrum, no motion, no blur bleeding onto
+   the page), and active-filter rows are borderless ledger cards
+   that lift on hover. Kept here because the gradient border and
+   scroll states are awkward to express in Tailwind.
+   ============================================================ */
+
+/* Gradient edge for the proposals card. A 1px padding box whose
+   background is the rainbow, with the panel painted on the inner
+   element — the border-image equivalent that still lets us keep a
+   radius. Alphas are held low so the edge reads as a hairline in
+   the DESIGN.md §2 sense, not as a highlight. */
+.filter-proposals-card {
+  padding: 1px;
+  border-radius: 20px;
+  background: linear-gradient(
+    120deg,
+    rgb(255 107 107 / 0.5),
+    rgb(255 212 59 / 0.45),
+    rgb(105 219 124 / 0.45),
+    rgb(77 171 247 / 0.5),
+    rgb(151 117 250 / 0.5)
+  );
+  box-shadow: var(--gousse-shadow-md);
+}
+
+/* Borderless ledger card for an active filter. Depth via shadow, lifts
+   on hover — no hard border (DESIGN.md §2). */
+.filter-card {
+  background: rgb(var(--gousse-panel));
+  border-radius: 16px;
+  box-shadow: var(--gousse-shadow-sm);
+  transition: box-shadow 0.18s cubic-bezier(0.2, 0, 0, 1);
+}
+.filter-card:hover {
+  box-shadow: var(--gousse-shadow-md);
+}
+
+/* ============================================================
+   TOASTS — sonner is rendered `unstyled` (see MielToaster) so the
+   surface is ours: a floating panel card with a hairline and the
+   highest shadow ramp, like PopoverPanel. Colour is carried by a
+   single per-type `--hue` that feeds the leading glyph only — the
+   card itself stays neutral, so a stack of toasts reads as one
+   material.
+   ============================================================ */
+/* Container: sonner hard-codes its own font stack and a 356px width.
+   Inherit the app font instead, and let the card breathe a little wider
+   so a title long enough to name an account stays at two lines. */
+[data-sonner-toaster] {
+  font-family: inherit;
+  --width: 380px;
+}
+
+/* The card is a two-column grid, not a row: the glyph owns column one,
+   the text block column two, and any action button spans both on a
+   second row. Grid makes that break explicit — with flex the buttons sat
+   beside the text and squeezed it against the close button's gutter,
+   and flex-wrap would leave the break up to how long the label is. */
+[data-sonner-toast].miel-toast {
+  --hue: var(--gousse-accent);
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+[data-sonner-toast].miel-toast[data-type="success"] {
+  --hue: var(--gousse-low);
+}
+[data-sonner-toast].miel-toast[data-type="error"] {
+  --hue: var(--gousse-high);
+}
+[data-sonner-toast].miel-toast[data-type="warning"] {
+  --hue: var(--gousse-medium);
+}
+/* info + loading keep the accent default. */
+
+[data-sonner-toast].miel-toast .miel-toast-icon {
+  color: rgb(var(--hue));
+  position: relative;
+}
+
+/* A custom `icons.loading` is wrapped by sonner in an absolutely-positioned
+   `.sonner-loader`. The icon slot above is the containing block; the wrapper
+   then just fills it, so the spinner sits where the static glyphs do instead
+   of centring itself against the whole card. */
+[data-sonner-toast].miel-toast .miel-toast-icon > .sonner-loader {
+  position: absolute;
+  inset: 0;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: none;
+}
+[data-sonner-toast].miel-toast .miel-toast-icon > .sonner-loader[data-visible="false"] {
+  transform: scale(0.8);
+}
+
+/* Actions sit on their own row spanning the full card width — the toast
+   has exactly one next step, so the button reads as that step rather
+   than as a control tucked beside the text. */
+[data-sonner-toast].miel-toast .miel-toast-action {
+  grid-column: 1 / -1;
+}
+/* With a cancel button too, stacking two full-width blocks reads as a
+   dialog. Split the row instead: the columns are re-cut so the pair sits
+   side by side, and the icon's `auto` column collapses (its content is
+   on row one, which sets its own width). */
+[data-sonner-toast].miel-toast:has([data-cancel]) {
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+}
+[data-sonner-toast].miel-toast:has([data-cancel]) [data-content] {
+  grid-column: 2 / -1;
+}
+[data-sonner-toast].miel-toast [data-cancel].miel-toast-action {
+  grid-column: 1 / 3;
+}
+[data-sonner-toast].miel-toast:has([data-cancel]) [data-action].miel-toast-action {
+  grid-column: 3 / -1;
+}
+
+/* Close button: sonner only positions its own when `data-styled`, so
+   we own placement. Hidden until hover/focus so a resting stack stays
+   quiet. The *visual* affordance is a small 24x24 pill sitting inside
+   the card's padding box (so it never bleeds past the 16px corner);
+   the 40x40 touch target is an invisible ::after overlay centred on
+   it (DESIGN.md §5 — extend the hit area, never shrink it). */
+[data-sonner-toast].miel-toast .miel-toast-close[data-close-button] {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  width: 24px;
+  border-radius: 9999px;
+  padding: 0;
+  /* sonner paints a filled, bordered close button in dark theme from a rule
+     that is *not* gated on `data-styled` — hence the grey blob. Reset it: the
+     resting state is a bare glyph, the fill only appears on hover below. */
+  background: transparent;
+  border: 0;
+  color: rgb(var(--gousse-muted));
+  opacity: 0;
+  transition:
+    opacity 0.15s cubic-bezier(0.2, 0, 0, 1),
+    background-color 0.15s cubic-bezier(0.2, 0, 0, 1),
+    color 0.15s cubic-bezier(0.2, 0, 0, 1);
+}
+[data-sonner-toast].miel-toast .miel-toast-close::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 40px;
+  width: 40px;
+  transform: translate(-50%, -50%);
+}
+[data-sonner-toast].miel-toast .miel-toast-close svg {
+  height: 12px;
+  width: 12px;
+  display: block;
+}
+[data-sonner-toast].miel-toast:hover .miel-toast-close,
+[data-sonner-toast].miel-toast .miel-toast-close:focus-visible {
+  opacity: 1;
+}
+[data-sonner-toast].miel-toast .miel-toast-close[data-close-button]:hover {
+  background: rgb(var(--gousse-line) / 0.4);
+  border-color: transparent;
+  color: rgb(var(--gousse-ink));
+}
+/* Reserve the close button's gutter on the text block only — not as card
+   padding, which would leave the full-width action button visibly
+   off-centre. The close pill is 24px + 8px inset, so 1.5rem past the
+   card's own 12px padding clears it with a hair of breathing room. */
+[data-sonner-toast].miel-toast:has(.miel-toast-close) [data-content] {
+  padding-right: 1.5rem;
+}
+
+/* ============================================================
+   SETTINGS PAGE — grouped single-scroll. A sticky, blurred group
+   header floats over the content while its group is in view; a
+   right-edge dot rail jumps between the three groups. Kept here
+   because the sticky blur mask + rail active-dot are awkward to
+   express cleanly in Tailwind.
+   ============================================================ */
+
+/* Sticky group header: a blurred mask so rows scroll *under* the
+   label instead of colliding with it. The gradient fades the
+   backdrop out at the bottom edge for a soft hand-off. */
+.settings-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: linear-gradient(
+    rgb(var(--gousse-bg)) 68%,
+    rgb(var(--gousse-bg) / 0)
+  );
+  backdrop-filter: blur(6px);
+}
+
+/* Fully-rounded control language for the settings page. Buttons, selects
+   and inputs all become pills. `Button`, `Select` and `Switch` come from
+   gousse-ui, so their radius is overridden here rather than in the
+   component; scoping to `.settings-surface` keeps the pill treatment off
+   the rest of the app. The segmented control opts out — it sets its own
+   radius and is excluded below. */
+.settings-surface :is(button, [role="button"]):not([role="radio"]) {
+  border-radius: 9999px;
+}
+
+.settings-surface :is(select, input, textarea) {
+  border-radius: 9999px;
+}
+
+/* Same pill treatment for the Create/Dismiss actions inside the
+   "Proposed by AI" card (SuggestedFilterRow). The gousse-ui
+   `Button` owns its own radius, so it's overridden here by scope rather
+   than at the component. Scoped to the action cluster, not the whole
+   card, so the label badge's own radius is left alone. A pill eats its
+   horizontal padding at the ends, hence the wider inline padding
+   (DESIGN.md §3). */
+.filter-row-actions :is(button, [role="button"]) {
+  border-radius: 9999px;
+  padding-inline: 0.875rem;
+}
+
+/* And again for the onboarding gate's single "Connect with Google" action —
+   same reason (gousse-ui `Button` owns its radius), same pill + wider inline
+   padding as everywhere else. */
+.onboarding-gate :is(button, [role="button"]) {
+  border-radius: 9999px;
+  padding-inline: 1.125rem;
+}
+
+/* A native select is painted by the OS, which ignores border-radius —
+   so the pill only lands once the native appearance is dropped. That
+   also removes the built-in arrow, hence the inline-SVG chevron and the
+   right padding that keeps the label clear of it. `currentColor` can't
+   be used in a url(), so the chevron is drawn in the muted token's
+   literal rgb and the two themes swap it below.
+
+   `.sync-period-select` opts the sync-period popover's year select into
+   the same treatment — it's outside `.settings-surface` but needs the
+   identical native-appearance reset to hold its pill. */
+.settings-surface select,
+.sync-period-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-inline: 0.875rem 2rem;
+}
+
+.dark .settings-surface select,
+.dark .sync-period-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}

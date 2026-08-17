@@ -1,0 +1,26 @@
+{
+  "name": "@miel/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "miel": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "tsc",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "format": "oxfmt \"**/*.{ts,tsx}\"",
+    "format:check": "oxfmt --check \"**/*.{ts,tsx}\"",
+    "lint": "oxlint -c ../../.oxlintrc.json ."
+  },
+  "dependencies": {
+    "@miel/core": "workspace:*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

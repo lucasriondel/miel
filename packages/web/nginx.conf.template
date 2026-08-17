@@ -1,0 +1,77 @@
+server {
+  listen 80;
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # nginx turns any Location starting with `/` into an absolute URL built from
+  # its own scheme — `http://` in here, since TLS is terminated at the edge. The
+  # `/app` -> `/app/` redirect below would therefore send a visitor off HTTPS,
+  # and Traefik's HTTP->HTTPS 308 would bounce them back. A relative Location
+  # keeps whatever scheme the browser already has.
+  absolute_redirect off;
+
+  # Docker's embedded DNS. Using a resolver + variable upstream defers name
+  # resolution to request time, so nginx still boots if the API container is
+  # not up yet (avoids "host not found in upstream" crashes during deploys).
+  resolver 127.0.0.11 valid=10s ipv6=off;
+
+  # Same-origin API proxy. This server answers on whatever host the reverse
+  # proxy routes to it (`server_name _`), and the API is reached under /api on
+  # that same host, so the browser never makes a cross-origin request -> no
+  # CORS, no credential-less preflight for Cloudflare Access to reject. The host
+  # itself is deployment configuration, not a value baked in here: see SITE_HOST
+  # in .env.example and packages/landing-page/src/deploy/topology.ts. The /api
+  # prefix is stripped because the API mounts its REST routes at root
+  # (/accounts, not /api/accounts); the WS handler accepts both /sync/ws and
+  # /api/sync/ws, so the stripped /sync/ws works too.
+  location /api/ {
+    set $api_upstream ${API_UPSTREAM};
+    # Strip the /api prefix explicitly. A variable in proxy_pass disables
+    # nginx's automatic location-based URI rewrite (the trailing-slash trick),
+    # so without this rewrite the API would receive /api/accounts and 404.
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass http://$api_upstream;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # WebSocket upgrade for the sync stream (/api/sync/ws -> /sync/ws).
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  }
+
+  # The SPA lives under /app (its Vite base and its router basename agree, see
+  # packages/core/src/appBasePath.ts) so the site root stays free for the public
+  # landing pages. Exact-match /app redirects to the directory form; everything
+  # below it falls back to the app's index.html, so deep links survive a reload.
+  location = /app {
+    return 301 /app/;
+  }
+
+  location /app/ {
+    try_files $uri $uri/ /app/index.html;
+  }
+
+  # Hashed bundles and public/ files, now emitted under /app/. A regex location
+  # outranks the prefix ones above, so this keeps the long cache on assets while
+  # a missing file 404s instead of being answered with index.html.
+  location ~* \.(?:js|css|woff2?|ttf|eot|ico|png|jpg|jpeg|gif|svg|webp|avif)$ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+    try_files $uri =404;
+  }
+
+  # Nothing else belongs to this app. The root belongs to the landing container
+  # (@miel/landing-page's own nginx image), which the reverse proxy in front of
+  # both containers routes / to — this image deliberately holds no landing HTML.
+  # Reaching this 404 means the path routing sent / here; see DEPLOY.md §1.3.
+  location / {
+    return 404;
+  }
+}

@@ -1,0 +1,148 @@
+/* gousse-ui — the effects Tailwind can't express cleanly: rotating conic
+   gradients, sheen keyframes, and the native-select appearance reset. Shipped
+   as a standalone sheet so consumers opt in with `import "gousse-ui/effects.css"`.
+   The React wrappers (RainbowGlow, Sheen, Select) attach these classes; you can
+   also apply them directly.
+
+   Classes are namespaced `gousse-*` and drive off the accent tokens where they
+   tint, so they track the active theme like the rest of the kit. */
+
+/* ============================================================
+   RAINBOW GLOW — Siri/Gemini conic halo. Two parts: the frame
+   (`.gousse-rainbow-glow`, a clipped blurred layer that hugs the
+   host) and its `::before` (the oversized conic gradient that
+   actually rotates). Ported from web's `.ai-glow` / `.filter-glow`.
+   ============================================================ */
+.gousse-rainbow-glow {
+  position: absolute;
+  inset: -3px;
+  z-index: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.gousse-rainbow-glow::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 250%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(0deg);
+  background: conic-gradient(
+    from 0deg,
+    #ff6b6b,
+    #ffa94d,
+    #ffd43b,
+    #69db7c,
+    #38d9a9,
+    #4dabf7,
+    #748ffc,
+    #9775fa,
+    #f06595,
+    #ff6b6b
+  );
+  animation: mielRainbowRotate 6s linear infinite;
+}
+
+/* `pill` (default) hugs a rounded-full host; `card` squares off to a
+   card radius, sits wider + more blurred. */
+.gousse-rainbow-glow--card {
+  border-radius: 24px;
+  filter: blur(10px);
+}
+.gousse-rainbow-glow--card::before {
+  width: 220%;
+}
+
+/* Visibility: `always` sits permanently lit (the card case); the default
+   pill stays dark until the host's `.group` is hovered or it's marked active
+   (hover/loading on the Triage pill). */
+.gousse-rainbow-glow--always {
+  opacity: 0.85;
+}
+.group:hover .gousse-rainbow-glow--hover,
+.gousse-rainbow-glow[data-active="true"] {
+  opacity: 0.9;
+}
+.gousse-rainbow-glow[data-active="true"] {
+  opacity: 1;
+  filter: blur(9px);
+}
+.gousse-rainbow-glow[data-active="true"]::before {
+  animation-duration: 2.4s;
+}
+
+@keyframes mielRainbowRotate {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the halo alive but slow it way down — respects the reduce-motion
+     intent without the glow looking broken/static. */
+  .gousse-rainbow-glow::before,
+  .gousse-rainbow-glow[data-active="true"]::before {
+    animation-duration: 40s;
+  }
+}
+
+/* ============================================================
+   SHEEN — a diagonal light sweep that runs once across a host on
+   hover. Overlay (`.gousse-sheen`) carries the gradient + rests
+   off-screen left; the sweep fires when the host `.group` is
+   hovered. Ported from web's sync-button `.sync-sheen`.
+   ============================================================ */
+.gousse-sheen {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  transform: translateX(-130%);
+  background: linear-gradient(
+    120deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 70%
+  );
+}
+.group:hover .gousse-sheen {
+  animation: mielSheen 0.9s ease forwards;
+}
+@keyframes mielSheen {
+  to {
+    transform: translateX(130%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .gousse-sheen {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   SELECT — the native-appearance reset behind Select's pill.
+   A native <select> is painted by the OS, which ignores
+   `border-radius` entirely, so `rounded-full` does nothing until
+   `appearance: none` drops that painting. Dropping it also
+   removes the built-in arrow, hence the inline-SVG chevron
+   below. A `url()` can't reference `currentColor`, so the glyph
+   is drawn in the muted token's literal rgb and the two themes
+   swap the whole image.
+
+   This owns the horizontal padding rather than leaving it to
+   FIELD_CHROME: the right inset has to clear the chevron, so the
+   two sides are asymmetric.
+   ============================================================ */
+.gousse-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-inline: 0.875rem 2rem;
+}
+
+.dark .gousse-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}

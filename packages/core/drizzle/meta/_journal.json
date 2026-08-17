@@ -1,0 +1,90 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1779190669689,
+      "tag": "0000_loving_lyja",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779207476685,
+      "tag": "0001_add_label_colors",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779313995996,
+      "tag": "0002_tearful_psynapse",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779531953840,
+      "tag": "0003_naive_senator_kelly",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779531953841,
+      "tag": "0004_add_account_avatar",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782737604082,
+      "tag": "0005_add_account_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782737804083,
+      "tag": "0006_add_run_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782737904084,
+      "tag": "0007_add_message_removed_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782738004085,
+      "tag": "0008_add_message_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786100000000,
+      "tag": "0009_add_provider_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786200000000,
+      "tag": "0010_provider_vendor_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786300000000,
+      "tag": "0011_encrypted_secrets",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/webp" href="/miel.webp" />
+    <title>miel</title>
+  </head>
+  <body>
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem("miel-theme");
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          const isDark = stored ? stored === "dark" : prefersDark;
+          if (isDark) document.documentElement.classList.add("dark");
+        } catch {}
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

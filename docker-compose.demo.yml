@@ -1,0 +1,93 @@
+# The demo stack: a throwaway copy of the app, running against a seeded fake
+# inbox, used to produce the screenshots in README.md and on the landing page.
+#
+#   docker compose -p miel-demo -f docker-compose.demo.yml up -d --build
+#
+# It is deliberately a separate file from docker-compose.yml (the self-host
+# stack) and docker-compose.dev.yml (Postgres only, for `bun dev`):
+#
+# - Its own project name and its own volume, so seeding — which deletes and
+#   recreates the demo account — can never touch real data in `miel-pgdata`.
+# - Its own host ports (registered in ~/dev/PORTS.md), so it can be brought up
+#   while `bun dev` or the self-host stack is already running.
+# - No real Google or Claude credentials. The demo inbox is written straight
+#   into Postgres by `packages/cli/scripts/seed-demo.ts`; nothing here talks to
+#   Gmail or to Anthropic, so the screenshots need no account and no live token.
+#   The same seed writes a placeholder Claude Code token into `encrypted_secrets`
+#   so Settings shows a configured install — see TOKEN_ENCRYPTION_KEY below.
+#
+# Tear it down with the volume, since nothing in it is worth keeping:
+#
+#   docker compose -p miel-demo -f docker-compose.demo.yml down -v
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: miel
+      POSTGRES_PASSWORD: miel
+      POSTGRES_DB: miel
+    volumes:
+      - miel-demo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U miel -d miel"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    ports:
+      # The seed script and the migration run on the host, against this port.
+      - "${DEMO_POSTGRES_PORT:-5436}:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://miel:miel@postgres:5432/miel
+      API_SECRET: demo-secret
+      API_PORT: 3001
+      WEB_ORIGIN: http://localhost:${DEMO_WEB_PORT:-5210}
+      # Placeholders, not credentials. The API image runs with
+      # NODE_ENV=production, and `packages/core/src/env.ts` requires these to be
+      # non-empty there — so an empty string here is a boot crash, not a
+      # degraded mode. Nothing in the demo talks to Google or Anthropic: the
+      # inbox is seeded straight into Postgres, so Connect/Sync/Reply are the
+      # only things these would be used for and no screenshot exercises them.
+      #
+      # There is no CLAUDE_CODE_OAUTH_TOKEN here, and adding one would do
+      # nothing: the token is read from `encrypted_secrets` and from nowhere
+      # else. `seed-demo.ts` writes a placeholder row with the key below, so the
+      # demo's Settings page shows a configured install.
+      GOOGLE_CLIENT_ID: demo-not-a-real-client-id
+      GOOGLE_CLIENT_SECRET: demo-not-a-real-client-secret
+      GOOGLE_REDIRECT_URI: http://localhost:${DEMO_API_PORT:-5511}/auth/google/callback
+      # 32 bytes of base64 — the shape TOKEN_ENCRYPTION_KEY has to have. Fixed
+      # rather than generated so the stack is reproducible. The demo account is
+      # seeded with no refresh token, so the one thing this decrypts is the
+      # placeholder Claude Code token `seed-demo.ts` writes — which means the
+      # seed run has to be given this exact value.
+      TOKEN_ENCRYPTION_KEY: ZGVtby1zY3JlZW5zaG90cy1rZXktbm90LXNlY3JldC0=
+    ports:
+      - "${DEMO_API_PORT:-5511}:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+      # Baked into the bundle at image-build time, exactly as in the self-host
+      # stack. VITE_API_SECRET must match the API_SECRET above, or every
+      # request the screenshot depends on comes back 401.
+      args:
+        VITE_API_BASE: /api
+        VITE_API_SECRET: demo-secret
+    depends_on:
+      - api
+    environment:
+      API_UPSTREAM: api:3001
+    ports:
+      - "${DEMO_WEB_PORT:-5210}:80"
+
+volumes:
+  miel-demo-pgdata:
