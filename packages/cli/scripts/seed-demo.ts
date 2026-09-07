@@ -5,7 +5,26 @@ import { randomUUID } from "crypto";
 import { sql } from "drizzle-orm";
 import { getDb, closeDb, schema, deleteClaudeCodeToken, setClaudeCodeToken } from "@miel/core";
 
-const DEMO_EMAIL = "demo@mielapp.dev";
+const DEMO_EMAIL = "nora.beaumont@gmail.com";
+const DEMO_DISPLAY_NAME = "Nora Beaumont";
+
+// The demo account's profile picture, inlined as a data URI rather than fetched.
+// A real account's avatar is a `lh3.googleusercontent.com` URL, but the demo
+// stack is booted offline for screenshots, so any remote source renders as a
+// broken image. An SVG data URI is self-contained: no network, no binary asset
+// to keep beside this script, and it survives `avatar.tsx`'s `<img>` unchanged.
+const DEMO_AVATAR_URL =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0%" stop-color="#f2a33c"/><stop offset="100%" stop-color="#c2410c"/>` +
+      `</linearGradient></defs>` +
+      `<rect width="96" height="96" fill="url(#g)"/>` +
+      `<circle cx="48" cy="38" r="16" fill="#fff" fill-opacity="0.92"/>` +
+      `<path d="M16 96c0-17.7 14.3-32 32-32s32 14.3 32 32z" fill="#fff" fill-opacity="0.92"/>` +
+      `</svg>`,
+  );
 
 // A placeholder, not a credential — long enough to be storable, and never used:
 // nothing in the demo talks to Anthropic. It is seeded because the Claude Code
@@ -66,28 +85,6 @@ const MESSAGES = [
     labels: [],
     daysAgo: 0,
     hoursAgo: 0,
-  },
-  {
-    from: ["Qonto", "no-reply@qonto.com"],
-    subject: "Votre code de confirmation : 771204",
-    snippet: "Vérifiez votre connexion avec le code ci-dessus. Il expire dans 10 minutes.",
-    priority: "high" as const,
-    reasoning: "Code de connexion urgent.",
-    system: ["CATEGORY_UPDATES", "UNREAD"],
-    labels: [],
-    daysAgo: 0,
-    hoursAgo: 1,
-  },
-  {
-    from: ["Deutsche Bahn", "service@bahn.de"],
-    subject: "Ihr Bestätigungscode lautet 305178",
-    snippet: "Bitte bestätigen Sie Ihre Anmeldung mit dem obigen Code.",
-    priority: "high" as const,
-    reasoning: "Anmeldebestätigung.",
-    system: ["CATEGORY_UPDATES", "UNREAD"],
-    labels: [],
-    daysAgo: 0,
-    hoursAgo: 1,
   },
   {
     from: ["Notion", "team@makenotion.com"],
@@ -372,136 +369,39 @@ const MESSAGES = [
     hoursAgo: 9,
   },
 
-  // --- Marketing mail. Every one of these carries a `promo`, so that what the
-  // suggestion cards show above the inbox is grounded in a message actually
-  // sitting in the list below them. The bodies are HTML because that is what a
-  // marketing mail is, and because the saved copy the Promo Codes page reads
-  // back (`bodyHtml` on the promo row) is rendered as HTML.
+  // --- Marketing mail. Exactly one, carrying one `promo`, so the ledger's
+  // promo section is one row: promos sort last in `buildLedger`, below the
+  // filter proposal and every fresh verification code, so each extra one pushes
+  // the whole ledger further down a 920px screenshot frame. One row is enough to
+  // show the feature and cheap enough to stay in shot. The promo is grounded in
+  // a message actually sitting in the list below it. The body is HTML because
+  // that is what a marketing mail is, and because the saved copy the Promo Codes
+  // page reads back (`bodyHtml` on the promo row) is rendered as HTML.
+  //
+  // Adding another means re-checking the screenshots still frame the ledger —
+  // see `.claude/skills/demo-screenshots/capture.ts`, which refuses to shoot a
+  // frame with no promo row visible.
   {
     from: ["Uniqlo", "news@mail.uniqlo.com"],
     subject: "Mid-season sale: 30% off everything, this weekend only",
-    // No "code AUTUMN30" in the snippet, and the mail is over a day old. Both
-    // are deliberate: the verification-code strip is browser-side regex over
-    // subject and snippet on mail under 24h old, so a promo mail worded like an
-    // OTP puts a discount code in the strip reserved for sign-in codes. The
-    // code still reaches the card, which reads the extracted `promo` below.
+    // No "code AUTUMN30" in the snippet, and that is the only thing keeping it
+    // out: verification codes are browser-side regex over subject and snippet on
+    // mail under 24h old, and this mail is same-day, so a snippet worded like an
+    // OTP ("Code: XYZ") would put a discount code in a row labelled Code rather
+    // than Promo. Keep discount codes out of promo snippets — the code still
+    // reaches the promo row, which reads the extracted `promo` below.
     snippet: "Three days only — our biggest reductions of the season, online and in store...",
     priority: "low" as const,
     reasoning: "Marketing mail with a time-limited discount.",
     labels: [],
     system: ["CATEGORY_PROMOTIONS", "UNREAD"],
-    daysAgo: 1,
-    hoursAgo: 4,
+    daysAgo: 0,
+    hoursAgo: 2,
     bodyHtml: `<h1>Mid-season sale</h1><p>Three days only — <strong>30% off everything</strong>, online and in store.</p><p>Use code <strong>AUTUMN30</strong> at checkout.</p><p><small>Valid on full-price items only. Cannot be combined with other offers. Ends Sunday.</small></p>`,
     promo: {
       code: "AUTUMN30",
       discount: "30% off everything",
       terms: "Full-price items only, cannot be combined with other offers",
-      expiresInDays: 5,
-      merchant: "Uniqlo",
-      saved: false,
-    },
-  },
-  {
-    from: ["Bellroy", "hello@bellroy.com"],
-    subject: "Your 15% welcome offer is waiting",
-    snippet: "Thanks for signing up. Here's 15% off your first order — no minimum spend...",
-    priority: "low" as const,
-    reasoning: "Welcome discount from a shop the user subscribed to.",
-    labels: [],
-    system: ["CATEGORY_PROMOTIONS"],
-    daysAgo: 1,
-    hoursAgo: 6,
-    bodyHtml: `<p>Welcome aboard.</p><p>Here is <strong>15% off your first order</strong>, no minimum spend.</p><p>Code: <strong>WELCOME15</strong></p><p><small>One use per customer. Excludes gift cards.</small></p>`,
-    promo: {
-      code: "WELCOME15",
-      discount: "15% off your first order",
-      terms: "One use per customer, excludes gift cards",
-      expiresInDays: 21,
-      merchant: "Bellroy",
-      saved: false,
-    },
-  },
-  {
-    from: ["Deliveroo", "no-reply@deliveroo.com"],
-    subject: "€10 off your next two orders",
-    snippet: "We miss you. Here's €10 off your next two orders over €25, valid until the end of...",
-    priority: "low" as const,
-    reasoning: "Win-back offer with a short window.",
-    labels: [],
-    system: ["CATEGORY_PROMOTIONS", "UNREAD"],
-    daysAgo: 1,
-    hoursAgo: 11,
-    bodyHtml: `<p>We miss you.</p><p><strong>€10 off</strong> your next two orders over €25.</p><p>Enter <strong>BACK10</strong> at checkout.</p><p><small>Minimum order €25. Delivery fees not included.</small></p>`,
-    promo: {
-      code: "BACK10",
-      discount: "€10 off orders over €25",
-      terms: "Minimum order €25, delivery fees excluded",
-      expiresInDays: 9,
-      merchant: "Deliveroo",
-      saved: false,
-    },
-  },
-  {
-    from: ["Muji", "newsletter@muji.eu"],
-    subject: "Free shipping on everything this week",
-    snippet: "No code needed — free standard delivery on all orders until Sunday...",
-    priority: "low" as const,
-    reasoning: "Storewide shipping offer.",
-    labels: [],
-    system: ["CATEGORY_PROMOTIONS"],
-    daysAgo: 2,
-    hoursAgo: 8,
-    bodyHtml: `<p><strong>Free shipping on everything</strong>, all week.</p><p>No code needed — applied automatically at checkout.</p><p><small>Standard delivery only. Ends Sunday.</small></p>`,
-    // The code-less offer, on purpose: the card must render without one, and
-    // the dedupe must never fold two of these together.
-    promo: {
-      code: null,
-      discount: "Free standard shipping",
-      terms: "Standard delivery only",
-      expiresInDays: 4,
-      merchant: "Muji",
-      saved: false,
-    },
-  },
-  {
-    from: ["Rapha", "info@rapha.cc"],
-    subject: "Members: 20% off the winter range",
-    snippet: "Your membership unlocks 20% off the new winter collection. Use RCC20 before...",
-    priority: "low" as const,
-    reasoning: "Membership discount on a seasonal range.",
-    labels: [],
-    system: ["CATEGORY_PROMOTIONS"],
-    daysAgo: 3,
-    hoursAgo: 5,
-    bodyHtml: `<p>Members' preview.</p><p><strong>20% off the winter range</strong> with code <strong>RCC20</strong>.</p><p><small>RCC members only. Excludes sale items.</small></p>`,
-    promo: {
-      code: "RCC20",
-      discount: "20% off the winter range",
-      terms: "RCC members only, excludes sale items",
-      expiresInDays: 12,
-      merchant: "Rapha",
-      saved: false,
-    },
-  },
-  {
-    from: ["Uniqlo", "news@mail.uniqlo.com"],
-    subject: "Last chance: 30% off ends Sunday",
-    snippet: "The mid-season sale ends at midnight on Sunday. Code AUTUMN30 is still live...",
-    priority: "low" as const,
-    reasoning: "Reminder of an offer already in the inbox.",
-    labels: [],
-    system: ["CATEGORY_PROMOTIONS"],
-    daysAgo: 4,
-    hoursAgo: 3,
-    bodyHtml: `<p>Last chance — the sale ends at midnight on Sunday.</p><p><strong>30% off everything</strong> with <strong>AUTUMN30</strong>.</p>`,
-    // Deliberately the same code as the mail three days newer: this is what
-    // proves `distinctByCode` folds a shop's reminder into one card rather than
-    // spending a second slot on it.
-    promo: {
-      code: "AUTUMN30",
-      discount: "30% off everything",
-      terms: "Full-price items only",
       expiresInDays: 5,
       merchant: "Uniqlo",
       saved: false,
@@ -598,11 +498,23 @@ function promoExpiry(days: number): Date {
   return at;
 }
 
+/**
+ * The one AI-proposed filter, and it is deliberately the most obvious rule in
+ * the mailbox: Stripe's receipts address to Finance. A screenshot is read in a
+ * second, so the pair has to be gradable at a glance by someone who has never
+ * seen this inbox — a known sender, an address whose local part already says
+ * what the mail is, and a label whose name is the same word. A made-up domain
+ * mapped to a generic label needs the reasoning line read before it means
+ * anything, which is exactly the wrong shape for a hero shot.
+ *
+ * It is grounded in the seed: the Stripe invoice above carries `Finance`, so
+ * the rule is one the mailbox visibly already follows by hand.
+ */
 const FILTER_SUGGESTION = {
-  criteriaFrom: "@northwind-labs.com",
-  addLabelName: "Work",
+  criteriaFrom: "receipts@stripe.com",
+  addLabelName: "Finance",
   reasoning:
-    "12 messages from northwind-labs.com were manually labeled Work this month — auto-labeling the whole domain would save the repeat step.",
+    "Every Stripe receipt this month was manually labeled Finance — a filter would save doing it again next month.",
 };
 
 async function main() {
@@ -624,7 +536,8 @@ async function main() {
   await db.insert(schema.accounts).values({
     id: accountId,
     email: DEMO_EMAIL,
-    displayName: "Demo Account",
+    displayName: DEMO_DISPLAY_NAME,
+    avatarUrl: DEMO_AVATAR_URL,
     connectedAt: new Date(),
     scopes: [
       "https://www.googleapis.com/auth/gmail.modify",

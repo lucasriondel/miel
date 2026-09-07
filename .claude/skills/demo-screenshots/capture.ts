@@ -117,9 +117,31 @@ const EXPECTED_SIDEBAR_FRAC = 0.181;
  */
 const SIDEBAR_TOLERANCE = 0.01;
 
+/**
+ * How many promo rows must be visible for the frame to be worth shipping.
+ * One is the honest floor: the screenshots exist to show the feature, and the
+ * ledger's promos are its only appearance on the inbox.
+ */
+const MIN_PROMOS_IN_FRAME = 1;
+
 // The inbox list is one <Link> per message, so its href is the marker —
 // see messageDetailPath() in features/inbox/inboxLocation.ts.
 const ROW_SELECTOR = "a[href*='/messages/']";
+
+/**
+ * A promo row in the actionables ledger. `LedgerRow` labels every row
+ * `"<KIND_LABEL> — <issuer>"`, and `KIND_LABEL.promo` is the only one that
+ * starts with "Promo", so the label is the marker — see
+ * features/ledger/LedgerRow.tsx.
+ *
+ * Presence is not enough. Promos sort *last* in the ledger
+ * (`KIND_ORDER = { filter: 0, code: 1, link: 1, promo: 2 }` in buildLedger.ts),
+ * so filter proposals and every fresh verification code sit above them and can
+ * push the first promo under the fold of a 920px frame. A row in the DOM that
+ * nobody can see in the picture is exactly the failure this guards, so the
+ * count below is of rows whose box actually falls inside the viewport.
+ */
+const PROMO_SELECTOR = "li[aria-label^='Promo']";
 
 type PageState = {
   w: number;
@@ -129,23 +151,36 @@ type PageState = {
   sidebarFrac: number | null;
   account: string | null;
   rows: number;
+  promos: number;
+  promosInView: number;
 };
 
 async function readState(page: Page): Promise<PageState> {
-  return page.evaluate((rowSelector) => {
-    const nav = document.querySelector("nav, aside");
-    const r = nav && nav.getBoundingClientRect();
-    const text = document.body.innerText || "";
-    return {
-      w: innerWidth,
-      h: innerHeight,
-      dark: document.documentElement.classList.contains("dark"),
-      scrollY: window.scrollY,
-      sidebarFrac: r ? +(r.width / innerWidth).toFixed(4) : null,
-      account: (text.match(/[\w.+-]+@[\w.-]+/) || [null])[0],
-      rows: document.querySelectorAll(rowSelector).length,
-    };
-  }, ROW_SELECTOR);
+  return page.evaluate(
+    ({ rowSelector, promoSelector }) => {
+      const nav = document.querySelector("nav, aside");
+      const r = nav && nav.getBoundingClientRect();
+      const text = document.body.innerText || "";
+      const promoRows = Array.from(document.querySelectorAll(promoSelector));
+      // Fully inside the frame: a row half-cut by the fold is not in the picture.
+      const inView = promoRows.filter((el) => {
+        const b = el.getBoundingClientRect();
+        return b.top >= 0 && b.bottom <= innerHeight && b.width > 0 && b.height > 0;
+      });
+      return {
+        w: innerWidth,
+        h: innerHeight,
+        dark: document.documentElement.classList.contains("dark"),
+        scrollY: window.scrollY,
+        sidebarFrac: r ? +(r.width / innerWidth).toFixed(4) : null,
+        account: (text.match(/[\w.+-]+@[\w.-]+/) || [null])[0],
+        rows: document.querySelectorAll(rowSelector).length,
+        promos: promoRows.length,
+        promosInView: inView.length,
+      };
+    },
+    { rowSelector: ROW_SELECTOR, promoSelector: PROMO_SELECTOR },
+  );
 }
 
 /**
@@ -174,6 +209,15 @@ function assertShootable(state: PageState, scheme: "light" | "dark"): void {
     problems.push(`html.dark is ${state.dark}, expected ${scheme === "dark"}`);
   }
   if (state.scrollY !== 0) problems.push(`scrollY is ${state.scrollY}, expected 0`);
+  // The seed carries five distinct unsaved promos (buildLedger dedupes Uniqlo's
+  // reminder onto one row), so zero here means the seed did not land, the
+  // ledger dropped them, or they were pushed under the fold.
+  if (state.promosInView < MIN_PROMOS_IN_FRAME) {
+    problems.push(
+      `${state.promosInView} promo rows in frame (${state.promos} in the DOM), ` +
+        `expected at least ${MIN_PROMOS_IN_FRAME}`,
+    );
+  }
   if (
     state.sidebarFrac == null ||
     Math.abs(state.sidebarFrac - EXPECTED_SIDEBAR_FRAC) > SIDEBAR_TOLERANCE

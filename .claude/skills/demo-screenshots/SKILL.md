@@ -105,7 +105,7 @@ TOKEN_ENCRYPTION_KEY=ZGVtby1zY3JlZW5zaG90cy1rZXktbm90LXNlY3JldC0= \
   bun run packages/cli/scripts/seed-demo.ts
 ```
 
-The seed prints `seeded demo account: demo@mielapp.dev` plus the counts. It is
+The seed prints `seeded demo account: nora.beaumont@gmail.com` plus the counts. It is
 idempotent: it deletes any prior demo account first, so re-running it after
 editing the message list is the normal way to change what the picture shows.
 
@@ -120,8 +120,13 @@ quietly drops a feature out of the picture:
   priority section by the message's `CATEGORY_*` label and the sidebar lists the
   mailboxes, so a message list with no categories shows neither.
 - **`promo`** on a marketing message seeds a `promo_codes` row. Unsaved ones are
-  the suggestion cards above the inbox — capped at six, deduped by code, and
-  hidden once expired — and `saved: true` ones are the Promo Codes page's rows.
+  promo rows in the actionables ledger above the inbox — capped at six, deduped
+  by code, and hidden once expired — and `saved: true` ones are the Promo Codes
+  page's rows. The seed carries **one** unsaved promo on purpose: promos sort
+  last in that ledger (below the filter proposal and every fresh verification
+  code), so each extra one pushes the ledger further down the frame. Adding more
+  means re-checking that the capture still frames them — it refuses to shoot a
+  frame with no promo row visible.
 - **`isTrashed`** goes with `saved: true`, because saving a promo trashes its
   mail: it is what keeps a saved promo's message out of the inbox while the
   promo itself stays on the page.
@@ -186,7 +191,7 @@ Both frames must show the same inbox, same scroll position, same selected
 account; the README swaps them on the reader's colour scheme and a pair that
 disagrees looks like a glitch. The script's own checks cover viewport, theme,
 scroll and the sidebar fraction, but not what is *in* the list — so look at the
-two PNGs before encoding, and confirm the account reads **demo@mielapp.dev** and
+two PNGs before encoding, and confirm the account reads **nora.beaumont@gmail.com** and
 nothing is hovered, focused or half-open.
 
 Confirm the dimensions too; anything but `2740,1840` means a check was bypassed:
