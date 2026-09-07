@@ -155,10 +155,12 @@ body {
   color: var(--accent);
 }
 
-/* No scroll spy on a page with no JavaScript, so the jumped-to section is the
-   only "active" state available — and it is the honest one. A subsection is
-   linkable too, so its own h3 highlights the same way. */
-section:target > h2, section:target > h3 { color: var(--accent); }
+/* Section headings carry the accent at all times, so the page reads as a set of
+   named parts rather than colouring one only once it has been jumped to. There
+   is no scroll spy on a page with no JavaScript and therefore no active state
+   to distinguish: the :target rule used to be it, and it made the accent look
+   like a selection when it is really the heading's own colour. */
+section > h2, section > h3 { color: var(--accent); }
 
 section[id] { scroll-margin-top: 1.5rem; }
 
@@ -209,7 +211,7 @@ a { color: var(--accent); }
   gap: 0.5rem;
   margin: 0.5rem 0 0;
   padding: 0.7rem 1.25rem;
-  border-radius: 0.75rem;
+  border-radius: 2rem;
   background: var(--accent);
   color: var(--accent-contrast);
   font-weight: 600;
