@@ -1,0 +1,212 @@
+/* ============================================================
+   SIDEBAR — the parts Tailwind can't express cleanly.
+
+   Companion sheet to `sidebar.tsx` — named apart from it because a
+   registry item name is its filename minus the extension, so a
+   `sidebar.css` would collide with the component. Without this
+   sheet the rows still lay out correctly but render flat: no hue
+   fill, no active bar, no glyph tint. Import it after `theme.css`.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   ROW — hue-driven interactions. A single per-row `--hue` custom
+   property feeds bg and glyph + count tint across rest/hover/
+   active. `--hue` defaults to the accent; category rows override
+   it inline. Tinted rows also carry their hue on the glyph at
+   rest.
+
+   The washes are deliberately quiet — 6% on hover, 9% active. The
+   sidebar is the one piece of chrome every page pays for, and a
+   heavier fill makes the nav louder than the content it points at.
+   The active row is also carried by weight and ink color (see
+   `sidebarRowClass`), so the fill only has to place the row, not
+   announce it on its own.
+
+   NOTE — the growing left bar this sheet used to draw is gone. Its
+   replacement is the per-row mark on the active row's right edge;
+   see below. `--bar-hue` survives under its new name `--mark-hue`,
+   still falling back to `--hue` so a consumer can recolor the
+   stroke alone.
+   ------------------------------------------------------------ */
+.sidebar-row {
+  --hue: var(--gousse-accent);
+  position: relative;
+}
+.sidebar-row:hover {
+  background: rgb(var(--hue) / 0.06);
+}
+.sidebar-row[data-active="true"],
+.sidebar-row[aria-current="page"] {
+  background: rgb(var(--hue) / 0.09);
+}
+
+/* ------------------------------------------------------------
+   MARK — the active indicator, a stroke on the active row's right
+   edge. Rows are full-bleed, so the stroke lands flush against the
+   shell's right edge with no positioning script: it scrolls with
+   its row, clips with the scroll region, and needs no re-measuring
+   on resize, font swap, or branch collapse.
+
+   Enter/leave is a subtle fade-and-grow: the stroke rests at 40%
+   height and transparent, and eases to full when the row becomes
+   active. Both directions run the same transition, so the old
+   row's stroke recedes as the new one arrives.
+
+   `--mark-height` and `--mark-width` are the CSS-only size knobs;
+   `--mark-hue` (the `markHue` prop) recolors the stroke alone,
+   falling back to the row's `--hue`.
+   ------------------------------------------------------------ */
+.sidebar-row {
+  --mark-height: 20px;
+  --mark-width: 2.5px;
+  /* The `markHue` prop overrides this inline; by default the stroke follows
+     the row's own hue. */
+  --mark-hue: var(--hue);
+}
+.sidebar-row::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: var(--mark-width);
+  height: var(--mark-height);
+  border-radius: var(--mark-width) 0 0 var(--mark-width);
+  background: rgb(var(--mark-hue));
+  transform: translateY(-50%) scaleY(0.4);
+  opacity: 0;
+  transition:
+    opacity 0.25s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  pointer-events: none;
+}
+.sidebar-row[data-active="true"]::after,
+.sidebar-row[aria-current="page"]::after {
+  transform: translateY(-50%) scaleY(1);
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-row::after {
+    transition: none;
+  }
+}
+
+/* Glyphs rest quiet and take the hue in steps: a whisper on hover, full hue
+   with a heavier stroke when active. Set here rather than as a utility on each
+   icon so the hue rules below win without `!important`.
+
+   `SidebarGlyph` owns the `.sidebar-glyph` class, so these rules reach any icon
+   dropped into a row's `icon` slot — the consumer doesn't hand-write the class.
+   `color` lands on the wrapper and the icon picks it up through `currentColor`;
+   `stroke-width` has to target the SVG itself, which is what the `> *` does. */
+.sidebar-glyph {
+  color: rgb(var(--gousse-muted) / 0.6);
+  transition: color 0.15s cubic-bezier(0.2, 0, 0, 1);
+}
+.sidebar-glyph > * {
+  stroke-width: 1.5;
+}
+.sidebar-row:hover .sidebar-glyph {
+  color: rgb(var(--hue) / 0.8);
+}
+/* Category rows: glyph is softly tinted even at rest. Scoped to *non*-active
+   rows rather than left to source order — an active tinted row has to take the
+   full-strength rule below, and `:not()` states that directly instead of
+   depending on which rule the cascade happens to reach last. */
+.sidebar-row[data-tinted="true"]:not([data-active="true"]):not([aria-current="page"])
+  .sidebar-glyph {
+  color: rgb(var(--hue) / 0.85);
+}
+/* Active takes the row's hue at full strength — the row's own `--hue` when one
+   is forced, the accent otherwise — so the glyph always matches the mark and the
+   count beside it. */
+.sidebar-row[data-active="true"] .sidebar-glyph,
+.sidebar-row[aria-current="page"] .sidebar-glyph {
+  color: rgb(var(--hue));
+}
+.sidebar-row[data-active="true"] .sidebar-glyph > *,
+.sidebar-row[aria-current="page"] .sidebar-glyph > * {
+  stroke-width: 1.9;
+}
+
+/* Trailing count: faint tabular figures at rest, hued beside the active row. */
+.sidebar-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--gousse-muted) / 0.5);
+}
+.sidebar-row[data-active="true"] .sidebar-count,
+.sidebar-row[aria-current="page"] .sidebar-count {
+  color: rgb(var(--hue) / 0.9);
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------
+   SCROLLER — no native scrollbar at all. A classic (always-on)
+   macOS/Windows scrollbar claims real layout width, which made the
+   scrolled rows render narrower than the header and footer rows
+   sitting outside the scroller. Hiding it keeps every sidebar row
+   exactly the same width; the list stays fully keyboard / wheel /
+   trackpad scrollable without the affordance.
+   ------------------------------------------------------------ */
+.sidebar-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* ------------------------------------------------------------
+   COLLAPSIBLE BRANCHES
+   ------------------------------------------------------------ */
+
+/* Chevron on collapsible parent rows: points down when open, rotates
+   to point right when the branch is collapsed. */
+.sidebar-chevron {
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+}
+.sidebar-row[data-collapsed="true"] .sidebar-chevron {
+  transform: rotate(-90deg);
+}
+
+/* Collapsible children: grid-rows trick animates height without a fixed px. */
+.sidebar-children {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+.sidebar-children[data-collapsed="true"] {
+  grid-template-rows: 0fr;
+}
+.sidebar-children > .sidebar-children-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------
+   TRIGGER — the top-bar open button only mounts while the sidebar
+   is collapsed, so it would otherwise pop in the instant the close
+   starts. Fade it in over the sidebar's own 300ms so the two read
+   as one motion.
+   ------------------------------------------------------------ */
+@keyframes sidebarToggleIn {
+  from {
+    opacity: 0;
+    transform: translateX(-0.5rem) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.sidebar-toggle-in {
+  animation: sidebarToggleIn 240ms ease-out 120ms backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-toggle-in {
+    animation: none;
+  }
+}

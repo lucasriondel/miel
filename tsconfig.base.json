@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // ES2023 for the types only — it adds no syntax to emit, just the copying
+    // array methods (`toSorted`, `toReversed`, `with`) that the linter's
+    // `unicorn/no-array-sort` steers every in-place sort onto. DOM is spelled
+    // out because naming `lib` at all replaces the default for `target`, which
+    // was the "full" ES2022 libs — DOM included, and core reads `setInterval`'s
+    // return type from it.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  }
+}

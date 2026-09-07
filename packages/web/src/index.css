@@ -1,0 +1,659 @@
+/* Tailwind v4 CSS-first entry. Order matters: tokens.css defines the `--gousse-*`
+   channel vars (:root/.dark), theme.css maps them onto Tailwind theme variables
+   (bg-gousse-*, shadow-gousse-*, animate-*), effects.css carries the rainbow-glow
+   / sheen keyframes, sidebar-chrome.css the hue-driven sidebar row surfaces that
+   ship with the `sidebar` registry item. `@import "tailwindcss"` first pulls in
+   the v4 engine. The gousse sheets are vendored registry source (see DESIGN.md
+   §10) — they are ours to edit, like the components beside them. */
+@import "tailwindcss";
+@import "./styles/gousse/tokens.css";
+@import "./styles/gousse/theme.css";
+@import "./styles/gousse/effects.css";
+@import "./styles/gousse/sidebar-chrome.css";
+
+/* Web accent override — tokens.css ships a default; we tint miel honey-yellow,
+   the same pair the landing page uses (`--accent` in
+   packages/landing-page/src/styles.ts): a deep amber on light so text and
+   focus rings keep contrast, a brighter one on dark. Layered after the imports
+   so it wins. */
+/* Priority as text, not as a filled pill (#141). `--gousse-high|medium|low` are
+   fill colours: on a light surface, amber-gold and green read as decoration and
+   fail AA as words. So each priority also gets an *ink* — the same hue taken
+   down until it clears 4.5:1 on `--gousse-bg` and `--gousse-panel`. On dark the
+   fill already clears it, so the ink is the token itself rather than a second
+   value to keep in step. They live here and not in `styles/gousse/tokens.css`
+   for the reason the accent override does: that sheet is the vendored registry's
+   and the next `bunx shadcn@latest add` overwrites it (DESIGN.md §10).
+   `src/lib/priorityColors.ts` is what maps a `Priority` onto them, and its test
+   computes the ratios from these very declarations. */
+:root {
+  --gousse-accent: 148 100 10; /* #94640a — web override, honey (light) */
+  --gousse-high-ink: 198 48 33; /* #c63021 — high as text (light) */
+  --gousse-medium-ink: 155 92 0; /* #9b5c00 — medium as text (light) */
+  --gousse-low-ink: 19 120 57; /* #137839 — low as text (light) */
+}
+
+.dark {
+  --gousse-accent: 237 182 75; /* #edb64b — web override, honey (dark) */
+  --gousse-high-ink: var(--gousse-high);
+  --gousse-medium-ink: var(--gousse-medium);
+  --gousse-low-ink: var(--gousse-low);
+}
+
+/* The utilities for the three above. Tailwind 4 is CSS-first, so a token is a
+   utility only once it is named in a `@theme` block; the vendored
+   `styles/gousse/theme.css` does that for the registry's own tokens. */
+@theme {
+  --color-gousse-high-ink: rgb(var(--gousse-high-ink));
+  --color-gousse-medium-ink: rgb(var(--gousse-medium-ink));
+  --color-gousse-low-ink: rgb(var(--gousse-low-ink));
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Kill mobile rubber-band/overscroll bounce past scroll limits. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+body {
+  @apply bg-gousse-bg text-gousse-ink font-sans antialiased;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   TOP BAR — animations that Tailwind can't express cleanly
+   (rotating conic gradient, scroll-fade shell). Surfaces use
+   the --gousse-* tokens so they track the active theme.
+   ============================================================ */
+
+/* The Triage-button rainbow halo and the sync-button hover sheen now live in
+   gousse-ui (`RainbowGlow` / `Sheen` + `gousse-ui/effects.css`). */
+
+/* Pulsing accent glow while a sync is running. */
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 6px 16px rgb(var(--gousse-accent) / 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 24px rgb(var(--gousse-accent) / 0.6);
+  }
+}
+.sync-running {
+  animation: pulseGlow 1.6s ease-in-out infinite;
+}
+
+/* ============================================================
+   FILTERS PAGE — the "Proposed by AI" group is edged with a
+   static rainbow hairline (the calm cousin of the Triage pill's
+   rotating halo: same spectrum, no motion, no blur bleeding onto
+   the page), and active-filter rows are borderless ledger cards
+   that lift on hover. Kept here because the gradient border and
+   scroll states are awkward to express in Tailwind.
+   ============================================================ */
+
+/* Gradient edge for the proposals card. A 1px padding box whose
+   background is the rainbow, with the panel painted on the inner
+   element — the border-image equivalent that still lets us keep a
+   radius. Alphas are held low so the edge reads as a hairline in
+   the DESIGN.md §2 sense, not as a highlight. */
+.filter-proposals-card {
+  padding: 1px;
+  border-radius: 20px;
+  background: linear-gradient(
+    120deg,
+    rgb(255 107 107 / 0.5),
+    rgb(255 212 59 / 0.45),
+    rgb(105 219 124 / 0.45),
+    rgb(77 171 247 / 0.5),
+    rgb(151 117 250 / 0.5)
+  );
+  box-shadow: var(--gousse-shadow-md);
+}
+
+/* Borderless ledger card for an active filter. Depth via shadow, lifts
+   on hover — no hard border (DESIGN.md §2).
+
+   The hairline in the ramp is load-bearing rather than decorative. In dark
+   the panel is rgb(23 23 22) on a rgb(13 13 12) page: ten levels apart, with
+   a drop shadow that is black on near-black and so separates nothing. The
+   card edge disappeared and the rows read as floating fragments. An inset
+   hairline is what draws the edge; it stays inside the radius, so the card is
+   still borderless in the §2 sense — no hard border box, just the line the
+   shadow cannot carry at this contrast. */
+.filter-card {
+  background: rgb(var(--gousse-panel));
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--gousse-line) / 0.55),
+    var(--gousse-shadow-sm);
+  transition: box-shadow 0.18s cubic-bezier(0.2, 0, 0, 1);
+}
+.filter-card:hover {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--gousse-line) / 0.8),
+    var(--gousse-shadow-md);
+}
+
+/* ============================================================
+   TOASTS — sonner is rendered `unstyled` (see MielToaster) so the
+   surface is ours: a floating panel card with a hairline and the
+   highest shadow ramp, like PopoverPanel. Colour is carried by a
+   single per-type `--hue` that feeds the leading glyph only — the
+   card itself stays neutral, so a stack of toasts reads as one
+   material.
+   ============================================================ */
+/* Container: sonner hard-codes its own font stack and a 356px width.
+   Inherit the app font instead, and let the card breathe a little wider
+   so a title long enough to name an account stays at two lines. */
+[data-sonner-toaster] {
+  font-family: inherit;
+  --width: 380px;
+}
+
+/* The card is a two-column grid, not a row: the glyph owns column one,
+   the text block column two, and any action button spans both on a
+   second row. Grid makes that break explicit — with flex the buttons sat
+   beside the text and squeezed it against the close button's gutter,
+   and flex-wrap would leave the break up to how long the label is. */
+[data-sonner-toast].miel-toast {
+  --hue: var(--gousse-accent);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  /* No `position` here, deliberately. sonner's own base rule sets
+     `position: absolute`, which is what makes a stack a stack: every toast
+     shares one anchor in the toaster and is pushed apart by the `--y`
+     transform it computes. This selector is more specific, so declaring
+     `position: relative` here (as it once did, to anchor the close button)
+     dropped every toast back into normal flow — they laid out one under the
+     next and the pile grew taller with each one. The close button anchors
+     fine without it: an absolutely-positioned box is already a containing
+     block for its own absolute children. */
+  /* sonner gates `width: var(--width)` on `[data-styled='true']`, which
+     `unstyled` turns off. Without it the card is content-sized, and since
+     `[data-x-position='right']` pins `right: 0` the stack's left edges
+     stagger by however long each message happens to be. Restate it here:
+     the width is the toaster's `--width`, not sonner's styling opinion. */
+  width: var(--width);
+}
+
+/* The other rule `unstyled` drops: sonner hides the *contents* of collapsed
+   background toasts so a resting stack reads as layered cards rather than
+   four legible messages at full height. Same selector, minus the
+   `data-styled` gate. */
+[data-sonner-toast].miel-toast[data-expanded="false"][data-front="false"] > * {
+  opacity: 0;
+}
+[data-sonner-toast].miel-toast[data-type="success"] {
+  --hue: var(--gousse-low);
+}
+[data-sonner-toast].miel-toast[data-type="error"] {
+  --hue: var(--gousse-high);
+}
+[data-sonner-toast].miel-toast[data-type="warning"] {
+  --hue: var(--gousse-medium);
+}
+/* info + loading keep the accent default. */
+
+[data-sonner-toast].miel-toast .miel-toast-icon {
+  color: rgb(var(--hue));
+  position: relative;
+}
+
+/* A custom `icons.loading` is wrapped by sonner in an absolutely-positioned
+   `.sonner-loader`. The icon slot above is the containing block; the wrapper
+   then just fills it, so the spinner sits where the static glyphs do instead
+   of centring itself against the whole card. */
+[data-sonner-toast].miel-toast .miel-toast-icon > .sonner-loader {
+  position: absolute;
+  inset: 0;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: none;
+}
+[data-sonner-toast].miel-toast .miel-toast-icon > .sonner-loader[data-visible="false"] {
+  transform: scale(0.8);
+}
+
+/* Actions sit on their own row spanning the full card width — the toast
+   has exactly one next step, so the button reads as that step rather
+   than as a control tucked beside the text. */
+[data-sonner-toast].miel-toast .miel-toast-action {
+  grid-column: 1 / -1;
+}
+/* With a cancel button too, stacking two full-width blocks reads as a
+   dialog. Split the row instead: the columns are re-cut so the pair sits
+   side by side, and the icon's `auto` column collapses (its content is
+   on row one, which sets its own width). */
+[data-sonner-toast].miel-toast:has([data-cancel]) {
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+}
+[data-sonner-toast].miel-toast:has([data-cancel]) [data-content] {
+  grid-column: 2 / -1;
+}
+[data-sonner-toast].miel-toast [data-cancel].miel-toast-action {
+  grid-column: 1 / 3;
+}
+[data-sonner-toast].miel-toast:has([data-cancel]) [data-action].miel-toast-action {
+  grid-column: 3 / -1;
+}
+
+/* Close button: sonner only positions its own when `data-styled`, so
+   we own placement. Hidden until hover/focus so a resting stack stays
+   quiet. The *visual* affordance is a small 24x24 pill sitting inside
+   the card's padding box (so it never bleeds past the 16px corner);
+   the 40x40 touch target is an invisible ::after overlay centred on
+   it (DESIGN.md §5 — extend the hit area, never shrink it). */
+[data-sonner-toast].miel-toast .miel-toast-close[data-close-button] {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  width: 24px;
+  border-radius: 9999px;
+  padding: 0;
+  /* sonner paints a filled, bordered close button in dark theme from a rule
+     that is *not* gated on `data-styled` — hence the grey blob. Reset it: the
+     resting state is a bare glyph, the fill only appears on hover below. */
+  background: transparent;
+  border: 0;
+  color: rgb(var(--gousse-muted));
+  opacity: 0;
+  transition:
+    opacity 0.15s cubic-bezier(0.2, 0, 0, 1),
+    background-color 0.15s cubic-bezier(0.2, 0, 0, 1),
+    color 0.15s cubic-bezier(0.2, 0, 0, 1);
+}
+[data-sonner-toast].miel-toast .miel-toast-close::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 40px;
+  width: 40px;
+  transform: translate(-50%, -50%);
+}
+[data-sonner-toast].miel-toast .miel-toast-close svg {
+  height: 12px;
+  width: 12px;
+  display: block;
+}
+[data-sonner-toast].miel-toast:hover .miel-toast-close,
+[data-sonner-toast].miel-toast .miel-toast-close:focus-visible {
+  opacity: 1;
+}
+[data-sonner-toast].miel-toast .miel-toast-close[data-close-button]:hover {
+  background: rgb(var(--gousse-line) / 0.4);
+  border-color: transparent;
+  color: rgb(var(--gousse-ink));
+}
+/* Reserve the close button's gutter on the text block only — not as card
+   padding, which would leave the full-width action button visibly
+   off-centre. The close pill is 24px + 8px inset, so 1.5rem past the
+   card's own 12px padding clears it with a hair of breathing room. */
+[data-sonner-toast].miel-toast:has(.miel-toast-close) [data-content] {
+  padding-right: 1.5rem;
+}
+
+/* ============================================================
+   SETTINGS PAGE — grouped single-scroll. A sticky group header
+   rides along while its group is in view; a right-edge dot rail
+   jumps between the three groups. Kept here because the rail's
+   active-dot state is awkward to express cleanly in Tailwind.
+   ============================================================ */
+
+/* Sticky group header. It carries no background of its own: the fade-and-blur
+   mask it used to paint was a band the width of the content column, so it read
+   as a dark box drawn over the page rather than as the page showing through.
+   The label and its hairline rule stick on their own. */
+.settings-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+/* Fully-rounded control language for the settings page. Buttons, selects
+   and inputs all become pills. `Button`, `Select` and `Switch` come from
+   gousse-ui, so their radius is overridden here rather than in the
+   component; scoping to `.settings-surface` keeps the pill treatment off
+   the rest of the app. The segmented control opts out — it sets its own
+   radius and is excluded below. */
+.settings-surface :is(button, [role="button"]):not([role="radio"]) {
+  border-radius: 9999px;
+}
+
+.settings-surface :is(select, input, textarea) {
+  border-radius: 9999px;
+}
+
+/* Same pill treatment for the Create/Dismiss actions inside the
+   "Proposed by AI" card (SuggestedFilterRow). The gousse-ui
+   `Button` owns its own radius, so it's overridden here by scope rather
+   than at the component. Scoped to the action cluster, not the whole
+   card, so the label badge's own radius is left alone. A pill eats its
+   horizontal padding at the ends, hence the wider inline padding
+   (DESIGN.md §3). */
+.filter-row-actions :is(button, [role="button"]) {
+  border-radius: 9999px;
+  padding-inline: 0.875rem;
+}
+
+/* And again for the onboarding gate's single "Connect with Google" action —
+   same reason (gousse-ui `Button` owns its radius), same pill + wider inline
+   padding as everywhere else. */
+.onboarding-gate :is(button, [role="button"]) {
+  border-radius: 9999px;
+  padding-inline: 1.125rem;
+}
+
+/* A native select is painted by the OS, which ignores border-radius —
+   so the pill only lands once the native appearance is dropped. That
+   also removes the built-in arrow, hence the inline-SVG chevron and the
+   right padding that keeps the label clear of it. `currentColor` can't
+   be used in a url(), so the chevron is drawn in the muted token's
+   literal rgb and the two themes swap it below. */
+.settings-surface select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-inline: 0.875rem 2rem;
+}
+
+.dark .settings-surface select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* ---------------------------------------------------------------------------
+   Inbox category subgroups (the "tinted header + tinted body" of
+   design/message-row-proposals).
+
+   Each group sets one custom property — `--hue`, the `hue` field of
+   `components/systemLabels.ts`, the same triplet the sidebar rows drive their
+   tint from — and every surface below derives from it. Adding a category is one
+   declaration in that table and nothing here.
+
+   Only three alphas separate light from dark, so the recipe is written once.
+   The tint alone carries the identity: the header at 10–14% and the run of rows
+   under it at 3–4.5%, enough that the eye reads a band without the wash ever
+   competing with the text on top of it.
+   --------------------------------------------------------------------------- */
+.category-group {
+  --hue: var(--gousse-muted);
+  --tint-head: 0.1;
+  --tint-body: 0.028;
+  --tint-text: 0.82;
+}
+
+.dark .category-group {
+  --tint-head: 0.14;
+  --tint-body: 0.045;
+  --tint-text: 1;
+}
+
+.category-group-header {
+  background: rgb(var(--hue) / var(--tint-head));
+}
+
+/* The heading's text-coloured parts: the chevron, the name and the count all
+   read in the category's own hue, so the band is identifiable from any one of
+   them. Lucide icons paint in `currentColor`, so setting `color` is enough. */
+.category-group-ink {
+  color: rgb(var(--hue) / var(--tint-text));
+}
+
+.category-group-count {
+  background: rgb(var(--hue) / 0.18);
+}
+
+.category-group-glyph {
+  color: rgb(var(--hue));
+}
+
+.category-group-body {
+  background: rgb(var(--hue) / var(--tint-body));
+}
+
+/* The row's hover is the category's, not a neutral grey: the band it belongs to
+   stays legible while the pointer is inside it. Painted on the row wrapper so a
+   row keeps one hover rule wherever it is mounted. */
+.category-group-body .message-row:hover {
+  background: rgb(var(--hue) / 0.07);
+}
+
+/* The two tinted surfaces above, flattened into opaque colours so the
+   row-actions overlay can paint the exact colour the row already is.
+
+   `color-mix` composites the tint over the page background the same way the
+   browser does when it paints `rgb(hue / a)` on top of `rgb(bg)`. Tailwind 4
+   already requires the browsers that shipped `color-mix` (Chrome 111, Safari
+   16.4), so there is no fallback to carry.
+
+   The hover surface is the two tint layers at once: over the same backdrop,
+   `--tint-body` under 7% hue composites to `1 - (1 - tint-body) * (1 - 0.07)`,
+   which is why it is one mix and not a mix of a mix. */
+.category-group-body {
+  --tint-hover-total: calc(1 - (1 - var(--tint-body)) * (1 - 0.07));
+
+  --tinted-body: color-mix(
+    in srgb,
+    rgb(var(--hue)) calc(var(--tint-body) * 100%),
+    rgb(var(--gousse-bg))
+  );
+
+  --tinted-hover: color-mix(
+    in srgb,
+    rgb(var(--hue)) calc(var(--tint-hover-total) * 100%),
+    rgb(var(--gousse-bg))
+  );
+}
+
+/* --------------------------------------------------------------------------
+   The surface a row's hover actions are painted over.
+
+   `MessageActions`' row variant is an overlay: it fades in on top of the
+   subject and sender and needs an opaque backing, or the text runs underneath
+   the icons. That backing has to be *the colour the row actually is*, and a row
+   is no longer the page background — it sits on `.category-group-body`'s tint,
+   with the hover tint over that, and the two are alpha-composited over
+   `--gousse-bg`. So the colour is published here, next to the rules that make
+   it, rather than hardcoded in the component.
+
+   It is a finished colour rather than this repo's usual bare `R G B` triplet,
+   because the two tinted values are produced by `color-mix`, which has no
+   triplet form. The overlay therefore fades to the `transparent` keyword: that
+   is `rgba(0, 0, 0, 0)`, so the ramp technically passes through grey — but only
+   at the far tail, where the gradient is already almost fully transparent, and
+   the alternative costs six per-channel custom properties per category.
+
+   Kept as three declarations mirroring the three surfaces above. A category
+   whose tints change updates the backing with them, because both read the same
+   `--hue` and the same alphas.
+   -------------------------------------------------------------------------- */
+.message-row {
+  --row-surface: rgb(var(--gousse-bg));
+}
+
+.category-group-body .message-row {
+  --row-surface: var(--tinted-body);
+}
+
+.category-group-body .message-row:hover {
+  --row-surface: var(--tinted-hover);
+}
+
+/* The heading is 8px of padding around a 16px glyph — T1's height — so the
+   actions in it cannot be the 32px *tall* targets they are in a section header,
+   which would set the row's height instead and make every band taller than the
+   design. They are pointer-only here (hidden below `sm`, where the bulk bar is
+   how a touch device acts in bulk), so the shorter target costs nothing.
+
+   The width stays 32px, and that is not a leftover: three strips of these
+   actions are on screen at once — the section header above the card, this band
+   heading inside it and a row's own on hover — and read/archive/delete are the
+   three they share, right-aligned so they line up in columns. A column is the
+   button's width plus the 4px gap, so shrinking the width here to match the
+   height would give this strip a 28px pitch against the others' 36px and pull
+   every one of its icons off the column its neighbours sit in. Only the height
+   is the band's business. */
+.category-group-actions button {
+  height: 1.5rem;
+  width: 2rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The suggestion edge (design/label-suggestion-edge-proposals, Treatment 1).
+
+   The trigger for a row's label suggestions is an 18px disc carrying a single
+   `+`, ringed by a 1px rainbow. Kept here rather than in Tailwind for the
+   reason `.filter-proposals-card` above is: a gradient border with a radius is
+   a padding box with the panel painted on the inner element, which is not a
+   utility.
+
+   The animation is the part with a history. `effects.css`'s `.gousse-rainbow-glow`
+   rotates an oversized square `::before` behind a blurred, clipped frame, which
+   works there because the blur hides the corners. At 18px with a crisp 1px edge
+   it does not: the square's corners sweep out past the radius and the ring
+   reads as a spinning blob. So nothing rotates here — `--ang` is a registered
+   custom property, so the conic gradient's own *angle* is what animates, and
+   the outline is exactly 1px at every frame.
+   --------------------------------------------------------------------------- */
+@property --ang {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.suggestion-edge {
+  --ang: 0deg;
+  display: inline-flex;
+  padding: 1px;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from var(--ang),
+    #ff6b6b,
+    #ffa94d,
+    #ffd43b,
+    #69db7c,
+    #38d9a9,
+    #4dabf7,
+    #748ffc,
+    #9775fa,
+    #f06595,
+    #ff6b6b
+  );
+}
+
+/* Spun where the eye already is: the row under the pointer, the button itself,
+   and — while the panel is up — the row being acted on, so it stays marked with
+   the pointer down inside the popover. */
+.message-row:hover .suggestion-edge,
+.suggestion-edge:hover,
+.suggestion-edge:focus-within,
+.suggestion-edge[data-open="true"] {
+  animation: suggestionEdgeSpin 7s linear infinite;
+}
+
+@keyframes suggestionEdgeSpin {
+  to {
+    --ang: 360deg;
+  }
+}
+
+/* Without `@property` the angle is not an animatable type, so the keyframe
+   would step rather than sweep. Sit still instead of stuttering. */
+@supports not (background: conic-gradient(from var(--ang), red, blue)) {
+  .message-row:hover .suggestion-edge,
+  .suggestion-edge:hover,
+  .suggestion-edge:focus-within,
+  .suggestion-edge[data-open="true"] {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Alive but slowed right down, like the rainbow glow beside it. */
+  .message-row:hover .suggestion-edge,
+  .suggestion-edge:hover,
+  .suggestion-edge:focus-within,
+  .suggestion-edge[data-open="true"] {
+    animation-duration: 40s;
+  }
+}
+
+/* The face. At rest it is the panel colour, so the rainbow reads as a hairline
+   ring around an accent `+`; hovered or open it drops to transparent and the
+   host's gradient becomes the whole disc. "Transparent face" and "gradient
+   disc" are therefore the same 1px of padding — nothing is drawn twice and the
+   geometry never changes. */
+.suggestion-face {
+  background: rgb(var(--gousse-panel));
+  transition:
+    background-color 0.14s ease,
+    transform 0.1s ease;
+}
+
+.suggestion-face:hover,
+.suggestion-face:focus-visible,
+.suggestion-edge[data-open="true"] .suggestion-face {
+  background: transparent;
+}
+
+.suggestion-face:hover svg,
+.suggestion-face:focus-visible svg,
+.suggestion-edge[data-open="true"] .suggestion-face svg {
+  color: #fff;
+  /* The spectrum runs through yellow, where white alone is thin. A hairline of
+     shadow under the stroke keeps the glyph readable across every hue the
+     rotation passes through, in both themes. */
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.45));
+}
+
+/* The disc is 18px of *visible* glyph; the target around it is 40px, as an
+   invisible centred overlay rather than padding — padding would grow the ring
+   itself, and the ring's size is what lets the trigger sit in the label group
+   (DESIGN.md §5: extend the hit area, never shrink the target). The row behind
+   it opens the message, so the overlay must not spill onto the neighbouring
+   label: 40px centred on an 18px disc reaches 11px past each edge, which the
+   group's 4px gap and the row's own padding absorb.
+
+   Below `sm` the row is a tap target in its own right and the labels wrap onto
+   its second line, where an overlay this size would cover the subject beside
+   it. There the disc keeps the row's tap area and no overlay is drawn. */
+@media (min-width: 40rem) {
+  .suggestion-face::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    height: 40px;
+    width: 40px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* A disabled trigger is a request in flight, not a dead control: hold the
+   resting face so the ring does not flash to a filled disc mid-mutation. */
+.suggestion-face:disabled,
+.suggestion-face:disabled:hover {
+  background: rgb(var(--gousse-panel));
+}
+
+.suggestion-face:disabled svg {
+  color: rgb(var(--gousse-accent));
+  filter: none;
+}

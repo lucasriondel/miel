@@ -1,0 +1,26 @@
+node_modules
+.turbo
+# A rule of its own, because `.turbo` matches that name and nothing else: the
+# cache directory a `--cache-dir` run writes was covered by no rule, and forty-two
+# of its files were committed before anyone noticed. See issue #121.
+.turbo-cache/
+dist
+.next
+out
+*.log
+.env
+.env.local
+.DS_Store
+bun.lockb
+.dokploy.yml
+
+# The maintainer's AFK agent-loop tooling: how this project gets worked on,
+# not part of it. Lives on one machine; see issue #101.
+.sandcastle/
+
+# Scratch captures from a real, signed-in browser: they show the account
+# switcher, the label tree and whatever is in the inbox at the time. Ten of them
+# were committed in the initial commit and had to be purged from history. The
+# screenshots that ship are `docs/miel-*.webp`, taken against the seeded demo
+# stack (see .claude/skills/demo-screenshots) and safe to publish.
+.tmp-screenshots/

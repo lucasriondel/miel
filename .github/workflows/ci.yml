@@ -1,0 +1,88 @@
+# The repo's CI gate (#98, extended by #103). Every check is its own step so a
+# failure names itself in the job log rather than hiding behind the one after it.
+#
+# Two jobs, because they wait on different things. `checks` is the static gate —
+# lint, format:check, typecheck — and answers in about a minute. `tests` runs the
+# suite, and @miel/core and @miel/api talk to a real database, so that job brings
+# up a Postgres service container and points DATABASE_URL at it. Splitting them
+# keeps the fast feedback from queueing behind the slow.
+name: CI
+
+on:
+  pull_request:
+
+# A second push to the same PR makes the run in flight irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: lint / format / typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Matches `packageManager` in the root package.json.
+          bun-version: 1.3.4
+
+      # Every dependency resolves from a public registry, so there is no auth
+      # step here; --frozen-lockfile makes CI fail rather than silently resolve
+      # a tree the lockfile does not describe.
+      - run: bun install --frozen-lockfile
+
+      - run: bun run lint
+      - run: bun run format:check
+      - run: bun run typecheck
+
+  tests:
+    name: test
+    runs-on: ubuntu-latest
+
+    services:
+      # postgres:16 — the same major docker-compose.dev.yml runs locally and the
+      # per-package scripts pull, so CI is not testing against a different engine
+      # than anyone develops on. No volume is mounted: the container and its data
+      # go away with the runner.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: miel
+          POSTGRES_PASSWORD: miel
+          POSTGRES_DB: miel_test
+        ports:
+          - 5432:5432
+        # Actions starts the service alongside the job, so without a health check
+        # the first step can reach it before it accepts connections.
+        options: >-
+          --health-cmd "pg_isready -U miel -d miel_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Set for the whole job: packages/{core,api}/scripts/test-with-db.sh see a
+      # DATABASE_URL that already names a Postgres and use it instead of starting
+      # a container of their own. Both suites share this database — the rows they
+      # write are scoped to per-file fixtures, and @miel/api's database-backed
+      # test only reads.
+      DATABASE_URL: postgres://miel:miel@localhost:5432/miel_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Matches `packageManager` in the root package.json.
+          bun-version: 1.3.4
+
+      - run: bun install --frozen-lockfile
+
+      # Applied here rather than left to whichever suite reaches the migrator
+      # first: turbo runs the packages' test tasks concurrently.
+      - name: Apply migrations
+        run: bun run packages/core/src/db/migrate.ts
+
+      - run: bun run test

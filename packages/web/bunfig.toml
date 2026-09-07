@@ -1,0 +1,5 @@
+# The DOM harness (#129), loaded before any test file so a suite can render a
+# component and click a button. See src/testing/domHarness.ts for why it is a
+# preload rather than a per-file setup.
+[test]
+preload = ["./src/testing/domHarness.ts"]

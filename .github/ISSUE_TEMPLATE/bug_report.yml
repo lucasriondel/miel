@@ -1,0 +1,42 @@
+# Kept to four fields on purpose (#102): a template long enough to feel like
+# paperwork suppresses the report it was meant to collect.
+name: Bug report
+description: Something in miel does not do what it says it does
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what happened, and what you expected instead.
+      placeholder: |
+        I ran `bun run src/index.ts sync --since 7d` and …
+        I expected …
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The shortest path from a fresh clone to the problem.
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, `bun --version`, and whether you run with `bun dev` or Docker.
+      placeholder: macOS 15, bun 1.3.4, docker compose up
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        Anything relevant from `logs/api.log` or `logs/web.log`.
+        Redact tokens, message contents and email addresses first.
+      render: shell

@@ -1,0 +1,15 @@
+**/node_modules
+**/.turbo
+# Same blind spot as .gitignore's, for the same reason (#121): `.turbo` matches
+# that name and nothing else, so a `--cache-dir` run's tarballs were being sent
+# to the daemon as build context.
+**/.turbo-cache
+**/dist
+**/.next
+**/*.log
+**/.env
+**/.env.local
+.git
+.DS_Store
+.vscode
+.idea

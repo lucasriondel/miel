@@ -1,0 +1,7 @@
+{
+  "apps": {
+    "packages/web": { "name": "miel", "script": "dev:app" },
+    "packages/api": { "name": "api.miel", "script": "dev:app", "appPort": 5531 },
+    "packages/landing-page": { "name": "landing.miel", "script": "dev:app" }
+  }
+}
