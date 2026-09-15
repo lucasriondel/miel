@@ -871,6 +871,43 @@ first, so "no row yet" would pass with no database behind it; `mock.restore()`
 does not undo a module mock. It rejoins the sweep when those aggregates have
 stores too.
 
+`.proctest.ts` is the mirror of that, and the two are one arrangement rather
+than two. A `.dbtest.ts` must reach a module the other suites fake; a
+`.proctest.ts` fakes a module the other suites must reach. Both are named so
+bun's `*.test.ts` glob does not collect them, and `scripts/test-with-db.sh`
+runs each by path afterwards. There are two: `google/gmailAdapter.proctest.ts`
+fakes `./contracts`, where every Gmail Effect tag lives, and
+`google/GoogleAuth.proctest.ts` fakes `google-auth-library`, which
+`oauthClient.test.ts` needs real. Both mocks are what those suites are *for* —
+the adapter's contract is which Effects it builds, which is exactly what marker
+objects make assertable — so the fix was the process, not dropping them.
+
+What that cost before it was noticed is the reason to keep it: `gmailAdapter`
+carried an `afterAll(() => mock.restore())` under a comment promising its mocks
+would not leak, and they leaked anyway, because `mock.restore()` does not undo
+a module mock. Every google suite loaded after it got markers where it expected
+Effects, so `GmailMessages`, `GmailThreads`, `GmailLabels` and `GmailModify`
+failed on an `Exit` that could not succeed — around twenty failures that moved
+with the file order and belonged to no suite that was failing. CI runs on
+`pull_request` only, so `main` never ran the suite and the first PR after it
+landed wore the red.
+
+The failure mode the naming introduces is the opposite one, and
+`src/testIsolation.test.ts` is the guard: a file the sweep does not collect and
+the script does not name runs *nowhere*, and nothing says so — it does not fail,
+it disappears. So the two lists are checked against each other, in both
+directions, and the guard asserts it is matching something rather than passing
+over an empty glob.
+
+Env is the third way a suite can own the process, and it does not look like a
+mock: `getEnv()` memoises the whole environment on its first call anywhere, so a
+`process.env.X = …` at the top of a test file reaches `getEnv()` only if that
+file happens to run first. `claude/prompts.test.ts` asserted a literal
+`API_SECRET` that way and failed on whatever ran before it. It reads the value
+back through `getEnv()` now, which is what the prompt builder itself embeds, and
+sets its own default with `??=` so it does not decide the secret for everyone
+else.
+
 ## The app shell
 
 The frame around every page is gousse's `app-shell` registry item, composed once

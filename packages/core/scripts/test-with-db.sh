@@ -151,4 +151,18 @@ else
   # still fake the client have stores of their own, this can rejoin the sweep.
   echo "▸ running the Postgres store adapters (own process)"
   run_bounded bun test ./src/stores/postgres.dbtest.ts
+
+  # The mirror case, and named `.proctest.ts` so the sweep does not collect
+  # these either. A `mock.module` is process-global and `mock.restore()` does
+  # not undo it, so a suite that fakes a module the *other* suites need real
+  # owns it for every file loaded after — silently, and in an order that moves
+  # with the file list, which is why this surfaced as failures in four suites
+  # that had nothing wrong with them. `gmailAdapter` fakes `./contracts`, where
+  # every Gmail Effect tag lives; `GoogleAuth` fakes `google-auth-library`,
+  # which `oauthClient.test.ts` needs real. Each file gets its own process, so
+  # its mocks can only reach itself. See the header of each for the detail.
+  for proc_suite in ./src/google/gmailAdapter.proctest.ts ./src/google/GoogleAuth.proctest.ts; do
+    echo "▸ running $proc_suite (own process)"
+    run_bounded bun test "$proc_suite"
+  done
 fi

@@ -1,8 +1,26 @@
-import { describe, test, expect, mock, afterAll } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 
-// Restore the process-global ./contracts + ./runtime mocks after this suite so
-// they don't leak into other tests.
-afterAll(() => mock.restore());
+// ── why this file is `.proctest.ts` ──────────────────────────────────────────
+// It runs in a process of its own, by path, after the `bun test ./src` sweep —
+// the arrangement `stores/postgres.dbtest.ts` already uses, and for the mirror
+// of its reason. That one must reach a module every other suite fakes; this one
+// fakes a module every other suite must reach.
+//
+// The two mocks below are the whole of it. `./contracts` is where every Gmail
+// Effect tag lives, so faking it replaces `GmailMessages.search` and its
+// siblings with plain marker objects — and a module mock is process-global,
+// with no way to take it back. `mock.restore()` does not undo one: this file
+// used to call it in an `afterAll` under a comment promising the mocks would
+// not leak, and they leaked anyway. Every google suite bun loaded afterwards
+// got markers where it expected Effects, so `GmailMessages`, `GmailThreads`,
+// `GmailLabels` and `GmailModify` all failed on an `Exit` that could not
+// succeed — 20 failures that moved around with the file order and belonged to
+// no suite that was failing.
+//
+// The mocks are what this suite is *for*, so the fix is not to drop them: the
+// adapter's contract is which Effects it builds and in what order, which is
+// exactly what markers make assertable. Keeping them costs one extra bun
+// process, and nothing has to remember to clean up after itself.
 
 // gmailAdapter.sendReply must fetch the original message first to learn its
 // threadId + Message-ID header, then send the reply with those so it threads

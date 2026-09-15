@@ -9,11 +9,21 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 
 process.env.DATABASE_URL ??= "postgres://test:test@localhost/test";
-process.env.API_SECRET = "top-secret-bearer-token";
-process.env.API_PORT = "3001";
+// `??=`, not `=`, and read back through `getEnv()` below rather than asserted as
+// a literal. `getEnv()` memoises the whole environment on its first call
+// *anywhere in the process*, so a suite that ran earlier may already have frozen
+// `API_SECRET` at its own value — assigning here would not reach `prompts.ts`,
+// and the literal assertion this file used to make failed on whatever ran first
+// rather than on anything being wrong with the prompts.
+process.env.API_SECRET ??= "top-secret-bearer-token";
+process.env.API_PORT ??= "3001";
 
 const { buildHostedTriagePrompt, buildTriagePrompt } = await import("./prompts");
+import { getEnv } from "../env";
 import type { TriageInputT } from "../schemas/triage";
+
+/** The secret `prompts.ts` itself embeds — whoever won the `getEnv()` race. */
+const API_SECRET = getEnv().API_SECRET;
 
 const INPUT: TriageInputT = {
   account: "user@example.com",
@@ -58,8 +68,9 @@ describe("buildHostedTriagePrompt", () => {
   });
 
   test("does not send API_SECRET to a third-party API", () => {
-    expect(cli).toContain("top-secret-bearer-token");
-    expect(hosted).not.toContain("top-secret-bearer-token");
+    expect(API_SECRET.length).toBeGreaterThan(0);
+    expect(cli).toContain(API_SECRET);
+    expect(hosted).not.toContain(API_SECRET);
   });
 
   test("keeps every rule the CLI variant states", () => {
