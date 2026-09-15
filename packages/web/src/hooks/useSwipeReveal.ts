@@ -12,6 +12,16 @@ interface Options {
 interface SwipeReveal {
   revealed: boolean;
   close: () => void;
+  /**
+   * True when the gesture that just ended was a horizontal swipe, and therefore
+   * when the `click` the browser synthesizes after it should be ignored.
+   *
+   * A touch that never scrolls the page still produces a click on whatever was
+   * under the finger, so a row whose whole width is one control — the category
+   * heading, which is its own collapse toggle — would act on every swipe. The
+   * flag is cleared by the next `touchstart`, so a plain tap is never eaten.
+   */
+  swiped: () => boolean;
   handlers: {
     onTouchStart: (e: ReactTouchEvent) => void;
     onTouchMove: (e: ReactTouchEvent) => void;
@@ -34,6 +44,7 @@ export function useSwipeReveal({
   const [revealed, setRevealed] = useState(false);
   const start = useRef<{ x: number; y: number } | null>(null);
   const axis = useRef<"undecided" | "horizontal" | "vertical">("undecided");
+  const horizontal = useRef(false);
 
   const onTouchStart = useCallback(
     (e: ReactTouchEvent) => {
@@ -42,6 +53,7 @@ export function useSwipeReveal({
       if (!t) return;
       start.current = { x: t.clientX, y: t.clientY };
       axis.current = "undecided";
+      horizontal.current = false;
     },
     [enabled],
   );
@@ -57,6 +69,7 @@ export function useSwipeReveal({
       if (axis.current === "undecided") {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
         axis.current = Math.abs(dx) > Math.abs(dy) * directionRatio ? "horizontal" : "vertical";
+        if (axis.current === "horizontal") horizontal.current = true;
       }
       if (axis.current !== "horizontal") return;
 
@@ -73,5 +86,7 @@ export function useSwipeReveal({
 
   const close = useCallback(() => setRevealed(false), []);
 
-  return { revealed, close, handlers: { onTouchStart, onTouchMove, onTouchEnd } };
+  const swiped = useCallback(() => horizontal.current, []);
+
+  return { revealed, close, swiped, handlers: { onTouchStart, onTouchMove, onTouchEnd } };
 }

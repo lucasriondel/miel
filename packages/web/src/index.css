@@ -407,6 +407,17 @@ body {
 
 .category-group-header {
   background: rgb(var(--hue) / var(--tint-head));
+
+  /* The same tint, flattened to an opaque colour, for the swipe-revealed action
+     strip below `sm` to paint over the sender run it slides across — the row
+     overlay's `--row-surface` trick, applied to the heading's own surface. The
+     heading sits on the section card, so this composites over `--gousse-panel`
+     rather than the page background. */
+  --head-surface: color-mix(
+    in srgb,
+    rgb(var(--hue)) calc(var(--tint-head) * 100%),
+    rgb(var(--gousse-panel))
+  );
 }
 
 /* The heading's text-coloured parts: the chevron, the name and the count all
@@ -499,8 +510,13 @@ body {
 /* The heading is 8px of padding around a 16px glyph — T1's height — so the
    actions in it cannot be the 32px *tall* targets they are in a section header,
    which would set the row's height instead and make every band taller than the
-   design. They are pointer-only here (hidden below `sm`, where the bulk bar is
-   how a touch device acts in bulk), so the shorter target costs nothing.
+   design. This cell is the pointer's — it is in flow, and a hover is what
+   reveals it — so the shorter target costs nothing.
+
+   Below `sm` there is no such cell: the strip is swiped for and drawn out of
+   flow, where a full 32px target sets nothing's height. Hence the rule is not
+   this class's alone — `.category-group-actions` is the desktop cell, and the
+   mobile overlay is deliberately not a member of it.
 
    The width stays 32px, and that is not a leftover: three strips of these
    actions are on screen at once — the section header above the card, this band

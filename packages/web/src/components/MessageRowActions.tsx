@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { MessageActions } from "./MessageActions";
+import { useDismissOnOutsideGesture } from "../hooks/useDismissOnOutsideGesture";
 import type { Priority } from "../api/types";
 
 interface Props {
@@ -28,21 +28,7 @@ interface Props {
  * scroll.
  */
 export const MessageRowActions = ({ isMobile, revealed, onClose, ...actions }: Props) => {
-  useEffect(() => {
-    if (!isMobile || !revealed) return;
-    const dismiss = () => onClose();
-    // Any tap/scroll outside the freshly-revealed actions dismisses them.
-    // Defer so the swipe's own touchend doesn't immediately close it.
-    const id = window.setTimeout(() => {
-      document.addEventListener("pointerdown", dismiss);
-      window.addEventListener("scroll", dismiss, { passive: true });
-    }, 0);
-    return () => {
-      window.clearTimeout(id);
-      document.removeEventListener("pointerdown", dismiss);
-      window.removeEventListener("scroll", dismiss);
-    };
-  }, [isMobile, revealed, onClose]);
+  useDismissOnOutsideGesture(isMobile && revealed, onClose);
 
   if (!isMobile) {
     return <MessageActions {...actions} variant="row" />;
