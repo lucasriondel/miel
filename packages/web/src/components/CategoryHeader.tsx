@@ -1,10 +1,11 @@
 import type { CSSProperties } from "react";
 import { ChevronDown } from "lucide-react";
 import type { ListedMessage } from "../api/types";
-import { CategorySelectButton } from "../features/select/CategorySelectButton";
+import { CategoryHeaderActions } from "./CategoryHeaderActions";
 import { CategorySenderRun } from "./CategorySenderRun";
-import { SectionActions } from "./SectionActions";
 import { getSystemLabelMeta } from "./systemLabels";
+import { useIsMobile } from "../hooks/useMediaQuery";
+import { useSwipeReveal } from "../hooks/useSwipeReveal";
 import type { CategoryName } from "../pages/categoryGroups";
 
 interface Props {
@@ -29,6 +30,14 @@ interface Props {
  * the browser resolves it by ignoring one of them — so they sit in a sibling
  * cell and stop the click from reaching the toggle.
  *
+ * Below `sm` that cell is swiped for rather than hovered, the way a message
+ * row's is: the heading is the gesture's surface, and `CategoryHeaderActions`
+ * draws the strip over its right edge. That makes the heading both a control
+ * and a swipe target, and the one thing it costs is guarded here — a horizontal
+ * swipe that never scrolls the page still synthesizes a `click` on the finger's
+ * element, which on a heading that *is* its own toggle would collapse the band
+ * on every reveal. `swiped()` is what the toggle checks before acting.
+ *
  * `Primary` appears here and nowhere else (req. 3): as a heading it names
  * the band, which is the one place saying it is worth the room.
  */
@@ -51,16 +60,27 @@ export const CategoryHeader = ({
   // quietest band, which is right for the group most messages land in.
   const style = meta?.hue ? ({ "--hue": meta.hue } as CSSProperties) : undefined;
 
+  const isMobile = useIsMobile();
+  const { revealed, close, swiped, handlers } = useSwipeReveal({ enabled: isMobile });
+
   return (
     <div
       style={style}
+      {...(isMobile ? handlers : {})}
       // `pr-4` matches a message row's own `px-4`, so this header's actions and
-      // the row actions below it end on the same right edge.
-      className="category-group-header flex items-center gap-2 py-2 pl-3 pr-4 sm:gap-2.5"
+      // the row actions below it end on the same right edge. `relative` is the
+      // mobile strip's containing block — it is an overlay, so the heading keeps
+      // its height whether or not the strip is out.
+      className="category-group-header relative flex items-center gap-2 py-2 pl-3 pr-4 sm:gap-2.5"
     >
       <button
         type="button"
-        onClick={onToggle}
+        onClick={() => {
+          // The click the swipe synthesized, not a tap: acting on it would
+          // collapse the band the user was only reaching into.
+          if (swiped()) return;
+          onToggle();
+        }}
         aria-expanded={!collapsed}
         // Named explicitly rather than by its contents: the heading holds a
         // count and, while collapsed, a run of senders, so the text inside it
@@ -89,20 +109,17 @@ export const CategoryHeader = ({
             in its rows, so repeating them above would be noise. */}
         {collapsed ? <CategorySenderRun senders={senders} /> : null}
       </button>
-      {/* A reserved cell, like the row's end (req. 9): the actions fade in on
-          hover of the group rather than being mounted by it, so nothing in the
-          heading moves. Below `sm` they are not offered at all — there is no
-          hover there, and the bulk bar is how a touch device acts in bulk. */}
-      <div className="category-group-actions hidden shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/category:opacity-100 sm:flex">
-        <CategorySelectButton
-          category={name.toLowerCase()}
-          accountId={accountId}
-          messages={messages}
-          isSelected={isSelected}
-          onToggleCategory={onToggleCategory}
-        />
-        {!selectMode && <SectionActions messages={messages} scope={`in ${name}`} />}
-      </div>
+      <CategoryHeaderActions
+        name={name}
+        accountId={accountId}
+        messages={messages}
+        selectMode={selectMode}
+        isSelected={isSelected}
+        onToggleCategory={onToggleCategory}
+        isMobile={isMobile}
+        revealed={revealed}
+        onClose={close}
+      />
     </div>
   );
 };

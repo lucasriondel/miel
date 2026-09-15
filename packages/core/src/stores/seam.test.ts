@@ -132,8 +132,13 @@ describe("the in-memory adapter cannot ship", () => {
         out.push({
           path: rel,
           text: readFileSync(path, "utf8"),
-          // The testkit is test-only wholesale; so is anything named as a test.
-          shipped: !rel.startsWith("testkit") && !/\.(test|dbtest)\.ts$/.test(entry.name),
+          // The testkit is test-only wholesale; so is anything named as a test —
+          // all three spellings, since a suite kept out of the `bun test ./src`
+          // sweep is still a test. `.proctest.ts` is the one that fakes a module
+          // the other suites need real (see `scripts/test-with-db.sh`); reading
+          // it as shipping code would make its `testkit/runExit` import look
+          // like production reaching for the in-memory adapter.
+          shipped: !rel.startsWith("testkit") && !/\.(test|dbtest|proctest)\.ts$/.test(entry.name),
         });
       }
     };

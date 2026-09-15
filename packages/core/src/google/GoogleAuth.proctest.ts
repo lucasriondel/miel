@@ -31,6 +31,13 @@ mock.module("../db/client", () => ({
 // ── google-auth-library mock ─────────────────────────────────────────────────
 // oauthClient.ts does `new OAuth2Client({...})`, so this must be a constructor.
 // Each test wires the per-method behaviour the live impl exercises.
+//
+// This is also why the file is `.proctest.ts` — see `gmailAdapter.proctest.ts`
+// for the arrangement. `oauthClient.test.ts` asserts that a real consent URL
+// carries `access_type=offline`, and the fake below answers every call with the
+// constant `?fake=1`. Registered process-wide and un-undoable, it decided what
+// `google-auth-library` meant for that suite too, which read as the consent URL
+// having lost its parameters.
 let getAccessTokenImpl: () => Promise<unknown>;
 let getTokenImpl: () => Promise<{ tokens: Record<string, unknown> }>;
 
