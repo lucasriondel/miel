@@ -29,6 +29,11 @@ const FIELD_CLASS =
  * shop actually said, there is no box for them, and the server refuses a
  * request that names one.
  *
+ * Editable is not the same as clearable, though: the offer and — since #168 —
+ * the code of a row that has one may be corrected but not emptied, which is
+ * `promoDraftIsSavable`'s rule and the wire schema's. So the Save button is
+ * what refuses, in place, rather than a request going out to be turned down.
+ *
  * The account is not a field either — it is where the mail arrived, not a
  * guess — so it stays plain text through the edit.
  */
@@ -40,7 +45,7 @@ export const SavedPromoEditRow = ({ promo, onDone }: Props) => {
     setDraft((current) => ({ ...current, [field]: value }));
 
   const save = () => {
-    if (!promoDraftIsSavable(draft)) return;
+    if (!promoDraftIsSavable(promo, draft)) return;
     const patch = promoPatch(promo, draft);
     // A save that changed nothing costs no request: the answer would be the row
     // as it already is.
@@ -82,7 +87,7 @@ export const SavedPromoEditRow = ({ promo, onDone }: Props) => {
             aria-label="Save changes"
             title="Save changes"
             onClick={save}
-            disabled={!promoDraftIsSavable(draft)}
+            disabled={!promoDraftIsSavable(promo, draft)}
             className="inline-flex items-center gap-1.5 rounded-full border border-gousse-line bg-gousse-panel px-3 py-1 text-xs font-bold text-gousse-ink transition-[background-color,transform] hover:bg-gousse-ink/10 active:scale-[0.97] disabled:opacity-50"
           >
             <Check className="h-3.5 w-3.5" aria-hidden />

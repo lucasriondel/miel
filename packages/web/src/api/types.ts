@@ -274,9 +274,11 @@ export interface SavedPromoMail {
  * Correcting the five extracted fields (#164).
  *
  * A patch: a field this does not name is the field nobody edited, and `null`
- * clears a nullable one — which is what an emptied box means. `discount` is the
- * headline that makes a row a promo at all, so it is the one that cannot be
- * cleared, and the server refuses a request that tries.
+ * clears a nullable one — which is what an emptied box means. Two of them
+ * cannot be cleared and the server refuses a request that tries: `discount`,
+ * the headline that makes a row a promo at all, and `code`, because #166
+ * stopped writing a row without one, so emptying the box would make by hand a
+ * shape the extraction no longer produces (#168). Both stay correctable.
  *
  * The expiry crosses as a calendar day (`YYYY-MM-DD`), never an instant: a
  * promo expires on a date, and the server is what turns the day into the stored
@@ -287,7 +289,7 @@ export interface SavedPromoMail {
  * request naming a field of it is answered 400 rather than quietly stripped.
  */
 export interface PromoFieldsPatch {
-  code?: string | null;
+  code?: string;
   discount?: string;
   terms?: string | null;
   expiresAt?: string | null;

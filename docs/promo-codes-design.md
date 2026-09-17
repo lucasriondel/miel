@@ -108,6 +108,14 @@ build rows through — drops any that comes back anyway. `code` stays nullable
 here so that drop is a *skipped entry* rather than a schema violation, which
 would fail the whole mail and lose the coded offers beside it.
 
+Since nothing code-less is written, the read surfaces stopped explaining one
+(#168). A stored `code` of null is only ever a row from before #166, so the
+suggestion row, the message panel and the saved page draw it with the same dash
+every unstated field gets and offer no copy affordance — no copy anywhere calls
+it a kind of promo. **Those rows are still read, edited and deleted normally:**
+the save trashed the Gmail original, so such a row is very often the only
+surviving copy of that mail.
+
 `merchant` is worth asking for despite the message carrying `fromName`: the
 sender is `newsletter@email.marketing-cloud.zara.com` and a saved promo outlives
 its context, so the page needs a name recognisable at a checkout.
@@ -184,7 +192,9 @@ badge, no second control.
   surface. Already-expired promos are hidden.
 - **Capped at ~6**, the rest reachable on the Promo Codes page.
 - **De-duped by code within the window** — the same `SUMMER25` arriving in three
-  reminder mails shows once.
+  reminder mails shows once. A row with no code is passed through rather than
+  folded, since only a code identifies an offer; that is legacy tolerance and
+  nothing more, because #166 stopped writing such a row.
 - **Renders nothing when empty.** No empty state. An always-present section that
   is usually empty is permanent chrome tax on the inbox.
 
@@ -262,7 +272,10 @@ Per row:
   deliberately slippery marketing prose, and locking any subset means the one
   locked field is the wrong one. This is the escape hatch that makes an
   imperfect extractor acceptable. The message copy stays immutable — that is a
-  record, not a guess.
+  record, not a guess. Two fields may be corrected but not *emptied*: `discount`,
+  the headline that makes a row a promo at all, and `code` (#168), because
+  clearing it would make by hand the shape #166 stopped producing. A legacy row
+  that has no code is still correctable in its other four fields.
 - **View original email** — renders the denormalised `body_html`.
 - **Delete entry.**
 

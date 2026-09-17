@@ -86,12 +86,29 @@ describe("editing the extracted fields", () => {
   });
 
   // The other half of "it is a patch": null is how a nullable field is cleared,
-  // which is what an emptied text box means.
+  // which is what an emptied text box means. The code is not among them — since
+  // #168 it is the second field, after the discount, that may be corrected but
+  // not cleared, and the patch shape is where that stops being expressible.
   test("clears a nullable field named null", async () => {
-    const updated = await edit({ terms: null, code: null });
+    const updated = await edit({ terms: null, merchant: null });
 
-    expect(updated).toMatchObject({ terms: null, code: null });
-    expect(row()).toMatchObject({ terms: null, code: null });
+    expect(updated).toMatchObject({ terms: null, merchant: null });
+    expect(row()).toMatchObject({ terms: null, merchant: null });
+    // Untouched, because clearing it was not on offer.
+    expect(row().code).toBe("WEEKEND20");
+  });
+
+  // A row written before #166, which is the only way one has no code: it is
+  // still a saved promo and still corrigible — the editor above it just cannot
+  // *empty* the code box.
+  test("corrects a legacy row that never had a code", async () => {
+    seed([saved({ code: null })]);
+
+    expect(await edit({ merchant: "Zara Home" })).toMatchObject({
+      code: null,
+      merchant: "Zara Home",
+    });
+    expect(row().code).toBeNull();
   });
 
   test("a patch that names nothing changes nothing", async () => {

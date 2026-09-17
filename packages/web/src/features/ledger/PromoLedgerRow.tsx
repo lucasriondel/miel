@@ -93,17 +93,20 @@ export const PromoLedgerRow = ({ item, onOpenMessage, onDismiss }: Props) => {
           >
             {save.isPending ? <Spinner size={16} /> : <Bookmark className="h-4 w-4" aria-hidden />}
           </LedgerIconButton>
-          <LedgerIconButton
-            label={promo.code === null ? "No code to copy" : copied ? "Copied" : "Copy code"}
-            onClick={handleCopy}
-            disabled={promo.code === null}
-          >
-            {copied ? (
-              <Check className="h-4 w-4 text-gousse-low" aria-hidden />
-            ) : (
-              <Copy className="h-4 w-4" aria-hidden />
-            )}
-          </LedgerIconButton>
+          {/* Only where there is something to take. A row with no code is one
+              written before #166 stopped storing code-less offers, and a copy
+              act disabled beside it would present that as an answer this still
+              gives (#168) — the way `CodeLedgerRow` leaves the icon off a
+              magic link rather than greying it. */}
+          {promo.code !== null && (
+            <LedgerIconButton label={copied ? "Copied" : "Copy code"} onClick={handleCopy}>
+              {copied ? (
+                <Check className="h-4 w-4 text-gousse-low" aria-hidden />
+              ) : (
+                <Copy className="h-4 w-4" aria-hidden />
+              )}
+            </LedgerIconButton>
+          )}
           <LedgerIconButton
             label="Open message"
             onClick={() => onOpenMessage(promo.accountId, promo.gmailMessageId)}

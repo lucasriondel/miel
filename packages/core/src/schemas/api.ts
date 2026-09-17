@@ -85,11 +85,17 @@ export type PromoIdParamsT = z.infer<typeof PromoIdParams>;
  * request does not name is the field nobody edited — and the nullable ones take
  * `null` for "the mail states none", which is what an emptied box means.
  *
- * Two rules are stated here rather than left to the service:
+ * Three rules are stated here rather than left to the service:
  *
  * - **`discount` cannot be cleared.** It is the headline that makes a row a
  *   promo at all, so it is the one field that is not nullable and, when named,
  *   has to say something.
+ * - **`code` cannot be cleared either**, since #168, and for a different
+ *   reason: a promo row is a code someone copies at a checkout, and #166
+ *   stopped writing one without it. Clearing a code would reproduce by hand
+ *   exactly the shape the extraction no longer produces. Correcting one stays
+ *   open — a mistyped code is what an editor is for — and the column stays
+ *   nullable, because the rows written before #166 are kept and still read.
  * - **Nothing but these five may be named.** `.strict()` is what makes "the
  *   saved copy of the mail is not editable" a refusal instead of a silent
  *   no-op: a patch naming `subject` or `bodyHtml` is answered 400, rather than
@@ -101,7 +107,7 @@ export type PromoIdParamsT = z.infer<typeof PromoIdParams>;
  */
 export const UpdatePromoRequest = z
   .object({
-    code: z.string().min(1).nullable().optional(),
+    code: z.string().min(1).optional(),
     discount: z.string().min(1).optional(),
     terms: z.string().min(1).nullable().optional(),
     expiresAt: z.string().date().nullable().optional(),

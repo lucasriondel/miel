@@ -13,10 +13,12 @@ interface Props {
  * one thing that is clickable, through the same chip the Promo Codes page uses
  * — a user reaching for a code aims at the code, wherever the code is drawn.
  *
- * The code-less branch is kept but is no longer reachable from this panel:
- * since #166 an offer that needs no code never becomes a row, so a run whose
- * only offer was one reports "found nothing" instead. The branch still draws
- * the rows written before that, which are the same shape and were not migrated.
+ * A row with no code draws its context and simply no chip. Since #166 an offer
+ * that needs no code never becomes a row — a run whose only offer was one
+ * reports "found nothing" instead — so the only rows that reach it are the ones
+ * written before that, which were not migrated. Tolerating them is the whole of
+ * it: there is no longer a line saying the offer needs no code, because that is
+ * not an answer this panel gives (#168).
  */
 export const PromoCodeRow = ({ promo }: Props) => (
   <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
@@ -30,10 +32,6 @@ export const PromoCodeRow = ({ promo }: Props) => (
         {promoExpiryLabel(promo.expiresAt)}
       </span>
     </div>
-    {promo.code === null ? (
-      <span className="shrink-0 text-xs font-medium text-gousse-muted">No code needed</span>
-    ) : (
-      <CopyPromoCodeButton code={promo.code} />
-    )}
+    {promo.code === null ? null : <CopyPromoCodeButton code={promo.code} />}
   </div>
 );

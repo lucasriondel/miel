@@ -24,9 +24,14 @@ const UNSTATED = "—";
  *
  * Four things a row does, and only one of them changes the promo. Taking the
  * code and reading the mail leave it exactly as it was; correcting the guesses
- * is the edit, and removing it is the delete. Which of the four is missing on a
- * given row is what the mail did not say: an offer needing no code has nothing
- * to copy.
+ * is the edit, and removing it is the delete.
+ *
+ * A row whose code is null is a row written before #166 stopped storing one,
+ * and it is drawn like any other field the mail never stated — the same dash,
+ * no copy affordance and no sentence about offers that need no code (#168).
+ * That is tolerance for what is stored, not a kind of promo this page has: the
+ * save trashed the Gmail original, so the row is very often the only surviving
+ * copy of that mail and nothing here may drop it.
  */
 export const SavedPromoReadRow = ({ promo, onEdit }: Props) => (
   <tr className="border-t border-gousse-line align-top">
@@ -36,9 +41,7 @@ export const SavedPromoReadRow = ({ promo, onEdit }: Props) => (
       {promo.code ? (
         <CopyPromoCodeButton code={promo.code} />
       ) : (
-        // Not an empty cell, and nothing to copy: "no code needed" is something
-        // the mail said.
-        <span className="text-gousse-muted">No code needed</span>
+        <span className="text-gousse-muted">{UNSTATED}</span>
       )}
     </td>
     <td className="px-3 py-2 text-gousse-muted">{promo.terms ?? UNSTATED}</td>

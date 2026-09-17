@@ -377,13 +377,75 @@ describe("taking the code", () => {
     expect(screen.queryByRole("button", { name: /copied/i })).toBeNull();
   });
 
-  // "No code needed, applied at checkout" is something the mail said; there is
-  // nothing to put on a clipboard.
-  test("offers nothing to copy when the offer needs no code", async () => {
+  test("offers nothing to copy when the row carries no code", async () => {
     mountPage({ active: [promo({ code: null })], expired: [] });
 
     await sectionNamed("Active promo codes");
     expect(screen.queryByRole("button", { name: /copy code/i })).toBeNull();
+  });
+});
+
+// Story 45: a row saved before #166 stopped writing code-less promos. The save
+// trashed the Gmail original and Gmail purges its own trash a month later, so
+// this row is very often the only surviving copy of that mail — nothing here
+// deletes it, hides it or breaks its page. What went away (#168) is the *copy*
+// that presented it as a normal kind of promo: the page no longer explains an
+// offer that needs no code, because it no longer produces one.
+describe("a saved row that carries no code", () => {
+  const legacy = () => promo({ code: null });
+
+  test("still renders, with an unstated cell and no claim about the offer", async () => {
+    mountPage({ active: [legacy()], expired: [] });
+
+    const row = rowsOf(await sectionNamed("Active promo codes"))[0]!;
+    expect(row).toContain("Zara");
+    expect(row).toContain("20% off");
+    expect(row).toContain("orders over £50, excl. sale");
+    // The same dash every other field the mail never stated gets — not a
+    // sentence telling the user this offer needs no code.
+    expect(row).toContain("—");
+    expect(screen.queryByText(/no code needed/i)).toBeNull();
+  });
+
+  test("still opens the copy of the mail the save took", async () => {
+    mountPage({ active: [legacy()], expired: [] });
+
+    const section = await sectionNamed("Active promo codes");
+    fireEvent.click(within(section).getByRole("button", { name: /view email/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText(/your 20% weekend/i)).not.toBeNull();
+  });
+
+  // The rule is that a code cannot be *cleared*; a row that never had one is
+  // still corrigible in its other four fields, or it could not be fixed at all.
+  test("is still correctable, and the patch names no code", async () => {
+    mountPage({ active: [legacy()], expired: [] });
+
+    const section = await sectionNamed("Active promo codes");
+    fireEvent.click(within(section).getByRole("button", { name: /edit promo code/i }));
+    type(/merchant/i, "Zara Home");
+    saveEdit();
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({
+      method: "PATCH",
+      path: "/api/promo-codes/promo-1",
+      body: { merchant: "Zara Home" },
+    });
+    await waitFor(() => expect(rowsOf(active()!)[0]).toContain("Zara Home"));
+  });
+
+  test("is still the user's to remove", async () => {
+    mountPage({ active: [legacy()], expired: [] });
+
+    const section = await sectionNamed("Active promo codes");
+    fireEvent.click(within(section).getByRole("button", { name: /delete promo code/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ method: "DELETE", path: "/api/promo-codes/promo-1" });
+    await waitFor(() => expect(screen.queryByText(/no saved promo codes/i)).not.toBeNull());
   });
 });
 
@@ -562,6 +624,27 @@ describe("correcting what the extraction guessed", () => {
 
     expect(sent).toEqual([]);
     expect(screen.getByRole("button", { name: /save changes/i })).toHaveProperty("disabled", true);
+  });
+
+  // The second field that cannot be emptied (#168), and for its own reason: a
+  // promo row is a code someone copies at a checkout, and since #166 none is
+  // written without one — so clearing it would make by hand the shape the
+  // extraction stopped producing. Correcting it is exactly what this is for.
+  test("will not save a code cleared off the row, but takes a corrected one", async () => {
+    mountPage({ active: [promo()], expired: [] });
+    await startEditing();
+
+    type(/code/i, "");
+    saveEdit();
+
+    expect(sent).toEqual([]);
+    expect(screen.getByRole("button", { name: /save changes/i })).toHaveProperty("disabled", true);
+
+    type(/code/i, "SUMMER25");
+    saveEdit();
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]!.body).toEqual({ code: "SUMMER25" });
   });
 
   test("abandons the typing on cancel, asking nothing of the server", async () => {
