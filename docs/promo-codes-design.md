@@ -93,7 +93,7 @@ first-code-wins would silently drop data the model already found.
 
 | field | nullable | notes |
 | --- | --- | --- |
-| `code` | yes | null for "no code needed, applied at checkout" |
+| `code` | yes | nullable in the contract, but a code-less entry is dropped before it becomes a row (#166) |
 | `discount` | no | the badge headline — `20% off` |
 | `terms` | yes | the qualifying rest — `orders over £50, excl. sale` |
 | `expiresAt` | yes | absolute ISO date, or null. **Never guessed.** |
@@ -101,6 +101,12 @@ first-code-wins would silently drop data the model already found.
 
 The `discount` / `terms` split is a stated rule in the prompt, not a judgement
 call left to the model — without one it splits inconsistently.
+
+An offer that needs no code is not a promo row (#166): the prompt says not to
+return one, and `toRows` in `services/promoCodes.ts` — the seam both write paths
+build rows through — drops any that comes back anyway. `code` stays nullable
+here so that drop is a *skipped entry* rather than a schema violation, which
+would fail the whole mail and lose the coded offers beside it.
 
 `merchant` is worth asking for despite the message carrying `fromName`: the
 sender is `newsletter@email.marketing-cloud.zara.com` and a saved promo outlives

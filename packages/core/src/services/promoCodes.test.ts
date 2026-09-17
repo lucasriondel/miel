@@ -159,6 +159,49 @@ describe("extracting promos from the messages a fetch just upserted", () => {
     expect(await suggested(stores)).toEqual([]);
   });
 
+  // A promo row is for a code someone copies at a checkout (#166). An offer that
+  // needs none has nothing to copy, so it never becomes a row — but it is a
+  // *skipped entry*, never a failed extraction: the mail's coded offers still
+  // land.
+  test("drops a code-less entry and keeps the coded ones from the same mail", async () => {
+    const messages = [promotional("m1")];
+    const stores = seed(messages);
+
+    const result = await succeeds(
+      stores,
+      messages,
+      answering(() => [
+        { ...PROMO, code: null, discount: "Free shipping" },
+        PROMO,
+        { ...PROMO, code: "   ", discount: "Free gift" },
+      ]),
+    );
+
+    expect(result.extracted).toBe(1);
+    expect(result.errors).toEqual([]);
+    expect((await suggested(stores)).map((p) => p.code)).toEqual(["WEEKEND20"]);
+  });
+
+  test("writes nothing when every entry the model answered needs no code", async () => {
+    const messages = [promotional("m1")];
+    const stores = seed(messages);
+
+    const result = await succeeds(
+      stores,
+      messages,
+      answering(() => [
+        { ...PROMO, code: null, discount: "Free shipping" },
+        { ...PROMO, code: null, discount: "Free gift over £30" },
+      ]),
+    );
+
+    // Indistinguishable from the model having answered nothing, which is the
+    // point: a code-less answer is skipped, not failed.
+    expect(result.extracted).toBe(0);
+    expect(result.errors).toEqual([]);
+    expect(await suggested(stores)).toEqual([]);
+  });
+
   test("a message the prefilter rejects reaches no model call at all", async () => {
     const messages = [personal("m1")];
     const stores = seed(messages);

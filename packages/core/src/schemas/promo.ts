@@ -35,7 +35,14 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * no feedback loop to tune it against.
  */
 export const ExtractedPromo = z.object({
-  /** The literal code, or null for "no code needed, applied at checkout". */
+  /**
+   * The literal code. Nullable, and deliberately still so after #166: the
+   * service drops a code-less entry before it becomes a row, because a promo
+   * row is a code someone copies at a checkout. Making this non-nullable would
+   * turn "free shipping, applied automatically" into a schema violation, and a
+   * schema violation fails the whole mail — losing the coded offers beside it.
+   * A code-less entry is a skipped entry, never a failed extraction.
+   */
   code: z.string().min(1).nullable(),
   /** The badge headline — `20% off`. */
   discount: z.string().min(1),
