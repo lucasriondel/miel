@@ -133,15 +133,17 @@ describe("the promo codes panel", () => {
 
   // Since #166 the server drops a code-less offer, so this is the row a build
   // from before that left behind rather than an answer this endpoint still
-  // gives: what is pinned is that the row draws without a copy button.
-  test("a row with no code is drawn, with nothing to copy", async () => {
+  // gives: what is pinned is that the row still draws — with nothing to copy
+  // and, since #168, nothing explaining an offer that needs no code, which is
+  // not a kind of promo this produces any more.
+  test("a row with no code is drawn, with nothing to copy and nothing to explain", async () => {
     answer = { promos: [promo({ code: null, discount: "Free shipping" })], found: true };
     renderPanel();
 
     fireEvent.click(findButton());
 
     await screen.findByText("Free shipping");
-    expect(screen.getByText("No code needed")).toBeTruthy();
+    expect(screen.queryByText(/no code needed/i)).toBeNull();
     expect(screen.queryByRole("button", { name: "Copy code" })).toBeNull();
   });
 

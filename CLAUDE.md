@@ -504,9 +504,10 @@ trashed or removed follows it out, which is why `unsaved` joins `messages`.
 Three are the section's: an expired promo is not a suggestion (an unstated
 expiry is not an expired one, and the stored instant is the end of the day, so a
 promo lapsing today is shown for the whole of it), a repeated code is one card
-(deduped *before* the cap, so a shop's third reminder cannot spend a slot;
-code-less offers are never folded, since only a code identifies an offer — a
-rule that now only reaches rows written before #166 stopped storing them), and
+(deduped *before* the cap, so a shop's third reminder cannot spend a slot; a row
+with no code is passed through rather than folded, since only a code identifies
+an offer — legacy tolerance and nothing more, reaching only rows written before
+#166 stopped storing them, and explained to nobody on screen since #168), and
 `MAX_PROMO_SUGGESTIONS` caps it. `now` is a parameter rather than a call to the
 clock, so "expired" is assertable. The Promise facade put the service in
 `stores/seam.test.ts`'s `SEAMED_SERVICES`.
@@ -637,9 +638,10 @@ no flag is set and no timestamp is written — there is no signal anywhere that 
 code was ever redeemed, so a "used" mark would have to be un-marked by hand and
 would lie in the meantime, and checking whether a code still works must not cost
 an edit. The confirmation is local and transient (the label flips to "Copied"),
-which says the one thing that happened. A code-less offer offers nothing to
-copy. A browser that refuses the clipboard raises a toast, so the one click that
-did nothing does not read as one that worked.
+which says the one thing that happened. A row with no code offers nothing to
+copy and says nothing about why — see *Rows written before the code rule* below.
+A browser that refuses the clipboard raises a toast, so the one click that did
+nothing does not read as one that worked.
 
 **View the original** reads the *copy the save took*, never the `messages` row:
 `readSavedPromoMailEffect` answers subject, sender, date and both bodies off the
@@ -676,9 +678,10 @@ and the page is the user's to curate.
 `PATCH /promo-codes/:id` edits **all five** extracted fields, and all five is the
 point rather than a convenience — they are the model's answers on deliberately
 slippery marketing prose, so locking any subset guarantees the locked one is the
-field it got wrong. `UpdatePromoRequest` is where two rules are stated rather
-than left to a service: `discount` is the one field that cannot be cleared (it is
-the headline that makes a row a promo at all), and the schema is `.strict()`, so
+field it got wrong. `UpdatePromoRequest` is where the rules are stated rather
+than left to a service: `discount` cannot be cleared (it is the headline that
+makes a row a promo at all), `code` cannot be cleared either since #168 (see
+below), and the schema is `.strict()`, so
 a patch naming `subject` or `bodyHtml` is **refused** with a 400 rather than
 accepted with the field quietly dropped. That refusal is what makes "the saved
 copy of the mail is not editable" true for a caller instead of only on screen — a
@@ -708,7 +711,7 @@ where a mail arrived is not a guess. `savedPromoDraft.ts` is the pure module
 between the boxes and the request — the draft a row starts from (the stored
 instant read as the UTC day it is the end of, for the reason `promoExpiryLabel`
 is UTC-pinned), the patch naming only what changed, `null` for an emptied box,
-and the one rule that refuses a save before a request leaves.
+and the rules that refuse a save before a request leaves.
 
 Neither mutation is optimistic, unlike every message action beside them, and the
 reason is worth keeping: which of the page's two sections a promo is in is
@@ -720,6 +723,37 @@ said — and a toast is what explains it. The delete asks first, in place, the w
 a filter row does, and here the reason is sharper than "destructive": the save
 trashed the Gmail original and Gmail purges its own trash a month later, so the
 row's copy is very often the only one left anywhere.
+
+## Rows written before the code rule
+
+#166 stopped writing a promo that carries no code; #168 is the read side of the
+same decision. A stored `code` of null is now *only* a row an older build left
+behind, so no surface explains it any more — the affordance and the copy that
+presented it as a normal answer are gone:
+
+- the ledger row draws the same `—` in its value chip that every unstated field
+  gets (`LedgerValueChip` lost its `emptyLabel` prop with the sentence) and
+  offers **no copy act at all**, rather than a disabled one labelled "No code to
+  copy" — the way `CodeLedgerRow` leaves the icon off a magic link;
+- `PromoCodeRow` on the message page draws its context and no chip;
+- `SavedPromoReadRow` puts the table's `UNSTATED` dash in the code cell.
+
+**Nothing hides, drops or breaks such a row**, and that is the constraint the
+whole change is written around: the save trashed the Gmail original, so the row
+is very often the only surviving copy of that mail. It still renders, still
+opens its original-mail dialog, and is still editable and deletable.
+
+The editor is the other half. `code` joins `discount` as a field that may be
+corrected but not **cleared** — in `UpdatePromoRequest` (so a patch naming
+`code: null` is refused 400 rather than stripped), in `PromoFieldsPatch` on both
+sides of the wire (`code?: string`), and in `promoDraftIsSavable`, which for
+that reason now takes the stored promo as well as the draft: the rule is about
+*clearing*, so a legacy row with no code stays correctable in its other four
+fields. Demanding a code there would leave it unfixable without inventing one.
+
+The dedupe in `listPromoSuggestionsEffect` keeps its code-less branch for the
+same reason the renderers keep theirs — those rows exist and are read. It is
+legacy tolerance, not a kind of promo this answers with.
 
 ## The worp integration
 

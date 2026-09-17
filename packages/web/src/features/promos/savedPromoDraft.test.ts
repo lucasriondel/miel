@@ -2,7 +2,8 @@
 //
 // The rules worth pinning are all here, in the one pure module between the five
 // text boxes and the request: a patch names what changed and nothing else, an
-// emptied box clears a nullable field, and the expiry crosses as a calendar day
+// emptied box clears a nullable field — except the code, which since #168 may
+// be corrected but not cleared — and the expiry crosses as a calendar day
 // because a promo expires on a date rather than at an instant.
 import { describe, expect, test } from "bun:test";
 import type { SavedPromo } from "../../api/types";
@@ -86,10 +87,15 @@ describe("the patch a save sends", () => {
   // An emptied box is the user saying the mail states none, which is a value and
   // not an omission.
   test("clears a nullable field emptied", () => {
-    expect(promoPatch(promo(), draftOf({ terms: "", code: "" }))).toEqual({
-      terms: null,
-      code: null,
-    });
+    expect(promoPatch(promo(), draftOf({ terms: "" }))).toEqual({ terms: null });
+  });
+
+  // The code is the exception (#168): nothing code-less is written any more, so
+  // an emptied code box is a mistake rather than "the mail states none". The
+  // save is refused below; the patch never names it either way.
+  test("never clears the code", () => {
+    expect(promoPatch(promo(), draftOf({ code: "" }))).toBeNull();
+    expect(promoPatch(promo(), draftOf({ code: "   ", terms: "" }))).toEqual({ terms: null });
   });
 
   test("says nothing about a field that was empty and stayed empty", () => {
@@ -129,22 +135,44 @@ describe("the patch a save sends", () => {
   });
 });
 
-// The headline is what makes a row a promo at all, so it is the one field of the
-// five that cannot be emptied — refused here, before a request, and refused
-// again by the wire schema.
+// Two of the five cannot be emptied — refused here, before a request, and
+// refused again by the wire schema. The discount is the headline that makes a
+// row a promo at all; the code is what a promo row is *for*, and since #166
+// nothing is written without one, so emptying the box would make by hand the
+// shape the extraction stopped producing.
 describe("what cannot be saved", () => {
   test("a draft with no discount", () => {
-    expect(promoDraftIsSavable({ ...promoDraft(promo()), discount: "" })).toBe(false);
-    expect(promoDraftIsSavable({ ...promoDraft(promo()), discount: "   " })).toBe(false);
+    expect(promoDraftIsSavable(promo(), { ...promoDraft(promo()), discount: "" })).toBe(false);
+    expect(promoDraftIsSavable(promo(), { ...promoDraft(promo()), discount: "   " })).toBe(false);
+  });
+
+  test("a draft that empties the code of a row that has one", () => {
+    expect(promoDraftIsSavable(promo(), { ...promoDraft(promo()), code: "" })).toBe(false);
+    expect(promoDraftIsSavable(promo(), { ...promoDraft(promo()), code: "   " })).toBe(false);
+  });
+
+  // The rule is about *clearing*, so a row written before #166 — the only way
+  // one has no code — stays correctable in its other four fields. Requiring a
+  // code there would mean a legacy row could not be fixed at all without
+  // inventing one.
+  test("but a legacy row with no code is still correctable", () => {
+    const legacy = promo({ code: null });
+
+    expect(promoDraftIsSavable(legacy, { ...promoDraft(legacy), merchant: "Zara Home" })).toBe(
+      true,
+    );
+    expect(promoPatch(legacy, { ...promoDraft(legacy), merchant: "Zara Home" })).toEqual({
+      merchant: "Zara Home",
+    });
   });
 
   test("any draft that still says something", () => {
-    expect(promoDraftIsSavable(promoDraft(promo()))).toBe(true);
-    // The other four may all be empty at once: an offer with no code, no terms,
-    // no stated end and a shop the mail never named is still an offer.
+    expect(promoDraftIsSavable(promo(), promoDraft(promo()))).toBe(true);
+    // The other three may all be empty at once: an offer with no terms, no
+    // stated end and a shop the mail never named is still an offer.
     expect(
-      promoDraftIsSavable({
-        code: "",
+      promoDraftIsSavable(promo(), {
+        code: "WEEKEND20",
         discount: "20% off",
         terms: "",
         expiresAt: "",

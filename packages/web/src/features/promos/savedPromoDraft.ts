@@ -59,8 +59,11 @@ const cleared = (typed: string): string | null => (typed.trim() === "" ? null : 
 export function promoPatch(promo: SavedPromo, draft: PromoDraft): PromoFieldsPatch | null {
   const patch: PromoFieldsPatch = {};
 
-  const code = cleared(draft.code);
-  if (code !== promo.code) patch.code = code;
+  // The code is corrected or left alone, never cleared (#168): an emptied box
+  // is refused by `promoDraftIsSavable` below, and the wire schema refuses one
+  // too, so it must not be able to leave here as `null`.
+  const code = draft.code.trim();
+  if (code !== "" && code !== promo.code) patch.code = code;
 
   const discount = draft.discount.trim();
   if (discount !== promo.discount) patch.discount = discount;
@@ -85,9 +88,16 @@ export function promoPatch(promo: SavedPromo, draft: PromoDraft): PromoFieldsPat
 /**
  * Whether the draft may be saved at all.
  *
- * One rule, and it is the wire schema's too: the discount is the headline that
- * makes a row a promo at all, so it is the one field of the five that cannot be
- * emptied. The other four may all be blank together — an offer with no code, no
- * terms, no stated end and a shop the mail never named is still an offer.
+ * Two rules, and both are the wire schema's too. The discount is the headline
+ * that makes a row a promo at all, so it can never be emptied. The code cannot
+ * be emptied *off a row that has one* (#168): a promo row is a code someone
+ * copies at a checkout, and since #166 none is written without one, so clearing
+ * it would make by hand the shape the extraction stopped producing.
+ *
+ * Why the stored row is an argument rather than the draft alone: the rule is
+ * about clearing, and a row written before #166 — the only way one has no code
+ * — must stay correctable in its other fields. Demanding a code there would
+ * mean a legacy row could not be fixed at all without inventing one.
  */
-export const promoDraftIsSavable = (draft: PromoDraft): boolean => draft.discount.trim() !== "";
+export const promoDraftIsSavable = (promo: SavedPromo, draft: PromoDraft): boolean =>
+  draft.discount.trim() !== "" && (promo.code === null || draft.code.trim() !== "");

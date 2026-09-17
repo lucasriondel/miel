@@ -317,11 +317,12 @@ const stillValid = (row: StoredPromoCode, now: Date): boolean =>
  * gets one entry; the store answers newest mail first, so the one kept is the
  * most recent detection.
  *
- * Only a code identifies an offer, so a promo needing none is never folded into
- * another: two "no code needed" offers are two offers, and there is nothing to
- * compare them by that is not a guess. Since #166 nothing new is stored without
- * a code, so that branch only ever reaches rows written before it — which are
- * kept, because nothing here deletes.
+ * Only a code identifies an offer, so a row that has none is passed through
+ * rather than folded — there is nothing to compare it by that is not a guess.
+ * That branch is **legacy tolerance and nothing more**: since #166 no row is
+ * written without a code, so the only rows it can reach are the ones written
+ * before it, which are kept because nothing here deletes. It is not a kind of
+ * promo this answers with any more, and no surface explains it as one (#168).
  */
 const distinctByCode = (rows: readonly StoredPromoCode[]): StoredPromoCode[] => {
   const seen = new Set<string>();
@@ -666,9 +667,12 @@ export async function savePromo(args: SavePromoArgs): Promise<SavePromoResult> {
  *
  * All five are here, and that is the point rather than a convenience: they are
  * the model's guesses on deliberately slippery marketing prose, so locking any
- * subset guarantees the locked one is the field it got wrong. `discount` is the
- * only one that cannot be cleared — it is the headline that makes the row a
- * promo at all — which is the wire schema's rule, stated there.
+ * subset guarantees the locked one is the field it got wrong. Two of them
+ * cannot be *cleared*, which is the wire schema's rule, stated there:
+ * `discount`, the headline that makes the row a promo at all, and — since #168
+ * — `code`, because #166 stopped writing a row without one and clearing a code
+ * would make by hand the shape the extraction no longer produces. Both may
+ * still be corrected, which is what an editor is for.
  *
  * `expiresAt` crosses as a calendar day (`YYYY-MM-DD`), never an instant. A
  * promo expires on a date; {@link promoExpiryInstant} is what turns the day
@@ -676,7 +680,7 @@ export async function savePromo(args: SavePromoArgs): Promise<SavePromoResult> {
  * through.
  */
 export interface PromoFieldsPatch {
-  code?: string | null;
+  code?: string;
   discount?: string;
   terms?: string | null;
   expiresAt?: string | null;

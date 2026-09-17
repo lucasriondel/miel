@@ -226,20 +226,24 @@ describe("what a promo row carries", () => {
     expect(within(found).getByText(/24/)).not.toBeNull();
   });
 
-  // The offer that needs no code, and the mail that named no deadline: neither
-  // may be shown something the mail never said.
-  test("states no code needed rather than an empty chip, and guesses no date", async () => {
+  // A detection written before #166 stopped storing code-less promos, and a
+  // mail that named no deadline: neither may be shown something the mail never
+  // said — and since #168 neither is explained as a kind of promo this
+  // produces. The row stays readable; the copy about it is gone.
+  test("draws a row with no code as an unstated value, and guesses no date", async () => {
     mountInbox([promo({ code: null, expiresAt: null, terms: null })]);
 
     const found = await shownSection();
-    // The chip stays and says so: vanishing would leave the value column empty
-    // and the row misaligned against the ones above it.
-    expect(within(found).getByText("No code needed")).not.toBeNull();
+    // The chip stays: vanishing would leave the value column empty and the row
+    // misaligned against the ones above it. What it holds is the same dash the
+    // ledger gives every unstated field — here the code and the deadline both —
+    // and not a sentence about offers that need no code.
+    expect(within(found).getAllByText("—")).toHaveLength(2);
+    expect(within(found).queryByText(/no code needed/i)).toBeNull();
     expect(within(found).queryByText("WEEKEND20")).toBeNull();
-    // And the copy act is offered but refused, rather than quietly missing.
-    expect(
-      within(found).getByRole("button", { name: "No code to copy" }).hasAttribute("disabled"),
-    ).toBe(true);
+    // And there is no copy act at all — a disabled one presents "no code" as an
+    // answer this still gives.
+    expect(within(found).queryByRole("button", { name: /copy|no code/i })).toBeNull();
   });
 
   test("falls back to the sender-less case without an empty merchant cell", async () => {

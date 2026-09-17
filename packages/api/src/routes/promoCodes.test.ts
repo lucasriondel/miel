@@ -189,6 +189,16 @@ describe("PATCH /promo-codes/:id", () => {
     expect((await authPatch(`/promo-codes/${PROMO}`, { discount: null })).status).toBe(400);
   });
 
+  // And since #168 the code is the second, for a different reason: nothing
+  // code-less is written any more, so clearing one would produce by hand the
+  // shape the extraction stopped producing. Correcting it stays open — a
+  // mistyped code is exactly what an editor is for.
+  test("refuses a code emptied or cleared, and takes a corrected one", async () => {
+    expect((await authPatch(`/promo-codes/${PROMO}`, { code: "" })).status).toBe(400);
+    expect((await authPatch(`/promo-codes/${PROMO}`, { code: null })).status).toBe(400);
+    expect((await authPatch(`/promo-codes/${PROMO}`, { code: "SUMMER25" })).status).not.toBe(400);
+  });
+
   // A promo expires on a date, never at an instant — the shop that said "ends
   // Sunday" meant the whole of Sunday.
   test("refuses an expiry that is not a calendar day", async () => {
