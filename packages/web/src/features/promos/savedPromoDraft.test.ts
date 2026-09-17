@@ -6,10 +6,10 @@
 // be corrected but not cleared — and the expiry crosses as a calendar day
 // because a promo expires on a date rather than at an instant.
 import { describe, expect, test } from "bun:test";
-import type { SavedPromo } from "../../api/types";
+import type { PromoListing } from "../../api/types";
 import { promoDraft, promoPatch, promoDraftIsSavable } from "./savedPromoDraft";
 
-const promo = (over: Partial<SavedPromo> = {}): SavedPromo => ({
+const promo = (over: Partial<PromoListing> = {}): PromoListing => ({
   id: "promo-1",
   accountId: "acc-1",
   accountEmail: "me@example.com",

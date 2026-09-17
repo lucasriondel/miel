@@ -1,9 +1,9 @@
-import type { SavedPromo } from "../../api/types";
+import type { PromoListing } from "../../api/types";
 import { SavedPromoRow } from "./SavedPromoRow";
 
 interface Props {
   title: string;
-  promos: SavedPromo[];
+  promos: PromoListing[];
   /**
    * The lapsed half. Greyed rather than dropped: an expired promo is never
    * deleted for the user, because the record of what a shop offered is worth

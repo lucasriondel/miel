@@ -512,6 +512,13 @@ an offer — legacy tolerance and nothing more, reaching only rows written befor
 clock, so "expired" is assertable. The Promise facade put the service in
 `stores/seam.test.ts`'s `SEAMED_SERVICES`.
 
+The cap is the one rule with a cost, and #154 paid it: the store answers newest
+mail first, so a heavy week's seventh distinct code would sit unread until the
+six ahead of it were saved or lapsed — a cap with nowhere to overflow into is a
+cap that loses offers. `listSuggestedPromosEffect` is where the rest are (see
+*The Promo Codes page* below): the same read model with the two rules the page
+differs by — no account, no cap — and nothing else re-decided.
+
 `GET /promo-codes` is its own endpoint and `["promo-suggestions", params]` its
 own query key, deliberately not an array widened onto the listed-message
 payload: the two have different lifetimes and invalidation, and that payload is
@@ -526,6 +533,13 @@ archive, trash and the bulk action name it in `alsoInvalidate`
 (`api/mutations.ts`), which is what makes the mailbox rule true on screen rather
 than only on the next read. The save (#161) is where the two keys move together;
 see below.
+
+The page's suggestions (#154) sit under the **same** key root —
+`["promo-suggestions", "all"]` beside `["promo-suggestions", params]` — and that
+is load-bearing rather than tidy. They are one read model, so the optimistic
+removal, which is a `setQueriesData` over the root, takes a card out of both
+lists on the click, and the one `alsoInvalidate` entry re-reads both. Two roots
+would have meant two of each, and the second would have been the one forgotten.
 
 Nothing is reused from the verification-code strip. That strip is browser-side
 regex over subject and snippet with no persistence, which works because an OTP
@@ -606,13 +620,35 @@ suggestions section folds a shop's repeated code into one card because three
 reminder mails are one offer, but two saves are two decisions and the page does
 not overrule either.
 
-`PromoStore.saved()` answers `SavedPromoCode` — the row plus its
-`accountEmail`, joined to `accounts` in both adapters. The email is the store's
-to answer for the reason a listed message carries its account's: the row shape
-is what the seam promises, not the join that produces it, and a caller
+Above those two sits a third, **Suggested** (#154) — every detection nobody has
+acted on, which is the other half of the inbox section's cap and the only place
+the codes past it are reachable. `listSuggestedPromosEffect` is deliberately not
+a variant of `listSavedPromosEffect` but the *suggestions* read with the two
+rules the page differs by: no account, because the page is global, and no cap,
+because hiding a row here would hide it everywhere. Everything else — unsaved
+only, the mailbox rule, unexpired, one row per code, newest mail first — is the
+same server-side answer the inbox gets, decided once. It renders nothing when
+there is nothing suggested, and the page's empty state waits for all three
+sections to be empty: a page with suggestions and no saved rows is not empty, it
+is a page with something to do.
+
+The suggested row shares the saved rows' columns and differs in what it *does*:
+one control, the same save. Each of the other three absences is a rule — there
+is no copy of the mail to view until a save writes one (and the Gmail original
+is still in the inbox), the guesses become corrigible when the user decides to
+keep them, and removing a detection would be a *dismissal*, an act this feature
+does not have. Copying is there, because it changes nothing and trying a code
+must not cost a save.
+
+`PromoStore.unsaved()` and `.saved()` both answer `PromoCodeWithAccount` — the
+row plus its `accountEmail`, joined to `accounts` in both adapters. The email is
+the store's to answer for the reason a listed message carries its account's: the
+row shape is what the seam promises, not the join that produces it, and a caller
 resolving ids against a separate accounts read would be doing this join itself.
 The contract's `PromoWorld.account()` hands back `{ id, email }` for the same
-reason — an adapter that joined *any* account would otherwise pass.
+reason — an adapter that joined *any* account would otherwise pass. On
+`PromoSuggestionFilter` every field is optional and which are named is what tells
+the two callers apart: an account and a window is the inbox, neither is the page.
 
 What the payload deliberately omits is the copy of the mail. The save
 denormalised subject, sender, date and both bodies onto the row so a saved
@@ -623,6 +659,15 @@ original is one promo at a time and gets its own read when it lands.
 `GET /promo-codes/saved` takes no parameters at all, and `["saved-promos"]` is
 its own query key — the page lists exactly what the suggestions no longer do,
 so the two are read at different moments and invalidated by different acts.
+`GET /promo-codes/suggested` is the third read and takes none either, for the
+reason the saved one does. The page therefore makes **two** requests, not one:
+a mail leaving the inbox moves the suggestions and not the saved rows, an edit
+moves the saved rows and not the suggestions, and the save is the one act that
+moves both — which is why it alone names `["saved-promos"]` in `alsoInvalidate`
+beside the suggestions root. Like the page's edit and delete, the save's effect
+on the two saved sections is a re-read rather than a cache write: which section
+a promo lands in is `listSavedPromos`' rule against the server's clock.
+
 `promoCodesPageWiring.test.tsx` renders the page with `fetch` stubbed and
 unseeded requests refused, asserting the order the rows are read in, and mounts
 `App` at the route to show the default-account redirect leaves it alone.
@@ -848,14 +893,14 @@ operations over `app_settings` and `encrypted_secrets`. `MessageStore`,
 list is made of, what Claude said about them, and the label catalogue both
 `services/messages.ts` and `services/apply.ts` attach from. `PromoStore` (#157)
 is `promo_codes`, with the seven operations the promo services will make and no
-more — insert the extractions, read one by id, read an account's unsaved rows
-for a window, read every account's saved ones, mark a row saved with its copy of
-the mail, patch the five extracted fields, delete a row. A store spans more
-than one table where the read model does — a listed message carries its
-account's email and its newest triage's priority, and a suggested promo is
-scoped by its mail's date and stops being suggested when that mail leaves the
-inbox — because the row shape is what the seam promises, not the join that
-produces it.
+more — insert the extractions, read one by id, read the unsaved rows (an
+account's window, or every account's when the filter names neither), read every
+account's saved ones, mark a row saved with its copy of the mail, patch the five
+extracted fields, delete a row. A store spans more than one table where the read
+model does — a listed message carries its account's email and its newest triage's
+priority, and a suggested promo names its mailbox, is scoped by its mail's date
+and stops being suggested when that mail leaves the inbox — because the row shape
+is what the seam promises, not the join that produces it.
 
 The requirement rides in the `R` channel, so it is the *boundary* that answers
 it: the Promise facades call `runWithStores(effect)` (`stores/postgres.ts`),

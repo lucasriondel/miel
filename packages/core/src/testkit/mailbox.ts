@@ -622,19 +622,30 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
         return row ? copyOf(row) : null;
       }),
 
+    // An unnamed account is every account, the way Postgres drops the predicate:
+    // the inbox section names one, the Promo Codes page names none. The account
+    // is joined here too, so a global read names each row's own mailbox.
     unsaved: (filter) =>
       answer(() =>
         data.promos
           .flatMap((p) => {
-            if (p.savedAt !== null || p.accountId !== filter.accountId) return [];
+            if (p.savedAt !== null) return [];
+            if (filter.accountId && p.accountId !== filter.accountId) return [];
             const mail = listableMessage(p);
             if (!mail) return [];
             if (filter.internalDateFrom && mail.internalDate < filter.internalDateFrom) return [];
             if (filter.internalDateTo && mail.internalDate >= filter.internalDateTo) return [];
-            return [{ promo: p, internalDate: mail.internalDate }];
+            const owner = data.accounts.find((a) => a.id === p.accountId);
+            if (!owner) return [];
+            return [
+              {
+                promo: { ...copyOf(p), accountEmail: owner.email },
+                internalDate: mail.internalDate,
+              },
+            ];
           })
           .toSorted((a, b) => b.internalDate.getTime() - a.internalDate.getTime())
-          .map((row) => copyOf(row.promo)),
+          .map((row) => row.promo),
       ),
 
     // The account is joined, not looked up by the caller: a saved row names the

@@ -684,19 +684,25 @@ const promosImpl: PromoStoreImpl = {
       return rows.length > 0 ? rows[0] : null;
     }),
 
-  // The join is the read model, not an optimisation: the window is the mail's
-  // date, and an unsaved detection is only suggested while its mail is one the
-  // inbox is still showing.
+  // The join to `messages` is the read model, not an optimisation: the window is
+  // the mail's date, and an unsaved detection is only suggested while its mail
+  // is one the inbox is still showing. The join to `accounts` is the read model
+  // too — the global read draws the mailbox as a column, so the row names it.
+  //
+  // An unnamed account is every account: the inbox section names one, the Promo
+  // Codes page names none, and the same rules answer both.
   unsaved: (filter) =>
     Effect.gen(function* () {
       const { db } = getDb();
       const conditions: SQL[] = [
         isNull(promoCodes.savedAt),
-        eq(promoCodes.accountId, filter.accountId),
         eq(messages.isArchived, false),
         eq(messages.isTrashed, false),
         isNull(messages.removedAt),
       ];
+      if (filter.accountId) {
+        conditions.push(eq(promoCodes.accountId, filter.accountId));
+      }
       if (filter.internalDateFrom) {
         conditions.push(gte(messages.internalDate, filter.internalDateFrom));
       }
@@ -705,7 +711,7 @@ const promosImpl: PromoStoreImpl = {
       }
       return yield* Effect.promise(() =>
         db
-          .select(PROMO_COLUMNS)
+          .select({ ...PROMO_COLUMNS, accountEmail: accounts.email })
           .from(promoCodes)
           .innerJoin(
             messages,
@@ -714,6 +720,7 @@ const promosImpl: PromoStoreImpl = {
               eq(messages.gmailMessageId, promoCodes.gmailMessageId),
             ),
           )
+          .innerJoin(accounts, eq(accounts.id, promoCodes.accountId))
           .where(and(...conditions))
           .orderBy(desc(messages.internalDate)),
       );

@@ -14,6 +14,7 @@ import type {
   PromoSuggestionsResponse,
   SavedPromoMail,
   SavedPromosPage,
+  SuggestedPromosResponse,
   TriageBatchSettings,
 } from "./types";
 
@@ -31,6 +32,12 @@ export const queryKeys = {
   // Its own root, not a branch of `messages` (#160): saving a promo should not
   // refetch the mail list, and trashing a mail should touch both.
   promoSuggestions: (params: PromoSuggestionsParams) => ["promo-suggestions", params] as const,
+  // The Promo Codes page's half of that same root (#154): every account's
+  // detections, no period and no cap, which is where the ones the inbox
+  // section's six cards left out are reachable. Under the *same* root as the
+  // inbox's on purpose — one read model, so one optimistic removal and one
+  // invalidation reach both lists.
+  allPromoSuggestions: ["promo-suggestions", "all"] as const,
   // The page's own root (#162): it lists what the suggestions no longer do, so
   // the two are read at different moments and invalidated by different acts.
   savedPromos: ["saved-promos"] as const,
@@ -215,6 +222,21 @@ export function usePromoSuggestions(params: PromoSuggestionsParams) {
           internalDateTo: params.internalDateTo,
         },
       }),
+  });
+}
+
+/**
+ * Every account's promo suggestions, for the Promo Codes page (#154).
+ *
+ * The section above the inbox shows six cards so a heavy newsletter week cannot
+ * push the message list off the screen; this is the read where the rest are, and
+ * the only reason a second one exists. No parameters, like the saved read below
+ * it: the page is global and the mailbox is a column on the row.
+ */
+export function useSuggestedPromos() {
+  return useQuery({
+    queryKey: queryKeys.allPromoSuggestions,
+    queryFn: async () => apiFetch<SuggestedPromosResponse>({ path: "/promo-codes/suggested" }),
   });
 }
 

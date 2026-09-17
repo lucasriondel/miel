@@ -241,8 +241,10 @@ export type {
 // The suggestions the inbox section reads (#160), the save that takes one out of
 // it (#161), the saved promos the Promo Codes page lists (#162), the copy of the
 // mail one of them came from (#163), the two acts that make the page the
-// user's — correcting the guesses and removing a row (#164) — and the run one
-// message at a time the detail page asks for (#165).
+// user's — correcting the guesses and removing a row (#164) — the page's own
+// read of every detection, which is where the ones past the inbox's cap are
+// reachable (#154), and the run one message at a time the detail page asks for
+// (#165).
 //
 // That last one is why the sync's own extraction is still absent here: it takes
 // what a fetch just brought in and has no caller outside `sync/fetchPhase`,
@@ -252,6 +254,7 @@ export {
   extractPromosForMessage,
   listPromoSuggestions,
   listSavedPromos,
+  listSuggestedPromos,
   MAX_PROMO_SUGGESTIONS,
   readSavedPromoMail,
   savePromo,
@@ -265,7 +268,7 @@ export type {
   ListSavedPromosArgs,
   PromoFieldsPatch,
   PromoSuggestion,
-  SavedPromo,
+  PromoListing,
   SavedPromoMail,
   SavedPromosPage,
   SavePromoArgs,

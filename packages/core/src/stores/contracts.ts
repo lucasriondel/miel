@@ -422,8 +422,8 @@ export interface StoredPromoCode extends PromoFields {
 }
 
 /**
- * A saved promo, as the Promo Codes page's read model is (#162): the row plus
- * the mailbox it arrived in.
+ * A promo row plus the mailbox it arrived in — what both of the Promo Codes
+ * page's reads answer (#162, #154).
  *
  * The email is the store's to answer for the reason a listed message carries
  * its account's — the row shape is what the seam promises, not the join that
@@ -432,21 +432,28 @@ export interface StoredPromoCode extends PromoFields {
  * be doing this join itself, with one more way to get it wrong. It follows the
  * account: a promo whose account is gone has gone with it.
  */
-export interface SavedPromoCode extends StoredPromoCode {
+export interface PromoCodeWithAccount extends StoredPromoCode {
   accountEmail: string;
 }
 
 /**
- * The suggestions read: one account, one window.
+ * The suggestions read: unsaved detections whose mail is still in the inbox.
  *
- * The window is the *message's* date, not the row's, because the section is
- * scoped to the period the inbox is showing — which is why this read spans two
- * tables. The same join carries the mailbox rule with it: an unsaved detection
- * follows its message, so one whose mail was archived, trashed or removed is not
- * suggested. Saving is the act that makes a promo outlive its mail.
+ * Every field is optional, and which are named is what tells the two callers
+ * apart. The inbox section names an account and a window, because it is showing
+ * the period the list below it is; the Promo Codes page names neither, because
+ * it is global and is where the detections the section's cap left out are
+ * reachable.
+ *
+ * The window is the *message's* date, not the row's, which is why this read
+ * spans two tables. The same join carries the mailbox rule with it whichever
+ * caller asks: an unsaved detection follows its message, so one whose mail was
+ * archived, trashed or removed is not suggested. Saving is the act that makes a
+ * promo outlive its mail.
  */
 export interface PromoSuggestionFilter {
-  accountId: string;
+  /** Absent means every account — the page, rather than one inbox. */
+  accountId?: string;
   internalDateFrom?: Date;
   internalDateTo?: Date;
 }
@@ -456,14 +463,18 @@ export interface PromoStoreImpl {
   readonly insert: (rows: readonly NewPromoCode[]) => Effect.Effect<StoredPromoCode[]>;
   /** One row, or null when no row has that id. */
   readonly byId: (id: string) => Effect.Effect<StoredPromoCode | null>;
-  /** The suggestions for an account's window, newest mail first. */
-  readonly unsaved: (filter: PromoSuggestionFilter) => Effect.Effect<StoredPromoCode[]>;
+  /**
+   * The unsaved detections, newest mail first — an account's window, or every
+   * account's when the filter names neither. Each row names its own mailbox,
+   * for the reason a saved one does: the global read shows it as a column.
+   */
+  readonly unsaved: (filter: PromoSuggestionFilter) => Effect.Effect<PromoCodeWithAccount[]>;
   /**
    * Every saved row, every account, newest saved first — the page is global,
    * because which mailbox a code arrived in is trivia at a checkout. Each row
    * names that mailbox all the same, so the page can show it as a column.
    */
-  readonly saved: () => Effect.Effect<SavedPromoCode[]>;
+  readonly saved: () => Effect.Effect<PromoCodeWithAccount[]>;
   /** Move a row to the saved state, with the copy of the mail taken then. */
   readonly markSaved: (args: {
     id: string;

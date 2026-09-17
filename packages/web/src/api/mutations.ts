@@ -97,8 +97,26 @@ function announcingFailure<TInput extends MessageMutationTarget, TResult, TSide 
  * different lifetimes), which is exactly why the lists' own invalidation does
  * not reach it: after a removal they are authoritative and are not re-read at
  * all.
+ *
+ * The root covers both suggestion lists (#154) — the inbox's, scoped to an
+ * account and a period, and the Promo Codes page's, which is scoped to neither
+ * and is where the detections past the section's cap are reachable. They are
+ * one read model under one root deliberately: the optimistic removal below is
+ * written with `setQueriesData` over this prefix, so a card leaves both lists
+ * on the click rather than only the one that happens to be on screen.
  */
 const PROMO_SUGGESTIONS = () => [["promo-suggestions"]] as const;
+
+/**
+ * What a *save* moves, which is the suggestions plus one more (#154): the promo
+ * leaves every suggestion list and joins the saved ones on the page.
+ *
+ * `["saved-promos"]` is re-read rather than written, unlike the suggestions
+ * beside it. Which of the page's two sections a promo lands in is
+ * `listSavedPromos`' rule against the server's clock, and deriving that in the
+ * browser is exactly what #164 declined to do for the edit next to it.
+ */
+const PROMO_READS = () => [["promo-suggestions"], ["saved-promos"]] as const;
 
 export function archiveMessageMutationOptions(qc: QueryClient) {
   return announcingFailure<MessageActionInput, MessageActionResult>(
@@ -190,7 +208,7 @@ export function savePromoMutationOptions(qc: QueryClient) {
             ? null
             : promo,
       },
-      alsoInvalidate: PROMO_SUGGESTIONS,
+      alsoInvalidate: PROMO_READS,
       listsAreAuthoritative: true,
     },
   );

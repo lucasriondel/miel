@@ -100,6 +100,25 @@ describe("GET /promo-codes/saved", () => {
   });
 });
 
+// The page's other read (#154): every detection nobody has acted on, which is
+// where the ones past the inbox section's cap are reachable. Global like the
+// saved one beside it, so there is again no account to validate — which rows it
+// answers is core's suite (`promoCodes.suggested.test.ts`).
+describe("GET /promo-codes/suggested", () => {
+  test("requires bearer auth", async () => {
+    const res = await createApp().fetch(new Request("http://localhost/promo-codes/suggested"));
+    expect(res.status).toBe(401);
+  });
+
+  // A route of its own, not `/promo-codes/:id/...` nor the account-scoped
+  // suggestions read wearing a path segment: either mistake answers 400 or 404
+  // rather than the page's rows.
+  test("is a route of its own", async () => {
+    const res = await authGet("/promo-codes/suggested");
+    expect([400, 404]).not.toContain(res.status);
+  });
+});
+
 // Reading the mail a saved promo came from (#163). The route's own share is
 // again the boundary — an id it can trust, and a token — plus the one answer it
 // composes itself: a promo with no saved copy of the mail is a 404 rather than

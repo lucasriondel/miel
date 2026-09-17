@@ -220,7 +220,7 @@ export interface ExtractPromosResult {
  * The copy of the mail the save took is deliberately not here — a list of
  * fields does not need every saved mail's HTML.
  */
-export interface SavedPromo {
+export interface PromoListing {
   id: string;
   accountId: string;
   accountEmail: string;
@@ -233,10 +233,20 @@ export interface SavedPromo {
   merchant: string | null;
 }
 
-/** The page's two sections, each already in the order it is read in. */
+/**
+ * The Promo Codes page's suggestions (#154) — every account's detections, with
+ * no period and no cap, which is where the ones past the inbox section's six
+ * cards are reachable. One row shape with the saved promos below them: the five
+ * guesses and the mailbox are what a row of that table says either way.
+ */
+export interface SuggestedPromosResponse {
+  items: PromoListing[];
+}
+
+/** The page's two saved sections, each already in the order it is read in. */
 export interface SavedPromosPage {
-  active: SavedPromo[];
-  expired: SavedPromo[];
+  active: PromoListing[];
+  expired: PromoListing[];
 }
 
 /**

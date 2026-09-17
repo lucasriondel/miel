@@ -4,6 +4,7 @@ import {
   deleteSavedPromo,
   listPromoSuggestions,
   listSavedPromos,
+  listSuggestedPromos,
   readSavedPromoMail,
   savePromo,
   updateSavedPromo,
@@ -25,6 +26,23 @@ export const promoCodesRoutes = new Hono();
  */
 promoCodesRoutes.get("/saved", async (c) => {
   return c.json(await listSavedPromos());
+});
+
+/**
+ * The page's other read (#154) — every detection nobody has acted on, across
+ * every account.
+ *
+ * It exists because the section above the inbox is capped: six cards so a heavy
+ * newsletter week cannot push the message list off the screen, and the rest
+ * have to be reachable somewhere or the cap quietly loses them. This is that
+ * somewhere. Parameterless like `/saved` for the same reason — the page is
+ * global and the mailbox is a column on the row.
+ *
+ * Which rows are suggestions, and that this one is uncapped while the inbox's
+ * is not, are the core service's answers.
+ */
+promoCodesRoutes.get("/suggested", async (c) => {
+  return c.json({ items: await listSuggestedPromos() });
 });
 
 /**

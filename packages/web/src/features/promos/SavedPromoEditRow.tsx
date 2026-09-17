@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Check, X } from "lucide-react";
-import type { SavedPromo } from "../../api/types";
+import type { PromoListing } from "../../api/types";
 import { useUpdateSavedPromo } from "../../api/mutations";
 import { promoDraft, promoDraftIsSavable, promoPatch, type PromoDraft } from "./savedPromoDraft";
 
 interface Props {
-  promo: SavedPromo;
+  promo: PromoListing;
   /** Called when the row is done being edited, saved or not. */
   onDone: () => void;
 }

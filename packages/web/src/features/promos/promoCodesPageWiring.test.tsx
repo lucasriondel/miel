@@ -11,7 +11,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CREDENTIAL_PROVIDERS } from "@miel/core/providerModels";
-import type { Account, SavedPromo, SavedPromoMail, SavedPromosPage } from "../../api/types";
+import type { Account, PromoListing, SavedPromoMail, SavedPromosPage } from "../../api/types";
 
 /**
  * The real api client, put back before the subjects are imported — a bun module
@@ -30,7 +30,7 @@ const { App } = await import("../../App");
 const MINE = "acc-1";
 const THEIRS = "acc-2";
 
-const promo = (over: Partial<SavedPromo> = {}): SavedPromo => ({
+const promo = (over: Partial<PromoListing> = {}): PromoListing => ({
   id: "promo-1",
   accountId: MINE,
   accountEmail: "me@example.com",
@@ -58,6 +58,8 @@ const mail = (over: Partial<SavedPromoMail> = {}): SavedPromoMail => ({
 const originalFetch = globalThis.fetch;
 let urls: string[] = [];
 let answer: SavedPromosPage = { active: [], expired: [] };
+/** The detections nobody has acted on — the section above the saved ones (#154). */
+let suggested: PromoListing[] = [];
 let original: SavedPromoMail = mail();
 
 /** Every write the page made, in order — method, path and body as sent. */
@@ -91,7 +93,7 @@ const originalClipboard = navigator.clipboard;
  * names, the way the real one stores it.
  */
 const applyWrite = (method: string, id: string, body: Record<string, unknown>) => {
-  const edit = (row: SavedPromo): SavedPromo => {
+  const edit = (row: PromoListing): PromoListing => {
     const next = { ...row };
     for (const [field, value] of Object.entries(body)) {
       if (field === "expiresAt") {
@@ -102,7 +104,7 @@ const applyWrite = (method: string, id: string, body: Record<string, unknown>) =
     }
     return next;
   };
-  const section = (promos: SavedPromo[]) =>
+  const section = (promos: PromoListing[]) =>
     method === "DELETE"
       ? promos.filter((row) => row.id !== id)
       : promos.map((row) => (row.id === id ? edit(row) : row));
@@ -114,6 +116,7 @@ beforeEach(() => {
   sent = [];
   refuseWrites = false;
   answer = { active: [], expired: [] };
+  suggested = [];
   original = mail();
   copied = [];
   Object.defineProperty(navigator, "clipboard", {
@@ -141,6 +144,28 @@ beforeEach(() => {
       applyWrite(method, id, (body as Record<string, unknown>) ?? {});
       return json(method === "DELETE" ? { ok: true, id } : { id, ...(body as object) });
     }
+    // The save (#154 on this page): the server writes the promo, then trashes
+    // the mail, and both reads move afterwards — the detection leaves the
+    // suggestions and the promo joins the saved ones.
+    if (method === "POST" && url.includes("/save")) {
+      const path = new URL(url).pathname;
+      sent.push({ method, path, body: null });
+      if (refuseWrites) {
+        return new Response(JSON.stringify({ error: "promo_not_found" }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const id = path.split("/").at(-2)!;
+      const saved = suggested.find((row) => row.id === id);
+      suggested = suggested.filter((row) => row.id !== id);
+      if (saved) answer = { ...answer, active: [...answer.active, saved] };
+      return json({ ok: true, id, trashedThreadId: "thread-1" });
+    }
+    if (url.includes("/promo-codes/suggested")) {
+      urls.push(url);
+      return json({ items: suggested });
+    }
     if (url.includes("/promo-codes/saved")) {
       urls.push(url);
       return json(answer);
@@ -161,8 +186,9 @@ afterEach(() => {
   });
 });
 
-const mountPage = (page: SavedPromosPage) => {
+const mountPage = (page: SavedPromosPage, detections: PromoListing[] = []) => {
   answer = page;
+  suggested = detections;
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -186,6 +212,7 @@ const sectionNamed = async (name: string) => {
 };
 const active = () => screen.queryByRole("region", { name: "Active promo codes" });
 const expired = () => screen.queryByRole("region", { name: "Expired promo codes" });
+const suggestedSection = () => screen.queryByRole("region", { name: "Suggested promo codes" });
 
 /** What each row of a section says, in the order the rows are read. */
 const rowsOf = (section: HTMLElement) =>
@@ -199,23 +226,102 @@ const rowsOf = (section: HTMLElement) =>
         .map((cell) => cell.textContent?.trim() ?? ""),
     );
 
+/** The paths the page read, whichever order the two queries resolved in. */
+const paths = () => urls.map((u) => new URL(u).pathname);
+
 describe("what the page asks for", () => {
   test("the saved promos, with no account and no period", async () => {
     mountPage({ active: [promo()], expired: [] });
 
-    await waitFor(() => expect(urls).toHaveLength(1));
-    const url = new URL(urls[0]!);
+    await waitFor(() => expect(urls).toHaveLength(2));
+    const url = new URL(urls.find((u) => u.includes("/promo-codes/saved"))!);
     expect(url.pathname).toEndWith("/promo-codes/saved");
     expect(url.search).toBe("");
   });
 
-  test("says so plainly when nothing has been saved yet", async () => {
+  // The other half of what the page is for (#154): the section above the inbox
+  // shows six cards, and the detections past that cap are reachable here. Its
+  // read names no account and no period either.
+  test("and every account's suggestions, with no account and no period", async () => {
+    mountPage({ active: [], expired: [] }, [promo({ id: "sug-1" })]);
+
+    await waitFor(() => expect(urls).toHaveLength(2));
+    const url = new URL(urls.find((u) => u.includes("/promo-codes/suggested"))!);
+    expect(url.pathname).toEndWith("/promo-codes/suggested");
+    expect(url.search).toBe("");
+  });
+
+  test("says so plainly when there is nothing saved and nothing suggested", async () => {
     mountPage({ active: [], expired: [] });
 
-    await waitFor(() => expect(urls).toHaveLength(1));
+    await waitFor(() => expect(urls).toHaveLength(2));
     expect(await screen.findByText(/no saved promo codes/i)).not.toBeNull();
     expect(active()).toBeNull();
     expect(expired()).toBeNull();
+    expect(screen.queryByRole("region", { name: "Suggested promo codes" })).toBeNull();
+  });
+});
+
+describe("the suggested section", () => {
+  test("shows a detection's fields and the mailbox it arrived in", async () => {
+    mountPage({ active: [], expired: [] }, [promo({ id: "sug-1" })]);
+
+    const row = rowsOf(await sectionNamed("Suggested promo codes"))[0]!;
+    expect(row).toContain("Zara");
+    expect(row).toContain("20% off");
+    expect(row).toContain("WEEKEND20");
+    expect(row).toContain("orders over £50, excl. sale");
+    expect(row).toContain("me@example.com");
+  });
+
+  // Nothing at all rather than an empty heading: a user with no pending
+  // detections is the steady state, and permanent chrome for it is a tax.
+  test("is not drawn at all when nothing is suggested", async () => {
+    mountPage({ active: [promo()], expired: [] });
+
+    await sectionNamed("Active promo codes");
+    expect(suggestedSection()).toBeNull();
+  });
+
+  // The detections the inbox's six cards left out are the reason this exists,
+  // so there is no cap here: a heavy newsletter week is fully readable.
+  test("lists more detections than the inbox section would show", async () => {
+    const many = Array.from({ length: 9 }, (_, i) =>
+      promo({ id: `sug-${i}`, gmailMessageId: `mail-${i}`, code: `CODE${i}` }),
+    );
+    mountPage({ active: [], expired: [] }, many);
+
+    expect(rowsOf(await sectionNamed("Suggested promo codes"))).toHaveLength(9);
+  });
+
+  // The same one gesture the card above the inbox offers: the promo is saved
+  // with its copy of the mail, and the mail is trashed.
+  test("saving one sends the save and moves the row down to the saved ones", async () => {
+    mountPage({ active: [], expired: [] }, [promo({ id: "sug-1" })]);
+
+    const section = await sectionNamed("Suggested promo codes");
+    fireEvent.click(within(section).getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ method: "POST", path: "/api/promo-codes/sug-1/save" });
+    // The row leaves on the click, and the saved sections are re-read — which
+    // section it lands in is the server's rule, not this page's.
+    await waitFor(() => expect(suggestedSection()).toBeNull());
+    await sectionNamed("Active promo codes");
+  });
+
+  test("puts the row back when the save is refused", async () => {
+    mountPage({ active: [], expired: [] }, [promo({ id: "sug-1" })]);
+    const section = await sectionNamed("Suggested promo codes");
+    refuseWrites = true;
+
+    fireEvent.click(within(section).getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    // Refused means nothing happened, and the row saying so is the only way the
+    // user learns it: a card that stayed gone would read as a save that landed.
+    await waitFor(() => expect(suggestedSection()).not.toBeNull());
+    expect(rowsOf(suggestedSection()!)).toHaveLength(1);
   });
 });
 
@@ -348,13 +454,13 @@ describe("taking the code", () => {
 
   test("changes nothing: no request leaves and the row is as it was", async () => {
     mountPage({ active: [promo()], expired: [] });
-    await waitFor(() => expect(urls).toHaveLength(1));
+    await waitFor(() => expect(urls).toHaveLength(2));
 
     fireEvent.click(await copyButton());
     await waitFor(() => expect(copied).toHaveLength(1));
 
-    // The page's own read, and nothing else — no save, no flag, no timestamp.
-    expect(urls).toHaveLength(1);
+    // The page's own two reads, and nothing else — no save, no flag, no timestamp.
+    expect(urls).toHaveLength(2);
     expect(rowsOf(await sectionNamed("Active promo codes"))[0]).toContain("WEEKEND20");
   });
 
@@ -465,8 +571,8 @@ describe("reading the mail it came from", () => {
 
     // The mail is named nowhere in the request: the copy hangs off the promo,
     // and `mail-1` may no longer exist anywhere.
-    await waitFor(() => expect(urls).toHaveLength(2));
-    expect(new URL(urls[1]!).pathname).toEndWith("/promo-codes/promo-1/original");
+    await waitFor(() => expect(urls).toHaveLength(3));
+    expect(paths().some((p) => p.endsWith("/promo-codes/promo-1/original"))).toBe(true);
     expect(await within(dialog).findByText(/your 20% weekend/i)).not.toBeNull();
     expect(within(dialog).getByText(/zara/i)).not.toBeNull();
   });
@@ -522,7 +628,8 @@ describe("reading the mail it came from", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /close/i }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(urls).toHaveLength(2);
+    // The page's two reads and the one the dialog made; closing asks for nothing.
+    expect(urls).toHaveLength(3);
   });
 });
 

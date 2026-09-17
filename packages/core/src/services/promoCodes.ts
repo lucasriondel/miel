@@ -39,7 +39,7 @@ import {
   PromoStore,
   type NewPromoCode,
   type PromoFields,
-  type SavedPromoCode,
+  type PromoCodeWithAccount,
   type StoredPromoCode,
 } from "../stores/contracts";
 import { runWithStores } from "../stores/postgres";
@@ -324,7 +324,7 @@ const stillValid = (row: StoredPromoCode, now: Date): boolean =>
  * before it, which are kept because nothing here deletes. It is not a kind of
  * promo this answers with any more, and no surface explains it as one (#168).
  */
-const distinctByCode = (rows: readonly StoredPromoCode[]): StoredPromoCode[] => {
+const distinctByCode = <T extends Pick<StoredPromoCode, "code">>(rows: readonly T[]): T[] => {
   const seen = new Set<string>();
   return rows.filter((row) => {
     if (row.code === null) return true;
@@ -374,11 +374,13 @@ export async function listPromoSuggestions(
 }
 
 /* ------------------------------------------------------------------------- *
- * The Promo Codes page (#162)
+ * The Promo Codes page (#162), and the suggestions its top section reads (#154)
  * ------------------------------------------------------------------------- */
 
 /**
- * One saved promo, as the page's rows are.
+ * One promo as a row of the page — saved or, in the section above them,
+ * suggested. One shape, because the five guesses and the mailbox are what a row
+ * of that table says either way; what a row *does* is what differs.
  *
  * `accountEmail` is a *column*, never a filter: a promo code is a thing used at
  * a checkout, and which mailbox it arrived in is trivia — nobody standing at a
@@ -391,7 +393,7 @@ export async function listPromoSuggestions(
  * saved mail's HTML to draw a table of five short fields. Reading the original
  * is one promo at a time and gets its own read when it lands.
  */
-export interface SavedPromo {
+export interface PromoListing {
   id: string;
   accountId: string;
   /** The mailbox this promo arrived in — shown, never filtered on. */
@@ -406,8 +408,8 @@ export interface SavedPromo {
 
 /** The page's two sections, each already in the order it is read in. */
 export interface SavedPromosPage {
-  active: SavedPromo[];
-  expired: SavedPromo[];
+  active: PromoListing[];
+  expired: PromoListing[];
 }
 
 export interface ListSavedPromosArgs {
@@ -419,7 +421,7 @@ export interface ListSavedPromosArgs {
   now?: Date;
 }
 
-const savedPromo = (row: SavedPromoCode): SavedPromo => ({
+const savedPromo = (row: PromoCodeWithAccount): PromoListing => ({
   id: row.id,
   accountId: row.accountId,
   accountEmail: row.accountEmail,
@@ -438,7 +440,7 @@ const savedPromo = (row: SavedPromoCode): SavedPromo => ({
  * Two promos that both state no end are equal, and the sort is stable, so they
  * keep the order the store answered in.
  */
-const bySoonest = (a: SavedPromoCode, b: SavedPromoCode): number => {
+const bySoonest = (a: PromoCodeWithAccount, b: PromoCodeWithAccount): number => {
   if (a.expiresAt === null || b.expiresAt === null) {
     return Number(a.expiresAt === null) - Number(b.expiresAt === null);
   }
@@ -488,6 +490,43 @@ export const listSavedPromosEffect = (
 // Promise facade for the API/CLI boundary.
 export async function listSavedPromos(args: ListSavedPromosArgs = {}): Promise<SavedPromosPage> {
   return runWithStores(listSavedPromosEffect(args));
+}
+
+/**
+ * Every detection nobody has acted on yet — the page's top section (#154).
+ *
+ * This exists because of the cap above it. The inbox shows
+ * {@link MAX_PROMO_SUGGESTIONS} cards so a heavy newsletter week cannot push
+ * the message list off the screen, and a cap with nowhere to overflow into is a
+ * cap that *loses* offers: the store answers newest mail first, so the seventh
+ * distinct code of the week would sit unread until the six above it were saved
+ * or lapsed. The page is where the rest are reachable, which is the only reason
+ * a second read of the same rows exists.
+ *
+ * So it is the same read model as the section's, differing in exactly the two
+ * places the page differs from an inbox: **no account**, because the page is
+ * global and the mailbox is a column; and **no cap**, because hiding rows here
+ * would hide them everywhere. Everything else is shared and deliberately not
+ * re-decided — unsaved only, the mailbox rule, unexpired, one card per code,
+ * newest mail first.
+ *
+ * Not folded into {@link listSavedPromosEffect}: that read answers what a promo
+ * *is* once the user has acted, and these have no copy of a mail, no saved
+ * instant, and a different act available on them. Two reads, one shape.
+ */
+export const listSuggestedPromosEffect = (
+  args: ListSavedPromosArgs = {},
+): Effect.Effect<PromoListing[], never, PromoStore> =>
+  Effect.gen(function* () {
+    const now = args.now ?? new Date();
+    const rows = yield* PromoStore.unsaved({});
+
+    return distinctByCode(rows.filter((row) => stillValid(row, now))).map(savedPromo);
+  });
+
+// Promise facade for the API/CLI boundary.
+export async function listSuggestedPromos(args: ListSavedPromosArgs = {}): Promise<PromoListing[]> {
+  return runWithStores(listSuggestedPromosEffect(args));
 }
 
 /* ------------------------------------------------------------------------- *

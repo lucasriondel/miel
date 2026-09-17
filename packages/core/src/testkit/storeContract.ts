@@ -348,6 +348,25 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       expect(ids).not.toContain(later.id);
     });
 
+    test("suggests every account's unsaved rows when no account is named", async () => {
+      const second = await world.account();
+      const mine = await extract();
+      const theirs = await extract({ accountId: second.id });
+      const outside = await extract({ internalDate: new Date("2026-07-01T09:00:00.000Z") });
+
+      const rows = (await run(PromoStore.unsaved({}))).filter((r) =>
+        [mine.id, theirs.id, outside.id].includes(r.id),
+      );
+
+      // No account and no window: the Promo Codes page is global and asks for
+      // every detection, which is where the ones the inbox's cap left out live.
+      expect(rows.map((r) => r.id).toSorted()).toEqual([mine.id, theirs.id, outside.id].toSorted());
+      // Each row names *its own* mailbox, the way a saved one does — the page
+      // shows it as a column, so it is part of what the row is.
+      expect(rows.find((r) => r.id === theirs.id)?.accountEmail).toBe(second.email);
+      expect(rows.find((r) => r.id === mine.id)?.accountEmail).toBe(accountEmail);
+    });
+
     test("stops suggesting a detection whose message left the inbox", async () => {
       const trashed = await extract({ isTrashed: true });
 

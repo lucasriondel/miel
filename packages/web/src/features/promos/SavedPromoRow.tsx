@@ -1,10 +1,10 @@
 import { useState } from "react";
-import type { SavedPromo } from "../../api/types";
+import type { PromoListing } from "../../api/types";
 import { SavedPromoEditRow } from "./SavedPromoEditRow";
 import { SavedPromoReadRow } from "./SavedPromoReadRow";
 
 interface Props {
-  promo: SavedPromo;
+  promo: PromoListing;
 }
 
 /**

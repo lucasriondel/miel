@@ -1,12 +1,12 @@
 import { Pencil } from "lucide-react";
-import type { SavedPromo } from "../../api/types";
+import type { PromoListing } from "../../api/types";
 import { CopyPromoCodeButton } from "./CopyPromoCodeButton";
 import { DeletePromoButton } from "./DeletePromoButton";
 import { promoExpiryDate } from "./promoExpiryLabel";
 import { ViewOriginalMailButton } from "./ViewOriginalMailButton";
 
 interface Props {
-  promo: SavedPromo;
+  promo: PromoListing;
   onEdit: () => void;
 }
 

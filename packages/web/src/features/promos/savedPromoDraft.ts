@@ -1,4 +1,4 @@
-import type { PromoFieldsPatch, SavedPromo } from "../../api/types";
+import type { PromoFieldsPatch, PromoListing } from "../../api/types";
 
 /**
  * The five extracted fields as text boxes hold them (#164).
@@ -33,7 +33,7 @@ const dayOf = (expiresAt: string | null): string =>
   expiresAt === null ? "" : new Date(expiresAt).toISOString().slice(0, 10);
 
 /** What a row starts editing from: exactly what it was showing. */
-export const promoDraft = (promo: SavedPromo): PromoDraft => ({
+export const promoDraft = (promo: PromoListing): PromoDraft => ({
   code: promo.code ?? "",
   discount: promo.discount,
   terms: promo.terms ?? "",
@@ -56,7 +56,7 @@ const cleared = (typed: string): string | null => (typed.trim() === "" ? null : 
  * Null for "nothing was touched" so a Save that changed nothing costs no
  * request — the same answer the server would have given, without asking.
  */
-export function promoPatch(promo: SavedPromo, draft: PromoDraft): PromoFieldsPatch | null {
+export function promoPatch(promo: PromoListing, draft: PromoDraft): PromoFieldsPatch | null {
   const patch: PromoFieldsPatch = {};
 
   // The code is corrected or left alone, never cleared (#168): an emptied box
@@ -99,5 +99,5 @@ export function promoPatch(promo: SavedPromo, draft: PromoDraft): PromoFieldsPat
  * — must stay correctable in its other fields. Demanding a code there would
  * mean a legacy row could not be fixed at all without inventing one.
  */
-export const promoDraftIsSavable = (promo: SavedPromo, draft: PromoDraft): boolean =>
+export const promoDraftIsSavable = (promo: PromoListing, draft: PromoDraft): boolean =>
   draft.discount.trim() !== "" && (promo.code === null || draft.code.trim() !== "");
