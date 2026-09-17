@@ -8,6 +8,7 @@ import { MessageRowEndCell } from "./MessageRowEndCell";
 import { MessageRowLabels } from "./MessageRowLabels";
 import { MessageRowActions } from "./MessageRowActions";
 import { SuggestionPill } from "./SuggestionPill";
+import { rowLabelKey, useRowLabelPicker } from "../features/labels/rowLabelPickerContext";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { useSwipeReveal } from "../hooks/useSwipeReveal";
 
@@ -47,6 +48,10 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
   const sender = message.fromName?.trim() || message.fromEmail;
   const subject = message.subject?.trim() || "(no subject)";
   const isUnread = message.labels.some((l) => l.name === "UNREAD");
+  // What the row's label picker marks as already added (#170). The ids, not the
+  // labels: the picker offers the account's catalogue and only needs to know
+  // which of those entries this message is carrying.
+  const appliedLabelIds = message.labels.map((l) => l.id);
   // The same two conditions `SuggestionPill` returns null on. No triage is no
   // suggestion to act on: the ids the routes take are that run's.
   const hasSuggestions =
@@ -58,6 +63,13 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
   const { search } = useLocation();
   const href = messageDetailPath(message.accountId, message.gmailMessageId, search);
 
+  // Whether the list's one label panel is currently hanging off this row's
+  // trigger (#170). The actions are revealed by hover and focus, and a panel
+  // that is portalled to the body has neither — so the trigger would fade out
+  // from under its own popover the moment the pointer reached it.
+  const picker = useRowLabelPicker();
+  const labelling = picker?.openRow === rowLabelKey(message);
+
   const isMobile = useIsMobile();
   const showActions = !selectMode;
   const { revealed, close, handlers } = useSwipeReveal({
@@ -67,6 +79,7 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
   return (
     <div
       {...(isMobile && showActions ? handlers : {})}
+      data-labelling={labelling ? "true" : undefined}
       className={`message-row group relative flex flex-col text-sm transition-colors duration-150 ${
         selected ? "bg-gousse-accent/[0.08]" : ""
       }`}
@@ -150,6 +163,7 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
           accountId={message.accountId}
           accountEmail={message.accountEmail}
           gmailMessageId={message.gmailMessageId}
+          appliedLabelIds={appliedLabelIds}
           isUnread={isUnread}
           isArchived={message.isArchived}
           isTrashed={message.isTrashed}
@@ -170,6 +184,7 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
           accountId={message.accountId}
           accountEmail={message.accountEmail}
           gmailMessageId={message.gmailMessageId}
+          appliedLabelIds={appliedLabelIds}
           isUnread={isUnread}
           isArchived={message.isArchived}
           isTrashed={message.isTrashed}

@@ -9,6 +9,8 @@ interface Props {
   isArchived: boolean;
   isTrashed: boolean;
   priority: Priority | null;
+  /** Passed through to the actions' label picker (#170). */
+  appliedLabelIds: readonly string[];
   relative: string;
   /** Select mode owns the row's right edge, so the actions stand down. */
   showActions: boolean;
@@ -55,7 +57,7 @@ export const MessageRowEndCell = ({ relative, showActions, ...actions }: Props) 
 
   return (
     <span className="hidden shrink-0 sm:grid sm:w-[5.75rem] sm:grid-cols-[5.75rem] sm:items-center">
-      <span className="col-start-1 row-start-1 justify-self-end whitespace-nowrap pr-1 text-xs font-medium text-gousse-muted tabular-nums transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
+      <span className="col-start-1 row-start-1 justify-self-end whitespace-nowrap pr-1 text-xs font-medium text-gousse-muted tabular-nums transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0 group-data-[labelling=true]:opacity-0">
         {relative}
       </span>
       {/* `forceVisible` lays the buttons out inline: the reveal is this cell's
@@ -73,7 +75,7 @@ export const MessageRowEndCell = ({ relative, showActions, ...actions }: Props) 
           of all.
 
           The geometry is why the backing does not hang off this cell. The
-          buttons are 32px tall and 212px wide, while the cell is 5.75rem wide
+          buttons are 32px tall and 248px wide, while the cell is 5.75rem wide
           and only as tall as its date text — so the strip overflows it on both
           axes, and a backing inset to the cell covers neither the icons' full
           height nor the 120px of them that reach left of it.
@@ -86,6 +88,12 @@ export const MessageRowEndCell = ({ relative, showActions, ...actions }: Props) 
           cell's `grid` still stacks the date and the actions, which is all the
           `relative` was doing.
 
+          `group-data-[labelling=true]` is the third way in, beside hover and
+          focus-within (#170): the label panel is portalled to the body, so
+          reaching for a label takes the pointer off the row and the focus out
+          of it, and the strip would fade out from under its own popover. The
+          row publishes the flag; this is where it is read.
+
           Anchoring to the row rather than cancelling the parent's padding is
           what makes this work on a row with attachments. That second line is a
           sibling of the flex row, not a child, so a backing inset to the flex
@@ -94,12 +102,14 @@ export const MessageRowEndCell = ({ relative, showActions, ...actions }: Props) 
           the moment a row is taller. `inset-y-0` has no such number in it.
 
           The fade is long — `pl-32` gives it 8rem of room and the opaque stop
-          ends right where the buttons do — because a short ramp reads as a
+          ends right where the buttons do (16.5rem: seven 32px buttons, six 4px
+          gaps and this strip's own `pr-4`, so adding or dropping an action means
+          moving that stop) — because a short ramp reads as a
           hard-edged slab sliding over the text: the eye catches the boundary,
           which is the thing this backing exists to avoid. Running the gradient
           to zero across the whole approach lets the subject dissolve into the
           row with no seam. */}
-      <span className="pointer-events-none absolute inset-y-0 right-0 col-start-1 row-start-1 flex items-center justify-end bg-[linear-gradient(to_left,var(--row-surface)_0,var(--row-surface)_14.25rem,transparent_100%)] pl-32 pr-4 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+      <span className="pointer-events-none absolute inset-y-0 right-0 col-start-1 row-start-1 flex items-center justify-end bg-[linear-gradient(to_left,var(--row-surface)_0,var(--row-surface)_16.5rem,transparent_100%)] pl-32 pr-4 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-data-[labelling=true]:pointer-events-auto group-data-[labelling=true]:opacity-100">
         <MessageActions {...actions} variant="row" forceVisible />
       </span>
     </span>

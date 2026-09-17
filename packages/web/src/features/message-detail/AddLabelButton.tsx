@@ -3,6 +3,7 @@ import { badgeClasses } from "@/components/ui/badge";
 import { useAddMessageLabel } from "../../api/mutations";
 import type { Label, MessageDetail } from "../../api/types";
 import { LabelPicker } from "../labels/LabelPicker";
+import { toMessageLabel } from "../labels/toMessageLabel";
 
 interface Props {
   message: MessageDetail;
@@ -36,13 +37,7 @@ export const AddLabelButton = ({ message }: Props) => {
     addLabel.mutate({
       accountId: message.accountId,
       gmailMessageId: message.gmailMessageId,
-      label: {
-        id: label.id,
-        name: label.name,
-        gmailLabelId: label.gmailLabelId,
-        colorBg: label.colorBg,
-        colorFg: label.colorFg,
-      },
+      label: toMessageLabel(label),
     });
   };
 

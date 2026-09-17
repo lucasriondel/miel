@@ -25,8 +25,11 @@ export const SectionActions = ({ messages, scope }: Props) => {
   const ids = messages.filter((m) => m.accountId === accountId).map((m) => m.gmailMessageId);
   const hasUnread = messages.some((m) => m.labels.some((l) => l.name === "UNREAD"));
 
-  // The section header offers the three flag actions only — the fifth needs a
-  // label picked, which is the bulk bar's business (#147).
+  // The section header offers the three flag actions only. The fifth needs a
+  // label picked, and a picker is owned by the surface that knows what it is
+  // aiming at: the bulk bar for a selection (#147), the row's own trigger for
+  // one message (#170). A header labelling a whole category in one press is a
+  // different act, and not one this offers.
   const run = (action: BatchFlagAction) => (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();

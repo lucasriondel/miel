@@ -10,6 +10,8 @@ interface Props {
   isArchived: boolean;
   isTrashed: boolean;
   priority: Priority | null;
+  /** Passed through to the actions' label picker (#170). */
+  appliedLabelIds: readonly string[];
   /** Mobile only: whether the swipe has revealed the actions. */
   isMobile: boolean;
   revealed: boolean;

@@ -1041,7 +1041,8 @@ were all settled, could not be labelled without going back to the list and
 selecting it. `features/message-detail/AddLabelButton.tsx` is the trigger,
 `useAddMessageLabel` the mutation, and there is no new endpoint, service or
 schema: `POST /messages/:accountId/:gmailMessageId/labels` has always taken both
-`add` and `remove`, and the web app sent only `remove`.
+`add` and `remove`, and the web app sent only `remove`. The inbox row is the
+fourth way in (#170, below) and reuses this mutation whole.
 
 Three things the shape is load-bearing for:
 
@@ -1105,6 +1106,62 @@ The filter is driven through *both* call sites in the rendered suites
 rather than against the component once — one component is the claim, so each
 face proving it narrows is what would catch a trigger wired to a picker of its
 own again.
+
+The inbox row (#170, below) is the third surface and the one exception to the
+`renderTrigger` shape: its panel is put on screen by the *list*, so it composes
+`LabelPickerMenu` directly rather than mounting `LabelPicker`. What the two
+panels share is `labelPanel.ts` — the width, border, padding and shadow that
+make them the same object — and everything inside them.
+
+## Labelling a message from its inbox row
+
+Filing a mail you can identify from its row is the common case, and it used to
+cost either opening the message or entering select mode — a mode built for
+acting on many. The row gained an add-label action and nothing else (#170).
+
+**It narrows a rule the code stated more broadly than it meant.** The row's
+badges carry no ✕ because "detaching a label is a decision, and the row is not
+where it is made", and the section headers offer the three flag actions because
+"the fifth needs a label picked". Both still hold for *detaching* and for a whole
+category; neither was ever an argument against attaching one to one message. The
+comments in `MessageRowLabels.tsx` and `SectionActions.tsx` say so now, and the
+row's badges stay read-only — removal is still the detail page's.
+
+There is no new endpoint, service or mutation: it is `useAddMessageLabel`
+(#167) and the shared picker (#169). What is new is who mounts the picker.
+
+- **One picker for the list, not one per row.** `RowLabelPickerHost` is mounted
+  by `InboxPage`'s body — what actually renders the rows — and holds the open
+  state, the panel and the mutation. A row contributes a `<button>`
+  (`RowAddLabelButton`) that says which message it is aimed at and hands over
+  the element to hang the panel off. Fifty rows would otherwise be fifty
+  popovers, fifty outside-click listeners and fifty readers of the same account's
+  labels.
+- **So the panel is portalled and anchored**, the way `FilterSimilarPopover` is,
+  rather than absolutely positioned inside a per-row wrapper the way
+  `LabelPicker`'s is — a wrapper is exactly the thing a list cannot have. It is
+  keyed by the row, so each open starts from a fresh position and an unfiltered
+  list.
+- **The context is tri-state in effect**: no host above means the trigger
+  renders nothing. A row mounted outside a list has nowhere to put a panel, and
+  answering that by mounting one locally would be the per-row popover this
+  exists to avoid.
+- **The row's strip is revealed by hover and focus, and the panel has neither** —
+  it is portalled to the body, so reaching for a label takes the pointer off the
+  row and the focus out of it. The row publishes `data-labelling` while its panel
+  is open and `MessageRowEndCell` reads it, or the trigger would fade out from
+  under its own popover.
+- **It is in `MessageActions`' row variant**, at the head of the strip: the trio
+  read/archive/delete stays last so the columns line up from the right edge
+  inwards, and the detail bar is excluded because its own trigger already sits in
+  the header beside the badges it adds to. The mobile layout gets it for free —
+  the swipe-revealed strip mounts the same component — and the opaque stop in the
+  end cell's gradient is sized to the button count, so it moved with the seventh.
+
+`features/labels/rowLabelWiring.test.tsx` mounts the page for real, for
+`categorySelectWiring`'s reason: the trigger, the one picker and the mutation
+have to agree, and a suite over any one of them would pass with the row wired to
+a picker of its own.
 
 ## Selecting messages
 

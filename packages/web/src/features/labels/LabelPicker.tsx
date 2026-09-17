@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Label } from "../../api/types";
 import { usePopover } from "../../hooks/usePopover";
+import { labelPanelClass } from "./labelPanel";
 import { LabelPickerMenu } from "./LabelPickerMenu";
 
 interface TriggerProps {
@@ -28,7 +29,10 @@ interface Props {
  * The account's labels, one click from wherever labelling happens (#169).
  *
  * Two faces mount it — the bulk bar's picker (#147) and the message detail's
- * "Add label" (#167) — and since this issue they share the whole of it: the
+ * "Add label" (#167); the inbox row's (#170) is the same panel put on screen by
+ * a list rather than by a trigger, so it composes `LabelPickerMenu` directly and
+ * shares this one's chassis (`labelPanel.ts`) — and since #169 they share it:
+ * the
  * popover, the panel, the filter field, which labels are offered and what is
  * said when there are none. What each keeps is its own trigger and the edge the
  * panel hangs from, the way an attachment's menu is shared between its two
@@ -61,7 +65,7 @@ export const LabelPicker = ({
       {renderTrigger({ open: popover.open, toggle: popover.toggle })}
       {popover.open ? (
         <div
-          className={`absolute top-full z-[60] mt-1.5 flex w-64 max-w-[calc(100vw-2rem)] flex-col gap-1.5 rounded-xl border border-gousse-line bg-gousse-panel p-1.5 shadow-gousse-lg ${
+          className={`absolute top-full z-[60] mt-1.5 ${labelPanelClass} ${
             align === "right" ? "right-0" : "left-0"
           }`}
         >

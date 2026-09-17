@@ -46,9 +46,15 @@ const HIDDEN = new Set(["UNREAD"]);
  * it: on a row a label is an *identifier* the eye skims past on the way to the
  * subject, so it takes the design's 11px on 1px of padding rather than the
  * badge's touch-sized chassis. It carries no remove button for the same reason
- * — detaching a label is a decision, and the row is not where it is made. The
+ * — *detaching* a label is a decision, and the row is not where it is made. The
  * detail page keeps the full `LabelBadge`, ✕ and all, which is where a label is
- * actually managed.
+ * taken off.
+ *
+ * That is the whole of the rule now (#170), and it is narrower than it was:
+ * *attaching* one is a row's business, because filing a mail you can identify
+ * from its row is the common case. The trigger for it is in the row's action
+ * strip (`RowAddLabelButton`) rather than in this group, so these badges stay
+ * what they are — a read-only identifier the eye skims past.
  */
 export const MessageRowLabels = ({ labels, suggestion }: Props) => {
   const userLabels = labels.filter((l) => !isSystemLabel(l.name) && !HIDDEN.has(l.name));

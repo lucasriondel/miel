@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FilterSimilarPopover } from "./FilterSimilarPopover";
+import { RowAddLabelButton } from "../features/labels/RowAddLabelButton";
 import { buildGmailMessageUrl } from "../features/message-detail/gmailUrl";
 import { useReturnToInbox } from "../features/inbox/useReturnToInbox";
 
@@ -45,6 +46,11 @@ interface Props {
   isTrashed: boolean;
   priority: Priority | null;
   variant: MessageActionsVariant;
+  /**
+   * Row variant only: the labels the message already carries, so the picker the
+   * label action opens can mark them (#170).
+   */
+  appliedLabelIds?: readonly string[];
   /**
    * Row variant only: when the actions are already mounted inside a container
    * that controls visibility (mobile swipe reveal), skip the hover-driven
@@ -78,6 +84,7 @@ export const MessageActions = ({
   isTrashed,
   priority,
   variant,
+  appliedLabelIds,
   forceVisible,
 }: Props) => {
   const navigate = useNavigate();
@@ -179,6 +186,20 @@ export const MessageActions = ({
 
   return (
     <div className={containerClass}>
+      {/* Row only (#170). Filing a mail you can identify from its row is the
+          common case, and it used to cost opening the message or entering select
+          mode. The detail bar has no need of it: its own trigger sits in the
+          header, in the badge row it adds to. It leads the strip for the same
+          reason the trio below trails it — everything a surface offers on top of
+          read/archive/delete goes to their left, so those three keep their
+          columns from the right edge inwards. */}
+      {variant === "row" ? (
+        <RowAddLabelButton
+          accountId={accountId}
+          gmailMessageId={gmailMessageId}
+          appliedLabelIds={appliedLabelIds ?? []}
+        />
+      ) : null}
       <div ref={filterMenu.ref} className="relative">
         <ActionButton
           ref={filterTriggerRef}

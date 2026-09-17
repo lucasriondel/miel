@@ -12,6 +12,7 @@ import { AccountSwitcher } from "../components/topbar/AccountSwitcher";
 import { SyncActions } from "../components/topbar/SyncActions";
 import { PeriodNav } from "../components/topbar/PeriodNav";
 import { ActionablesLedger } from "../features/ledger/ActionablesLedger";
+import { RowLabelPickerHost } from "../features/labels/RowLabelPickerHost";
 import { useSelection } from "../features/select/useSelection";
 import { SelectModeButton } from "../features/select/SelectModeButton";
 import { BulkActionBar } from "../features/select/BulkActionBar";
@@ -203,57 +204,65 @@ const InboxBody = ({
   const untriagedStart = lowStart + buckets.low.length;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Hidden in select mode: the bulk-action mode stays uncluttered, and
-          every act in the ledger is a single-item act that has nothing to say
-          about a selection. */}
-      {!selectMode && (
-        <ActionablesLedger
+    // One label picker for the whole list (#170), mounted here because this is
+    // what renders the rows: a row's trigger says which message it is aimed at,
+    // so fifty rows cost fifty buttons rather than fifty popovers, and the
+    // account's labels are read once for the list. It wraps the ledger too and
+    // costs it nothing — the panel is portalled, so the provider adds no
+    // element to the layout.
+    <RowLabelPickerHost>
+      <div className="flex flex-col gap-6">
+        {/* Hidden in select mode: the bulk-action mode stays uncluttered, and
+            every act in the ledger is a single-item act that has nothing to say
+            about a selection. */}
+        {!selectMode && (
+          <ActionablesLedger
+            accountId={selectedAccountId}
+            messages={items}
+            internalDateFrom={rangeStartIso}
+            internalDateTo={rangeEndIso}
+          />
+        )}
+        <PrioritySection
           accountId={selectedAccountId}
-          messages={items}
-          internalDateFrom={rangeStartIso}
-          internalDateTo={rangeEndIso}
+          priority="high"
+          messages={buckets.high}
+          startIndex={0}
+          selectMode={selectMode}
+          isSelected={isSelected}
+          onToggleSelect={onToggleSelect}
+          onToggleCategory={onToggleCategory}
         />
-      )}
-      <PrioritySection
-        accountId={selectedAccountId}
-        priority="high"
-        messages={buckets.high}
-        startIndex={0}
-        selectMode={selectMode}
-        isSelected={isSelected}
-        onToggleSelect={onToggleSelect}
-        onToggleCategory={onToggleCategory}
-      />
-      <PrioritySection
-        accountId={selectedAccountId}
-        priority="medium"
-        messages={buckets.medium}
-        startIndex={mediumStart}
-        selectMode={selectMode}
-        isSelected={isSelected}
-        onToggleSelect={onToggleSelect}
-        onToggleCategory={onToggleCategory}
-      />
-      <PrioritySection
-        accountId={selectedAccountId}
-        priority="low"
-        messages={buckets.low}
-        startIndex={lowStart}
-        selectMode={selectMode}
-        isSelected={isSelected}
-        onToggleSelect={onToggleSelect}
-        onToggleCategory={onToggleCategory}
-      />
-      <UntriagedSection
-        accountId={selectedAccountId}
-        messages={buckets.untriaged}
-        startIndex={untriagedStart}
-        selectMode={selectMode}
-        isSelected={isSelected}
-        onToggleSelect={onToggleSelect}
-        onToggleCategory={onToggleCategory}
-      />
-    </div>
+        <PrioritySection
+          accountId={selectedAccountId}
+          priority="medium"
+          messages={buckets.medium}
+          startIndex={mediumStart}
+          selectMode={selectMode}
+          isSelected={isSelected}
+          onToggleSelect={onToggleSelect}
+          onToggleCategory={onToggleCategory}
+        />
+        <PrioritySection
+          accountId={selectedAccountId}
+          priority="low"
+          messages={buckets.low}
+          startIndex={lowStart}
+          selectMode={selectMode}
+          isSelected={isSelected}
+          onToggleSelect={onToggleSelect}
+          onToggleCategory={onToggleCategory}
+        />
+        <UntriagedSection
+          accountId={selectedAccountId}
+          messages={buckets.untriaged}
+          startIndex={untriagedStart}
+          selectMode={selectMode}
+          isSelected={isSelected}
+          onToggleSelect={onToggleSelect}
+          onToggleCategory={onToggleCategory}
+        />
+      </div>
+    </RowLabelPickerHost>
   );
 };
