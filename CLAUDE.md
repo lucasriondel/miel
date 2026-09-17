@@ -1022,13 +1022,55 @@ Three things the shape is load-bearing for:
   toast rides on the mutation (`announcingFailure`) rather than the click,
   because a rollback on its own is silent and a badge that appears and quietly
   goes reads as a click that missed.
-- **One picker, two faces.** `features/labels/LabelPickerMenu.tsx` holds which
-  labels are offered (the account's own, system mailboxes left out) and the
-  loading, failed and empty states; the bulk bar's picker and this one own only
-  their trigger and where the panel hangs, the way an attachment's menu is
-  shared between its two presentations. A label already on the message is listed
-  and marked "Added" rather than hidden — hiding it reads as this account not
-  having it.
+- **One picker, two faces.** `features/labels/LabelPicker.tsx` is the picker and
+  this is one of the two triggers that open it — see below. A label already on
+  the message is listed and marked "Added" rather than hidden, since hiding it
+  reads as this account not having it.
+
+## The one label picker
+
+`features/labels/LabelPicker.tsx` is the whole of a label chooser and both
+surfaces that label anything mount it: the bulk bar's `BulkLabelPicker` (#147)
+and the message detail's `AddLabelButton` (#167). It was extracted in that order
+on purpose (#169) — the feature shipped against the picker that already existed,
+and two real call sites are when the shared shape is visible rather than guessed.
+
+What a face owns is its trigger, passed as `renderTrigger` because the two share
+nothing about it but the open state it reflects (an icon button in a toolbar, a
+badge in a header), plus the `align` edge its panel hangs from. Everything else
+is the picker's, closing included: a pick closes the panel and *then* reaches the
+caller, so a face cannot forget to. The panel stays anchored in place rather than
+portalled — neither the sticky bulk bar nor the detail header clips.
+
+The filter field is what the extraction was for. An account with eighty labels
+was a flat, unsearchable scroll box, and one change gives both surfaces a way to
+aim at a label. Four things it is worth not undoing:
+
+- **`offeredLabels.ts` is the rule, and it is pure**, so what a keystroke does to
+  the list is assertable without a DOM: system mailboxes out, sorted by name, and
+  a case-insensitive substring of the *whole* name — a nested label answers to
+  the parent someone remembers (`Clients/Acme` for "clients") as readily as to
+  its own leaf.
+- **Four states, not three.** Loading, load-failed and no-labels-yet are the
+  three #167 kept apart, and a filter that matched nothing is a fourth: an
+  account with eighty labels and no "Zzz" has not run out of labels.
+  `LabelPickerBody.tsx` is where the four are chosen between, and the field is
+  drawn only in the branch that has something to narrow.
+- **The query lives in `LabelPickerMenu`**, which is unmounted with the panel, so
+  the next open starts from the whole list with nothing having to remember to
+  clear it.
+- **The field is outside the `menu` element** — a text box is not a menu item —
+  and only the results scroll, so what narrows the list cannot scroll away from
+  it. It takes the caret on open (the panel is only ever there because someone
+  just clicked), and it leaves Escape alone: the popover closes on it, and a
+  field that swallowed the first press to clear itself would make a panel take
+  two presses to leave.
+
+The filter is driven through *both* call sites in the rendered suites
+(`select/bulkLabelWiring.test.tsx`, `message-detail/addLabelWiring.test.tsx`)
+rather than against the component once — one component is the claim, so each
+face proving it narrows is what would catch a trigger wired to a picker of its
+own again.
 
 ## Selecting messages
 

@@ -146,6 +146,12 @@ const picker = () => screen.queryByRole("menu", { name: "Labels" });
 const openPicker = () => fireEvent.click(trigger());
 const pick = (name: string | RegExp) =>
   fireEvent.click(within(picker()!).getByRole("menuitem", { name }));
+const filterField = () => screen.queryByLabelText("Filter labels") as HTMLInputElement | null;
+const type = (value: string) => fireEvent.change(filterField()!, { target: { value } });
+const items = () =>
+  within(picker()!)
+    .queryAllByRole("menuitem")
+    .map((item) => item.textContent);
 
 /** The requests this page sent to the message's own label route, and no other. */
 const labelCalls = () => inFlight.filter((call) => call.path === "/messages/acc-1/msg-1/labels");
@@ -201,11 +207,8 @@ describe("the add-label trigger", () => {
 
     openPicker();
 
-    const items = within(picker()!)
-      .getAllByRole("menuitem")
-      .map((item) => item.textContent);
     // The other account's label and Gmail's own mailbox are both absent.
-    expect(items).toEqual(["Invoices", "Work"]);
+    expect(items()).toEqual(["Invoices", "Work"]);
   });
 });
 
@@ -269,5 +272,73 @@ describe("attaching one", () => {
 
     await waitFor(() => expect(within(picker()!).getByText("Couldn't load labels.")).toBeDefined());
     expect(within(picker()!).queryAllByRole("menuitem")).toHaveLength(0);
+  });
+
+  test("says it is still reading them while the request is in flight", () => {
+    renderPage(messageDetail(), null);
+
+    openPicker();
+
+    // A list on its way is not a list that failed and not an account with no
+    // labels: the three states stay three (#167), filter field or no.
+    expect(within(picker()!).getByText("Loading labels…")).toBeDefined();
+    expect(filterField()).toBeNull();
+  });
+});
+
+// The shared picker's filter (#169), driven through the detail page's trigger —
+// the other half of `select/bulkLabelWiring.test.tsx`'s. One component, so what
+// narrows the bulk bar's list narrows this one.
+describe("filtering the picker", () => {
+  test("typing narrows the list and clearing restores it", () => {
+    renderPage();
+    openPicker();
+
+    type("inv");
+
+    expect(items()).toEqual(["Invoices"]);
+
+    type("");
+
+    expect(items()).toEqual(["Invoices", "Work"]);
+  });
+
+  test("the field takes the caret when the picker opens, so typing narrows it", () => {
+    renderPage();
+
+    openPicker();
+
+    expect(document.activeElement).toBe(filterField());
+  });
+
+  test("a label reached through the filter is added like any other", async () => {
+    renderPage();
+    openPicker();
+
+    type("wor");
+    pick("Work");
+
+    await waitFor(() => expect(labelCalls()).toHaveLength(1));
+    expect(labelCalls()[0]?.body).toEqual({ add: ["lab-work"] });
+    expect(picker()).toBeNull();
+  });
+
+  test("a label already on the message is still marked, filtered down to it", () => {
+    renderPage(messageDetail({ labels: [asMessageLabel(INVOICES)] }));
+    openPicker();
+
+    type("inv");
+
+    expect(items()).toEqual(["InvoicesAdded"]);
+  });
+
+  test("Escape still closes the popover from inside the field", () => {
+    renderPage();
+    openPicker();
+    type("inv");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(picker()).toBeNull();
   });
 });

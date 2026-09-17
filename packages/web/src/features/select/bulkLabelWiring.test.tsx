@@ -125,6 +125,12 @@ const picker = () => screen.queryByRole("menu", { name: "Labels" });
 // A click is what a tap produces: the picker opens on it rather than on hover,
 // so a finger reaches it as readily as a pointer.
 const openPicker = () => fireEvent.click(trigger());
+const filterField = () => screen.queryByLabelText("Filter labels") as HTMLInputElement | null;
+const type = (value: string) => fireEvent.change(filterField()!, { target: { value } });
+const items = () =>
+  within(picker()!)
+    .queryAllByRole("menuitem")
+    .map((item) => item.textContent);
 
 describe("the bulk bar's label picker", () => {
   test("offers this account's own labels, and nothing that is not one", () => {
@@ -134,11 +140,8 @@ describe("the bulk bar's label picker", () => {
 
     openPicker();
 
-    const items = within(picker()!)
-      .getAllByRole("menuitem")
-      .map((item) => item.textContent);
     // The other account's label and Gmail's own mailbox are both absent.
-    expect(items).toEqual(["Invoices", "Work"]);
+    expect(items()).toEqual(["Invoices", "Work"]);
     expect(trigger().getAttribute("aria-expanded")).toBe("true");
   });
 
@@ -198,11 +201,78 @@ describe("the bulk bar's label picker", () => {
     expect(sent).toEqual([]);
   });
 
+  test("says there are none, rather than offering an unfillable filter", () => {
+    renderBar(["msg-1"], []);
+
+    openPicker();
+
+    expect(within(picker()!).getByText("No labels yet.")).toBeDefined();
+    // Nothing to narrow, so the field that narrows it is not drawn.
+    expect(filterField()).toBeNull();
+  });
+
   test("the four existing actions are still there beside it", () => {
     renderBar(["msg-1"]);
 
     for (const name of ["Mark as read", "Mark as unread", "Archive", "Delete"]) {
       expect(screen.getByRole("button", { name })).toBeDefined();
     }
+  });
+});
+
+// The filter is the half of #169 that makes the shared picker usable: an account
+// with eighty labels is a scroll box nobody can aim at. Driven here through the
+// bulk bar and, in `message-detail/addLabelWiring.test.tsx`, through the detail
+// page's trigger — one component, so both faces must narrow the same way.
+describe("filtering the bulk picker", () => {
+  test("typing narrows the list and clearing restores it", () => {
+    renderBar(["msg-1"]);
+    openPicker();
+
+    type("inv");
+
+    expect(items()).toEqual(["Invoices"]);
+
+    type("");
+
+    expect(items()).toEqual(["Invoices", "Work"]);
+  });
+
+  test("a label reached through the filter is applied like any other", async () => {
+    const { labelsOf } = renderBar(["msg-1"]);
+    openPicker();
+
+    type("inv");
+    fireEvent.click(within(picker()!).getByRole("menuitem", { name: "Invoices" }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]?.body.labelId).toBe("lab-invoices");
+    expect(labelsOf("msg-1")).toEqual(["Invoices"]);
+    expect(picker()).toBeNull();
+  });
+
+  test("a query nothing matches says so, rather than reading as no labels at all", () => {
+    renderBar(["msg-1"]);
+    openPicker();
+
+    type("zzz");
+
+    expect(items()).toEqual([]);
+    expect(within(picker()!).getByText("No labels match that.")).toBeDefined();
+    // The three states the picker already distinguished are still its own: this
+    // account has labels, and saying "No labels yet." here would be a lie.
+    expect(within(picker()!).queryByText("No labels yet.")).toBeNull();
+  });
+
+  test("the next open starts from the whole list again", () => {
+    renderBar(["msg-1"]);
+    openPicker();
+    type("inv");
+
+    fireEvent.click(trigger());
+    openPicker();
+
+    expect(filterField()?.value).toBe("");
+    expect(items()).toEqual(["Invoices", "Work"]);
   });
 });
