@@ -169,16 +169,21 @@ describe("the badge row", () => {
     expect(html).not.toContain("Attachment quote.pdf");
   });
 
-  // The row asks the same question its children do, so a message whose only
-  // "badge" was an attachment must not leave an empty flex row spending a gap.
-  test("is absent when an attachment was the only thing it would have held", () => {
+  // The row used to hide itself when it had nothing to draw, so a message whose
+  // only "badge" was an attachment left no empty flex row spending a gap. Since
+  // #167 it is never empty: what is left when every badge is gone is the trigger
+  // that labels a message carrying no label — the one that most needs it.
+  test("holds the add-label trigger and nothing else on a bare message", () => {
     const html = render({
       labels: [
         { id: "l0", gmailLabelId: "INBOX", name: "INBOX", colorBg: null, colorFg: null },
         { id: "l9", gmailLabelId: "UNREAD", name: "UNREAD", colorBg: null, colorFg: null },
       ],
     });
-    expect(atRest(html)).not.toMatch(/<div class="flex flex-wrap items-center gap-2"/);
+    const rest = atRest(html);
+    expect(rest).toContain('aria-label="Add label"');
+    expect(rest).not.toContain("INBOX");
+    expect(rest).not.toContain("quote.pdf");
   });
 
   test("renders pending suggestions beside them", () => {

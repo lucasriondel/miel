@@ -985,6 +985,38 @@ on a refetch and undo a "Mark as unread" the reader had just asked for. The
 consequence for the toggle's own suite is that it tests the trip back —
 opening an unread message leaves no "Mark as read" to click.
 
+## Labelling the message you are reading
+
+The last gap in that set (#167). A label could be taken off one message (the ✕
+on its badge), put on many at once (the bulk bar, in select mode) or accepted
+from a triage suggestion — so a message with no run, or one whose suggestions
+were all settled, could not be labelled without going back to the list and
+selecting it. `features/message-detail/AddLabelButton.tsx` is the trigger,
+`useAddMessageLabel` the mutation, and there is no new endpoint, service or
+schema: `POST /messages/:accountId/:gmailMessageId/labels` has always taken both
+`add` and `remove`, and the web app sent only `remove`.
+
+Three things the shape is load-bearing for:
+
+- **The header's badge row is now unconditional.** It used to ask whether it had
+  a badge to draw and render nothing when it had none, which left no label area
+  at all on precisely the message someone opened in order to label. It is never
+  empty now — `MessageLabels` still self-hides, and what remains is the trigger.
+- **Both optimistic plans, and a notice.** The mutation declares `optimistic`
+  and `optimisticDetail`, so the badge appears on the open page and on the row
+  behind it before the server answers; `withLabel` leaves a label the message
+  already carries alone, so nothing can produce a second badge. The refusal
+  toast rides on the mutation (`announcingFailure`) rather than the click,
+  because a rollback on its own is silent and a badge that appears and quietly
+  goes reads as a click that missed.
+- **One picker, two faces.** `features/labels/LabelPickerMenu.tsx` holds which
+  labels are offered (the account's own, system mailboxes left out) and the
+  loading, failed and empty states; the bulk bar's picker and this one own only
+  their trigger and where the panel hangs, the way an attachment's menu is
+  shared between its two presentations. A label already on the message is listed
+  and marked "Added" rather than hidden — hiding it reads as this account not
+  having it.
+
 ## Selecting messages
 
 Multi-select is one hook — `features/select/useSelection.ts`, account-scoped by

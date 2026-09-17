@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import {
+  addMessageLabelMutationOptions,
   applyLabelSuggestionMutationOptions,
   archiveMessageMutationOptions,
   batchMessageActionMutationOptions,
@@ -568,6 +569,80 @@ describe("accepting a label suggestion", () => {
     );
 
     expect(qc.getQueryState(["accounts", "acc-1", "labels"])?.isInvalidated).toBe(true);
+  });
+});
+
+// #167. The other half of the same route: the web app sent only `remove`, so a
+// message with no triage run — or one whose suggestions are all settled — had no
+// way to be labelled at all short of selecting it in the list.
+describe("adding a label to a message", () => {
+  const INVOICES_LABEL: MessageLabel = {
+    id: "lab-1",
+    name: "Invoices",
+    gmailLabelId: "Label_1",
+    colorBg: "#fff8e1",
+    colorFg: "#4a3b00",
+  };
+  const input = { ...INPUT, label: INVOICES_LABEL };
+
+  test("POSTs the label as an addition", async () => {
+    const calls = stubFetch({ ok: true, added: [], removed: [] });
+
+    await addMessageLabelMutationOptions(new QueryClient()).mutationFn(input);
+
+    expect(calls[0]?.url).toBe(`${API}/messages/acc-1/msg-1/labels`);
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.body).toEqual({ add: ["lab-1"] });
+  });
+
+  test("draws the badge on the row behind the page before the server answers", async () => {
+    const qc = seed([listedMessage({ labels: [] })]);
+
+    await addMessageLabelMutationOptions(qc).onMutate(input);
+
+    expect(labelNames(qc)).toEqual(["Invoices"]);
+  });
+
+  test("leaves another message's row alone", async () => {
+    const qc = seed([
+      listedMessage({ gmailMessageId: "msg-1", labels: [] }),
+      listedMessage({ gmailMessageId: "msg-2", labels: [] }),
+    ]);
+
+    await addMessageLabelMutationOptions(qc).onMutate(input);
+
+    expect(labelNames(qc, 1)).toEqual([]);
+  });
+
+  test("draws the badge on the open message too", async () => {
+    const qc = seedOpen(messageDetail({ labels: [] }));
+
+    await addMessageLabelMutationOptions(qc).onMutate(input);
+
+    expect(openLabelNames(qc)).toEqual(["Invoices"]);
+  });
+
+  // The picker shows an applied label as applied rather than hiding it, so the
+  // request can be fired at a label the message already carries — and a second
+  // badge of the same label is exactly what must not appear.
+  test("never doubles a label the message already carries", async () => {
+    const qc = seedOpen(messageDetail({ labels: [INVOICES_LABEL] }));
+    qc.setQueryData(listKey, list([listedMessage({ labels: [INVOICES_LABEL] })]));
+
+    await addMessageLabelMutationOptions(qc).onMutate(input);
+
+    expect(openLabelNames(qc)).toEqual(["Invoices"]);
+    expect(labelNames(qc)).toEqual(["Invoices"]);
+  });
+
+  test("takes the badge back off both when the request failed", async () => {
+    const qc = seedOpen(messageDetail({ labels: [] }));
+    const options = addMessageLabelMutationOptions(qc);
+
+    options.onError(new Error("boom"), input, await options.onMutate(input));
+
+    expect(openLabelNames(qc)).toEqual([]);
+    expect(labelNames(qc)).toEqual([]);
   });
 });
 

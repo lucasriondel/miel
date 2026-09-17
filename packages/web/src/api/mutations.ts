@@ -739,18 +739,67 @@ export function useDismissAllSuggestions() {
   return useMutation(dismissAllSuggestionsMutationOptions(qc));
 }
 
-export interface RemoveMessageLabelInput extends MessageActionInput {
-  labelId: string;
-}
-
-export interface RemoveMessageLabelResult {
+/** What the one label route answers, whichever half of it was asked for. */
+export interface ModifyMessageLabelsResult {
   ok: true;
   added: { labelId: string; gmailLabelId: string; name: string }[];
   removed: { labelId: string; gmailLabelId: string; name: string }[];
 }
 
+export interface AddMessageLabelInput extends MessageActionInput {
+  /**
+   * The whole label, not its id: the badge is drawn before the server answers,
+   * so the optimistic plans need the name and the colours too — the same reason
+   * the bulk action carries one.
+   */
+  label: MessageLabel;
+}
+
+/**
+ * Attaching one of the account's labels to the open message (#167).
+ *
+ * The other half of the route a removal already used, and the last gap in the
+ * set: a label could be taken off one message, put on many at once, or accepted
+ * from a suggestion — so a message with no triage run had no way to be labelled
+ * without going back to the list and selecting it.
+ *
+ * Both optimistic shapes are declared because the user is looking at one of them
+ * and may well be looking at the other next: the badge appears on the open page
+ * and on the row behind it. `withLabel` leaves a label the message already
+ * carries alone, so the picker offering an applied label — which it does, rather
+ * than hiding it — can never produce a second badge.
+ *
+ * The notice hangs off the mutation rather than the click, like the two actions
+ * that leave the page: a rollback is silent, and a badge that appears and
+ * quietly goes again is indistinguishable from a misfired click.
+ */
+export function addMessageLabelMutationOptions(qc: QueryClient) {
+  return announcingFailure<AddMessageLabelInput, ModifyMessageLabelsResult>(
+    qc,
+    "Could not add label",
+    {
+      request: (input) => ({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/labels`,
+        method: "POST",
+        body: { add: [input.label.id] },
+      }),
+      optimistic: (input) => (m) => (sameMessage(m, input) ? withLabel(m, input.label) : m),
+      optimisticDetail: (input) => (d) => withLabel(d, input.label),
+    },
+  );
+}
+
+export function useAddMessageLabel() {
+  const qc = useQueryClient();
+  return useMutation(addMessageLabelMutationOptions(qc));
+}
+
+export interface RemoveMessageLabelInput extends MessageActionInput {
+  labelId: string;
+}
+
 export function removeMessageLabelMutationOptions(qc: QueryClient) {
-  return messageMutationOptions<RemoveMessageLabelInput, RemoveMessageLabelResult>(qc, {
+  return messageMutationOptions<RemoveMessageLabelInput, ModifyMessageLabelsResult>(qc, {
     request: (input) => ({
       path: `/messages/${input.accountId}/${input.gmailMessageId}/labels`,
       method: "POST",
