@@ -157,6 +157,37 @@ describe("extracting promos from one message on request", () => {
     expect(await stored(stores)).toEqual([]);
   });
 
+  // The same rule the sync writes under (#166), because both doors go through
+  // the one row-building seam rather than filtering at their own call site.
+  test("drops a code-less entry and keeps the coded one", async () => {
+    const stores = seed();
+
+    const result = await succeeds(
+      stores,
+      answering([{ ...PROMO, code: null, discount: "Free shipping" }, PROMO]),
+    );
+
+    expect(result.found).toBe(true);
+    expect(result.promos.map((p) => p.code)).toEqual(["WEEKEND20"]);
+    expect((await stored(stores)).map((r) => r.code)).toEqual(["WEEKEND20"]);
+  });
+
+  test("reports found nothing when the mail's only offer needs no code", async () => {
+    const stores = seed();
+    await succeeds(stores, answering([PROMO]));
+
+    const result = await succeeds(
+      stores,
+      answering([{ ...PROMO, code: null, discount: "Free shipping" }]),
+    );
+
+    // Nothing storable came back, so this run is the "found nothing" one — and
+    // it clears the previous answer as any other run does.
+    expect(result.found).toBe(false);
+    expect(result.promos).toEqual([]);
+    expect(await stored(stores)).toEqual([]);
+  });
+
   test("a re-run leaves a saved promo on the same mail alone", async () => {
     const stores = seed();
     const [first] = await succeeds(stores, answering([PROMO])).then((r) => r.promos);

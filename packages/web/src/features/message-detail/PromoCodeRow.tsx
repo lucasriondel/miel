@@ -13,9 +13,10 @@ interface Props {
  * one thing that is clickable, through the same chip the Promo Codes page uses
  * — a user reaching for a code aims at the code, wherever the code is drawn.
  *
- * An offer with no code is shown all the same: "free shipping over £40" is a
- * promo with nothing to copy, and dropping it would hide a real answer for want
- * of a button.
+ * The code-less branch is kept but is no longer reachable from this panel:
+ * since #166 an offer that needs no code never becomes a row, so a run whose
+ * only offer was one reports "found nothing" instead. The branch still draws
+ * the rows written before that, which are the same shape and were not migrated.
  */
 export const PromoCodeRow = ({ promo }: Props) => (
   <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">

@@ -131,7 +131,10 @@ describe("the promo codes panel", () => {
     expect(screen.getByRole("button", { name: "Search again" })).toBeTruthy();
   });
 
-  test("an offer with no code is shown, with nothing to copy", async () => {
+  // Since #166 the server drops a code-less offer, so this is the row a build
+  // from before that left behind rather than an answer this endpoint still
+  // gives: what is pinned is that the row draws without a copy button.
+  test("a row with no code is drawn, with nothing to copy", async () => {
     answer = { promos: [promo({ code: null, discount: "Free shipping" })], found: true };
     renderPanel();
 

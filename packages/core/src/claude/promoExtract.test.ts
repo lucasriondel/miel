@@ -116,6 +116,14 @@ describe("the promo-extract prompt", () => {
   test("names the sender as the merchant's fallback", () => {
     expect(prompt).toContain(INPUT.from);
   });
+
+  // #166: a promo row is a code someone copies at a checkout, so an offer that
+  // needs none is not one. The model is told, which makes the common case that
+  // it never answers with one at all.
+  test("says an offer requiring no code must not be returned", () => {
+    expect(prompt.toLowerCase()).toContain("do not return");
+    expect(prompt.toLowerCase()).toContain("no code");
+  });
 });
 
 // The seam is the existing one: a suite hands over a `ClaudeImpl` at the tag,
@@ -147,6 +155,25 @@ describe("running promo-extract through the Claude tag", () => {
 
     // Typed, not `unknown`: the field access below is the assertion.
     expect(result.output.promos[0]?.code).toBe("WEEKEND20");
+  });
+
+  // The service drops a code-less entry (#166), and the contract deliberately
+  // does not: making `code` non-nullable would turn one code-less offer into a
+  // schema violation, and a schema violation loses the whole mail — including
+  // the two coded promos beside it.
+  test("decodes a code-less entry rather than failing the mail", async () => {
+    const decoded = expectSuccess(
+      await runExit(
+        spec.output.decode({
+          promos: [
+            { code: null, discount: "Free shipping", terms: null, expiresAt: null, merchant: null },
+            PROMOS.promos[0],
+          ],
+        }),
+      ),
+    );
+
+    expect(decoded.promos.map((p) => p.code)).toEqual([null, "WEEKEND20"]);
   });
 
   test("a malformed answer is the repo's own schema error", async () => {

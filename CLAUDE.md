@@ -419,6 +419,18 @@ The rules the shape is load-bearing for:
   when triage's own provider is fine. Which provider that is has been the
   install's own answer since #154 — the task has a picker like the other three —
   rather than `SETTING_DEFAULTS` with no way to say otherwise.
+- **A promo row is a code.** An offer needing none — "free shipping, applied
+  automatically" — produces no row anywhere (#166). The prompt says not to
+  return one, and `toRows`, the seam *both* write paths build rows through,
+  drops any that comes back: a row with nothing to copy spends a suggestion slot
+  and a saved-page line on something the user cannot act on. The drop is at that
+  seam rather than at each call site so the sync and the on-demand run cannot
+  answer differently about the same mail. `code` stays nullable in the output
+  contract and in the column on purpose: a non-nullable field would make a
+  code-less entry a schema violation, and a schema violation fails the whole
+  mail — so it is a **skipped entry, never a failed extraction**, and the coded
+  offers beside it still land. Nothing was migrated or deleted, so rows written
+  before this still exist and the UI still reads a null code.
 - **No new sync socket event.** It is a step inside fetch, and a wire event
   would mean the `SyncServerEvent` / `ReceivedSyncServerEvent` compatibility
   dance the repo already carries once. Its failures ride in the sync window's
@@ -493,7 +505,8 @@ Three are the section's: an expired promo is not a suggestion (an unstated
 expiry is not an expired one, and the stored instant is the end of the day, so a
 promo lapsing today is shown for the whole of it), a repeated code is one card
 (deduped *before* the cap, so a shop's third reminder cannot spend a slot;
-code-less offers are never folded, since only a code identifies an offer), and
+code-less offers are never folded, since only a code identifies an offer — a
+rule that now only reaches rows written before #166 stopped storing them), and
 `MAX_PROMO_SUGGESTIONS` caps it. `now` is a parameter rather than a call to the
 clock, so "expired" is assertable. The Promise facade put the service in
 `stores/seam.test.ts`'s `SEAMED_SERVICES`.

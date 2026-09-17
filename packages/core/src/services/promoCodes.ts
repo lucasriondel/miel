@@ -5,7 +5,8 @@
  * What it does for a sync: take the messages the fetch just upserted, ask
  * {@link shouldExtractPromos} which of them are worth a model call, run
  * `promo-extract` over those, and write one suggested row per promo the model
- * answered with.
+ * answered with — minus the ones carrying no code, which {@link toRows} drops
+ * for both this door and the on-demand one (#166).
  *
  * Three rules the shape here is load-bearing for.
  *
@@ -133,6 +134,38 @@ const toRow = (
   merchant: promo.merchant ?? message.fromName,
 });
 
+/**
+ * Whether an entry is worth a row at all (#166).
+ *
+ * A promo row is *for* a code someone copies at a checkout. "Free shipping,
+ * applied automatically" is a real offer and a useless row: there is nothing to
+ * copy, so it spends a suggestion slot and a line on the saved page on something
+ * the user cannot act on — the copy button already has nothing to offer it.
+ *
+ * Whitespace counts as nothing, since a code nobody can type is not a code.
+ */
+const hasCode = (promo: ExtractedPromoT): boolean =>
+  promo.code !== null && promo.code.trim().length > 0;
+
+/**
+ * The one place a model answer becomes rows, for both doors — the sync's
+ * fill-forward and the message page's on-demand run.
+ *
+ * The drop lives here rather than at each call site so the two cannot come to
+ * different answers about the same mail, and so a third caller inherits the rule
+ * instead of having to remember it.
+ *
+ * A code-less entry is a **skipped entry, never a failed extraction**: the
+ * output contract keeps `code` nullable on purpose, because making it
+ * non-nullable would turn one code-less offer into a schema violation and a
+ * schema violation fails the whole mail — losing the coded promos beside it.
+ */
+const toRows = (
+  accountId: string,
+  message: PromoCandidateMessage,
+  promos: readonly ExtractedPromoT[],
+): NewPromoCode[] => promos.filter(hasCode).map((promo) => toRow(accountId, message, promo));
+
 interface OneMessageResult {
   rows: NewPromoCode[];
   errors: string[];
@@ -156,7 +189,7 @@ const extractOne = (
       receivedAt: message.internalDate.toISOString(),
       body: text,
     });
-    return { rows: output.promos.map((p) => toRow(accountId, message, p)), errors: [] };
+    return { rows: toRows(accountId, message, output.promos), errors: [] };
   }).pipe(
     // Which class a failure is in stays the combinator's answer, not this
     // module's; the original error is kept only to name a failure that carries
@@ -286,7 +319,9 @@ const stillValid = (row: StoredPromoCode, now: Date): boolean =>
  *
  * Only a code identifies an offer, so a promo needing none is never folded into
  * another: two "no code needed" offers are two offers, and there is nothing to
- * compare them by that is not a guess.
+ * compare them by that is not a guess. Since #166 nothing new is stored without
+ * a code, so that branch only ever reaches rows written before it — which are
+ * kept, because nothing here deletes.
  */
 const distinctByCode = (rows: readonly StoredPromoCode[]): StoredPromoCode[] => {
   const seen = new Set<string>();
@@ -848,9 +883,10 @@ export const extractPromosForMessageEffect = (
     // press a re-ask rather than a duplicate. A run that found nothing still
     // clears, because "the model now says there is nothing here" is an answer
     // and leaving the old guess up would contradict what the button just said.
+    // A mail whose only offer needs no code is such a run: {@link toRows} drops
+    // it, so `found` is false and the panel reports nothing found.
     yield* PromoStore.removeUnsavedForMessage(args);
-    const rows = output.promos.map((p) => toRow(args.accountId, candidate, p));
-    const stored = yield* PromoStore.insert(rows);
+    const stored = yield* PromoStore.insert(toRows(args.accountId, candidate, output.promos));
 
     debug.info("promos extracted on request", {
       gmailMessageId: args.gmailMessageId,
