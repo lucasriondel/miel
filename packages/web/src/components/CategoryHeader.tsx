@@ -56,7 +56,7 @@ export const CategoryHeader = ({
       style={style}
       // `pr-4` matches a message row's own `px-4`, so this header's actions and
       // the row actions below it end on the same right edge.
-      className="category-group-header flex items-center gap-2 py-2 pl-3 pr-4 sm:gap-2.5"
+      className="category-group-header group/category flex items-center gap-2 py-2 pl-3 pr-4 sm:gap-2.5"
     >
       <button
         type="button"
@@ -89,11 +89,27 @@ export const CategoryHeader = ({
             in its rows, so repeating them above would be noise. */}
         {collapsed ? <CategorySenderRun senders={senders} /> : null}
       </button>
-      {/* A reserved cell, like the row's end (req. 9): the actions fade in on
-          hover of the group rather than being mounted by it, so nothing in the
-          heading moves. Below `sm` they are not offered at all — there is no
-          hover there, and the bulk bar is how a touch device acts in bulk. */}
-      <div className="category-group-actions hidden shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/category:opacity-100 sm:flex">
+      {/* Reachable at every width and on every device — the rule #144 set, kept
+          whole. These were once `hidden` below `sm` and `opacity-0` above it
+          until the group was hovered, which made a pointer the one way to reach
+          them: on a touch device the three buttons were in the DOM, invisible,
+          and a category could never be acted on as a whole.
+
+          The reveal is back, but only behind `pointer-fine:` — a device that
+          can actually hover and aim (see the variant in `index.css`). Anything
+          that fails that query, every touch device among them, never gets the
+          `opacity-0` at all and keeps the buttons on screen. So this is a
+          refinement for mice, not the gate it used to be: three bands of icons
+          stacked down the page is a lot of chrome for a pointer that can summon
+          them on approach, and no quieter for a finger that cannot.
+
+          `focus-within` is in the reveal for the same reason touch is exempt
+          from it: a keyboard tabbing into an invisible button is #144's bug in
+          another modality. Opacity rather than `hidden` so the heading beside
+          it does not reflow as the pointer arrives, and the cell still refuses
+          to shrink, so the heading is what gives way when the row runs out of
+          room. */}
+      <div className="category-group-actions flex shrink-0 items-center gap-1 transition-opacity duration-150 pointer-fine:opacity-0 pointer-fine:group-hover/category:opacity-100 pointer-fine:group-focus-within/category:opacity-100">
         <CategorySelectButton
           category={name.toLowerCase()}
           accountId={accountId}

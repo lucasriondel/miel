@@ -49,6 +49,23 @@
   --color-gousse-low-ink: rgb(var(--gousse-low-ink));
 }
 
+/* `pointer-fine:` — the variant for "this device has a real mouse".
+   Tailwind ships no `hover:hover` or `pointer:fine` variant, and v4 is
+   CSS-first, so it is declared here rather than in a config file.
+
+   Both clauses are load-bearing and neither is enough alone. `hover: hover` is
+   true on hybrids and stylus devices that can hover but are aimed with a finger
+   or a pen; `pointer: fine` is true of a pointing device accurate enough to hit
+   a 24px icon but says nothing about whether it can hover, which is the half a
+   reveal depends on. The pair together is the only honest test for "hovering is
+   something this user can do", and anything that fails it — every touch
+   device — falls through to the unprefixed rule and keeps what #144 gave it.
+
+   That is the whole point of the variant: hover-reveal is a refinement for
+   pointers, never a gate on reachability. Use it only for chrome that is
+   *also* on screen unconditionally everywhere else. */
+@custom-variant pointer-fine (@media (hover: hover) and (pointer: fine));
+
 html,
 body,
 #root {
@@ -499,8 +516,7 @@ body {
 /* The heading is 8px of padding around a 16px glyph — T1's height — so the
    actions in it cannot be the 32px *tall* targets they are in a section header,
    which would set the row's height instead and make every band taller than the
-   design. They are pointer-only here (hidden below `sm`, where the bulk bar is
-   how a touch device acts in bulk), so the shorter target costs nothing.
+   design.
 
    The width stays 32px, and that is not a leftover: three strips of these
    actions are on screen at once — the section header above the card, this band
@@ -509,10 +525,32 @@ body {
    button's width plus the 4px gap, so shrinking the width here to match the
    height would give this strip a 28px pitch against the others' 36px and pull
    every one of its icons off the column its neighbours sit in. Only the height
-   is the band's business. */
+   is the band's business.
+
+   That 24px used to be justified by these being pointer-only — hidden below
+   `sm` and hover-revealed above it. They are not: a touch device reaches them
+   now (#144's rule, applied to the band headings), and 24px is half the height
+   a finger is aimed at. The box stays 24px because the band's height depends on
+   it; the *target* does not have to. The `::after` is the hit area, centred on
+   the button and overflowing it vertically, so a tap that lands above or below
+   the visible icon still hits it and the row's height is unchanged. It sits
+   above the button's own content but takes no paint. Three of these overlap
+   nothing but each other's horizontal gap, and a tap in that 4px gap resolving
+   to either neighbour is the same outcome a 4px miss always had. */
 .category-group-actions button {
+  position: relative;
   height: 1.5rem;
   width: 2rem;
+}
+
+.category-group-actions button::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* 24px box + 10px each side = a 44px target, the usual minimum. */
+  top: -0.625rem;
+  bottom: -0.625rem;
 }
 
 /* ---------------------------------------------------------------------------

@@ -5,14 +5,20 @@
 // way to reach them: on a touch device the three buttons were in the DOM,
 // invisible, and the category could never be acted on as a whole.
 //
+// The reveal came back for pointers only, behind `pointer-fine:` — a mouse
+// summons these on approach, and a device that cannot hover never gets the
+// `opacity-0`. So what is forbidden is an *unconditional* gate, not every gate;
+// `unconditionalHidingClasses` is that rule, shared with the two suites that
+// check the same thing on the band headings.
+//
 // Rendered rather than read as source, for what a render answers: the buttons
 // are found and clicked with no hover event anywhere, and the click produces the
 // request the account's own mailbox expects. Two things a render cannot answer
 // are asserted on the rendered class list instead, and only those two — happy-dom
 // loads no stylesheet, so "visible" and "does not overflow" have no computed
 // value here. What replaces them is the mechanism itself: no ancestor of a
-// button gates it on hover, and the heading is the element that gives way when
-// the row runs out of room.
+// button gates it on hover for a device that cannot hover, and the heading is
+// the element that gives way when the row runs out of room.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { ReactElement } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -21,6 +27,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { listedMessage } from "../api/listedMessage.fixture";
 import type { ListedMessage } from "../api/types";
 import { TriageActivityProvider } from "../contexts/TriageActivityContext";
+import { unconditionalHidingClasses } from "./hoverGateClasses";
 import { PrioritySection } from "./PrioritySection";
 import { UntriagedSection } from "./UntriagedSection";
 
@@ -166,18 +173,21 @@ for (const section of CASES) {
       }
     });
 
-    test("nothing above a button hides it until hover", () => {
+    test("nothing above a button hides it from a device that cannot hover", () => {
       mountSection(section, "acc-1", messagesFor("acc-1", 2));
 
       const classes = classesUpToSection(screen.getByRole("button", { name: "Archive all" }));
 
-      expect(classes.filter((c) => c.includes("group-hover"))).toEqual([]);
-      // The named group the gate hung off, gone with it rather than left as a
-      // marker nothing reads.
+      // A gate is allowed only where hovering is possible. The section header's
+      // own actions carry none at all — the band headings inside the card are
+      // where the pointer refinement lives (#144's rule kept, see
+      // `CategoryHeader`), and this row of three is the one a section shows
+      // unconditionally.
+      expect(unconditionalHidingClasses(classes)).toEqual([]);
+      // The named group the old gate hung off, gone with it rather than left as
+      // a marker nothing reads.
       expect(classes.filter((c) => c.startsWith("group/"))).toEqual([]);
-      expect(classes.filter((c) => c.startsWith("opacity-0"))).toEqual([]);
-      expect(classes).not.toContain("invisible");
-      expect(classes).not.toContain("hidden");
+      expect(classes.filter((c) => c.includes("group-hover"))).toEqual([]);
     });
 
     test("a plain click acts on the section — no pointer gesture first", async () => {

@@ -19,6 +19,7 @@ import type { ListedMessage } from "../api/types";
 import { TriageActivityProvider } from "../contexts/TriageActivityContext";
 import { PrioritySection } from "./PrioritySection";
 import { UntriagedSection } from "./UntriagedSection";
+import { classesUpFrom, unconditionalHidingClasses } from "./hoverGateClasses";
 
 const originalFetch = globalThis.fetch;
 
@@ -238,6 +239,45 @@ describe("acting on one category", () => {
     expect(screen.getByRole("button", { name: "Archive all" })).toBeTruthy();
     // …and the band's, which say which band.
     expect(screen.getByRole("button", { name: "Archive all in Promotions" })).toBeTruthy();
+  });
+
+  test("a band action is hidden from no device that cannot hover", () => {
+    mount([inCategory("CATEGORY_PROMOTIONS", "m-1", "KoRo")]);
+
+    // #144's rule, which the band headings once broke: they were `hidden` below
+    // `sm` and `opacity-0` above it until the group was hovered, so a touch
+    // device had the three buttons in the DOM, invisible, and could never act
+    // on a band as a whole.
+    //
+    // They are hover-revealed again — three strips of icons down the page is a
+    // lot of chrome for a pointer that can summon them — but only behind
+    // `pointer-fine:`, so the device that could not reach them is exactly the
+    // device the gate does not apply to. happy-dom loads no stylesheet and
+    // cannot evaluate that media query; the prefix is the mechanism, and its
+    // absence in front of a hiding class is the bug.
+    const classes = classesUpFrom(
+      screen.getByRole("button", { name: "Archive all in Promotions" }),
+    );
+
+    expect(unconditionalHidingClasses(classes)).toEqual([]);
+  });
+
+  test("the band actions are revealed on hover where hovering is possible", () => {
+    mount([inCategory("CATEGORY_PROMOTIONS", "m-1", "KoRo")]);
+
+    // The other half: the gate has to actually be there, or the reveal silently
+    // becomes "always visible" again and only a screenshot would say so.
+    const classes = classesUpFrom(
+      screen.getByRole("button", { name: "Archive all in Promotions" }),
+    );
+
+    expect(classes).toContain("pointer-fine:opacity-0");
+    // Hover alone would strand a keyboard on an invisible button — #144's bug
+    // in another modality — so focus lifts it too.
+    expect(classes).toContain("pointer-fine:group-hover/category:opacity-100");
+    expect(classes).toContain("pointer-fine:group-focus-within/category:opacity-100");
+    // The gate reaches down from the heading, so the heading has to name itself.
+    expect(classes).toContain("group/category");
   });
 
   test("carries the category select onto the band, handing up only its own rows", () => {

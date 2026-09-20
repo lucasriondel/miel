@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { listedMessage } from "../api/listedMessage.fixture";
 import type { ListedMessage } from "../api/types";
 import { TriageActivityProvider } from "../contexts/TriageActivityContext";
+import { unconditionalHidingClasses } from "./hoverGateClasses";
 import { PrioritySection } from "./PrioritySection";
 import { UntriagedSection } from "./UntriagedSection";
 
@@ -120,15 +121,15 @@ for (const section of CASES) {
       expect(props.calls).toEqual([["acc-1", ["acc-1-msg-0", "acc-1-msg-1"]]]);
     });
 
-    test("nothing above it hides it until hover", () => {
+    test("nothing above it hides it from a device that cannot hover", () => {
       mountSection(section, wired());
 
       const classes = classesUpToSection(screen.getByRole("button", { name: section.selectLabel }));
 
-      expect(classes.filter((c) => c.includes("group-hover"))).toEqual([]);
-      expect(classes.filter((c) => c.startsWith("opacity-0"))).toEqual([]);
-      expect(classes).not.toContain("invisible");
-      expect(classes).not.toContain("hidden");
+      // The select in a *section* header is never gated. Its twin in a band
+      // heading is, but only behind `pointer-fine:` — which is what this rule
+      // allows and an unconditional `opacity-0` is not.
+      expect(unconditionalHidingClasses(classes)).toEqual([]);
     });
 
     test("it stays in select mode, where the per-category actions do not", () => {
