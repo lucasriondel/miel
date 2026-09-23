@@ -4,6 +4,7 @@ import { CategoryGroupBody } from "./CategoryGroupBody";
 import { CategoryHeader } from "./CategoryHeader";
 import { MessageRow } from "./MessageRow";
 import { PresenceRow } from "./PresenceRow";
+import { staggerDelayMs } from "./presenceStagger";
 import { getSystemLabelMeta } from "./systemLabels";
 import { senderRun, type CategoryName } from "../pages/categoryGroups";
 import type { Presence } from "../hooks/presence";
@@ -57,21 +58,27 @@ export const CategoryGroup = ({
   const style = meta?.hue ? ({ "--hue": meta.hue } as CSSProperties) : undefined;
 
   return (
-    <div
-      style={style}
-      className="category-group group/category border-b border-gousse-line last:border-b-0"
-    >
-      <CategoryHeader
-        category={category}
-        accountId={accountId}
-        messages={messages}
-        collapsed={collapsed}
-        onToggle={onToggle}
-        senders={senderRun(messages)}
-        selectMode={selectMode}
-        isSelected={isSelected}
-        onToggleCategory={onToggleCategory}
-      />
+    <div style={style} className="category-group group/category">
+      {/* The heading enters with its first row rather than ahead of it — a group
+          arriving (a new account's, or a category's first message) would
+          otherwise show its heading over an empty run for the row's delay. It
+          plays on mount only, so collapsing and re-rendering leave it alone. */}
+      <div
+        className="motion-safe:animate-slide-up"
+        style={{ animationDelay: `${staggerDelayMs(startIndex)}ms` }}
+      >
+        <CategoryHeader
+          category={category}
+          accountId={accountId}
+          messages={messages}
+          collapsed={collapsed}
+          onToggle={onToggle}
+          senders={senderRun(messages)}
+          selectMode={selectMode}
+          isSelected={isSelected}
+          onToggleCategory={onToggleCategory}
+        />
+      </div>
       <CategoryGroupBody collapsed={collapsed}>
         {presence.map(({ item: m, key, state }, idx) => (
           <PresenceRow key={key} state={state} index={startIndex + idx}>

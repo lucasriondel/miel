@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedMessage } from "../api/types";
-import { categoryOf, groupByCategory, senderRun } from "./categoryGroups";
+import type { Presence } from "../hooks/presence";
+import { categoryOf, groupByCategory, groupPresenceByCategory, senderRun } from "./categoryGroups";
 
 const label = (name: string) => ({
   id: name,
@@ -12,6 +13,7 @@ const label = (name: string) => ({
 
 interface Over {
   id?: string;
+  accountId?: string;
   from?: string | null;
   fromEmail?: string;
   labels?: string[];
@@ -19,11 +21,12 @@ interface Over {
 
 const message = ({
   id = "m-1",
+  accountId = "acc-1",
   from = null,
   fromEmail = "x@y.com",
   labels = [],
 }: Over = {}): ListedMessage => ({
-  accountId: "acc-1",
+  accountId,
   accountEmail: "a@b.com",
   gmailMessageId: id,
   gmailThreadId: `t-${id}`,
@@ -117,5 +120,43 @@ describe("senderRun", () => {
 
   test("treats a blank display name as absent", () => {
     expect(senderRun([message({ from: "   ", fromEmail: "a@b.com" })])).toEqual(["a@b.com"]);
+  });
+});
+
+describe("groupPresenceByCategory", () => {
+  const row = (state: Presence<ListedMessage>["state"], over: Over): Presence<ListedMessage> => {
+    const item = message(over);
+    return { item, key: `${item.accountId}:${item.gmailMessageId}`, state };
+  };
+
+  test("keeps two accounts' rows of one category in separate groups", () => {
+    // Mid-switch: acc-1's rows are leaving, acc-2's arriving, all Primary.
+    const groups = groupPresenceByCategory([
+      row("leaving", { id: "a", accountId: "acc-1" }),
+      row("leaving", { id: "b", accountId: "acc-1" }),
+      row("present", { id: "c", accountId: "acc-2" }),
+    ]);
+    expect(groups.map((g) => [g.key, g.state, g.messages.length])).toEqual([
+      ["acc-1:CATEGORY_PERSONAL", "leaving", 2],
+      ["acc-2:CATEGORY_PERSONAL", "present", 1],
+    ]);
+  });
+
+  test("a group with a row still staying is present and counts only what stays", () => {
+    const [group] = groupPresenceByCategory([
+      row("leaving", { id: "a" }),
+      row("present", { id: "b" }),
+    ]);
+    expect(group?.state).toBe("present");
+    expect(group?.rows.map((r) => r.item.gmailMessageId)).toEqual(["a", "b"]);
+    expect(group?.messages.map((m) => m.gmailMessageId)).toEqual(["b"]);
+  });
+
+  test("orders categories by mailbox order within each account", () => {
+    const groups = groupPresenceByCategory([
+      row("present", { id: "a", labels: ["CATEGORY_UPDATES"] }),
+      row("present", { id: "b", labels: ["CATEGORY_PROMOTIONS"] }),
+    ]);
+    expect(groups.map((g) => g.category)).toEqual(["CATEGORY_PROMOTIONS", "CATEGORY_UPDATES"]);
   });
 });

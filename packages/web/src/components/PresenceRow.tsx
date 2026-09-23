@@ -1,15 +1,12 @@
 import type { ReactNode } from "react";
 import type { PresenceState } from "../hooks/presence";
+import { staggerDelayMs } from "./presenceStagger";
 
 interface Props {
   state: PresenceState;
   index: number;
   children: ReactNode;
 }
-
-// Cap total stagger so long inboxes don't wait seconds for the last row.
-const STAGGER_MS = 40;
-const MAX_DELAY_MS = 600;
 
 export const PresenceRow = ({ state, index, children }: Props) => {
   const leaving = state === "leaving";
@@ -35,11 +32,7 @@ export const PresenceRow = ({ state, index, children }: Props) => {
               ? "pointer-events-none border-b border-gousse-line last:border-b-0 motion-safe:animate-slide-out"
               : "border-b border-gousse-line last:border-b-0 motion-safe:animate-slide-up"
           }
-          style={
-            state === "present"
-              ? { animationDelay: `${Math.min(index * STAGGER_MS, MAX_DELAY_MS)}ms` }
-              : undefined
-          }
+          style={state === "present" ? { animationDelay: `${staggerDelayMs(index)}ms` } : undefined}
         >
           {children}
         </div>

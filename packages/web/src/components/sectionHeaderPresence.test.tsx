@@ -161,6 +161,54 @@ for (const section of CASES) {
   });
 }
 
+/** The category group headings in a section, in DOM order: whether each is
+ *  open, the count it shows, and whether it is still interactive. */
+const groupHeadings = () =>
+  screen.queryAllByRole("button", { name: /^(Collapse|Expand) Primary$/ }).map((b) => ({
+    open: b.getAttribute("aria-expanded") === "true",
+    count: /(\d+)/.exec(b.textContent ?? "")?.[1] ?? "",
+    inert: b.closest("[inert]") !== null,
+  }));
+
+for (const section of CASES) {
+  describe(`${section.name}'s category groups on an account switch`, () => {
+    afterEach(() => localStorage.clear());
+
+    test("the outgoing account's group leaves on its own instead of merging into the incoming one", async () => {
+      const { show } = mountSection(section, "acc-1", messagesFor("acc-1", 2));
+      expect(groupHeadings().map((g) => g.count)).toEqual(["2"]);
+
+      show("acc-2", messagesFor("acc-2", 1));
+
+      // Two groups, not one counting both mailboxes: the leaving one keeps the
+      // count it left with and cannot be acted on; the arriving one is live.
+      expect(groupHeadings()).toEqual([
+        { open: true, count: "2", inert: true },
+        { open: true, count: "1", inert: false },
+      ]);
+      await waitFor(() =>
+        expect(groupHeadings()).toEqual([{ open: true, count: "1", inert: false }]),
+      );
+    });
+
+    test("each account's groups keep their own collapsed preference through the switch", async () => {
+      localStorage.setItem(
+        "gousse:collapsed-categories:acc-2",
+        JSON.stringify(["CATEGORY_PERSONAL"]),
+      );
+      const { show } = mountSection(section, "acc-1", messagesFor("acc-1", 2));
+      expect(groupHeadings().map((g) => g.open)).toEqual([true]);
+
+      show("acc-2", messagesFor("acc-2", 1));
+
+      // The leaving group stays open as acc-1 had it; the arriving one reads
+      // acc-2's preference on its first frame rather than inheriting acc-1's.
+      expect(groupHeadings().map((g) => g.open)).toEqual([true, false]);
+      await waitFor(() => expect(groupHeadings().map((g) => g.open)).toEqual([false]));
+    });
+  });
+}
+
 // Every mode is a period now (#151), so the page always scopes its query to
 // the layout's window and the seeded caches are keyed with the same one.
 const RANGE_START = new Date("2026-08-01T00:00:00.000Z");

@@ -1,4 +1,5 @@
 import type { ListedMessage } from "../api/types";
+import type { Presence, PresenceState } from "../hooks/presence";
 import { mailboxOrderIndex } from "../components/systemLabels";
 
 /** The Gmail system labels a message is grouped under, in `MAILBOX_ORDER`'s order. */
@@ -53,6 +54,61 @@ export const groupByCategory = (messages: ListedMessage[]): CategoryGroup[] => {
   return [...groups.entries()]
     .map(([category, msgs]) => ({ category, messages: msgs }))
     .toSorted((a, b) => mailboxOrderIndex(a.category) - mailboxOrderIndex(b.category));
+};
+
+export interface CategoryGroupPresence {
+  /** `account:category` — so an account switch is one group leaving and another
+   *  arriving, never one group whose rows change owner underneath its heading. */
+  key: string;
+  accountId: string;
+  category: CategoryName;
+  rows: Presence<ListedMessage>[];
+  /** What the heading counts and acts on: the rows staying, or — for a group on
+   *  its way out — the rows it is leaving with, so its count does not tick down
+   *  mid-exit. */
+  messages: ListedMessage[];
+  /** A group is leaving once every row in it is. */
+  state: PresenceState;
+}
+
+/**
+ * A section's merged presence list, split into category groups *per account*.
+ *
+ * `groupByCategory` alone is right for one account and wrong across a switch:
+ * the rows of the account being left are still on screen, leaving, while the
+ * next account's arrive, and grouping them by category alone put both into one
+ * group — a heading counting two mailboxes at once, acting on the one being
+ * left, and never animating in or out itself because it never came or went.
+ *
+ * Accounts keep the order their rows are in, which puts the account being left
+ * first: its rows stay in place and the incoming ones append, as they did
+ * before there were groups.
+ */
+export const groupPresenceByCategory = (
+  presence: Presence<ListedMessage>[],
+): CategoryGroupPresence[] => {
+  const byAccount = new Map<string, Presence<ListedMessage>[]>();
+  for (const p of presence) {
+    const bucket = byAccount.get(p.item.accountId);
+    if (bucket) bucket.push(p);
+    else byAccount.set(p.item.accountId, [p]);
+  }
+
+  return [...byAccount.entries()].flatMap(([accountId, accountRows]) =>
+    groupByCategory(accountRows.map((p) => p.item)).map(({ category }) => {
+      const rows = accountRows.filter((p) => categoryOf(p.item) === category);
+      const staying = rows.filter((p) => p.state === "present");
+      const state: PresenceState = staying.length === 0 ? "leaving" : "present";
+      return {
+        key: `${accountId}:${category}`,
+        accountId,
+        category,
+        rows,
+        messages: (state === "leaving" ? rows : staying).map((p) => p.item),
+        state,
+      };
+    }),
+  );
 };
 
 /**

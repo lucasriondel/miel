@@ -2,7 +2,8 @@ import { useCallback, useState } from "react";
 
 const storageKey = (accountId: string) => `gousse:collapsed-categories:${accountId}`;
 
-function load(accountId: string): Set<string> {
+function load(accountId: string | undefined): Set<string> {
+  if (!accountId) return new Set();
   try {
     const raw = localStorage.getItem(storageKey(accountId));
     if (!raw) return new Set();
@@ -12,6 +13,12 @@ function load(accountId: string): Set<string> {
     return new Set();
   }
 }
+
+/** One account's stored preference, read outside the hook — for a group still
+ *  on screen from the account being switched away from, whose state the hook
+ *  (which follows the account being shown) no longer holds. */
+export const isCategoryCollapsedIn = (accountId: string, name: string): boolean =>
+  load(accountId).has(name);
 
 /**
  * Which inbox categories are collapsed, keyed by system-label name and persisted
@@ -26,18 +33,23 @@ function load(accountId: string): Set<string> {
  *
  * Default is expanded: a name is collapsed only if the set names it, so a fresh
  * account shows everything and storage being unavailable degrades to that.
+ *
+ * Switching accounts is a prop change, not a remount, so the set is held
+ * together with the account it was read for and re-read when that changes —
+ * during render, so the first frame of the new account already shows its own
+ * preference rather than the previous account's.
  */
 export function useCollapsedCategories(accountId: string | undefined) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(() =>
-    accountId ? load(accountId) : new Set(),
-  );
+  const [state, setState] = useState(() => ({ accountId, collapsed: load(accountId) }));
+  if (state.accountId !== accountId) setState({ accountId, collapsed: load(accountId) });
+  const { collapsed } = state;
 
   const isCollapsed = useCallback((name: string) => collapsed.has(name), [collapsed]);
 
   const toggle = useCallback(
     (name: string) => {
-      setCollapsed((prev) => {
-        const next = new Set(prev);
+      setState((prev) => {
+        const next = new Set(prev.collapsed);
         if (next.has(name)) next.delete(name);
         else next.add(name);
         if (accountId) {
@@ -47,7 +59,7 @@ export function useCollapsedCategories(accountId: string | undefined) {
             // ignore quota / disabled storage
           }
         }
-        return next;
+        return { accountId, collapsed: next };
       });
     },
     [accountId],
