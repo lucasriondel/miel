@@ -40,10 +40,43 @@ export interface AttachmentMeta {
   size: number;
 }
 
-function walkAttachments(part: GogMessagePayloadT | undefined, acc: AttachmentMeta[]): void {
+function partHeader(part: GogMessagePayloadT, name: string): string | undefined {
+  return part.headers?.find((h) => h.name.toLowerCase() === name)?.value;
+}
+
+// A part the HTML body draws through `cid:` is part of the message's content —
+// a signature logo, a social icon, an embedded screenshot — not a file someone
+// attached. Mail clients render those inline and list only the rest, and a
+// signature-heavy reply chain can carry twenty of them.
+function referencedContentIds(html: string): Set<string> {
+  const ids = new Set<string>();
+  for (const match of html.matchAll(/cid:([^"'\s)>]+)/gi)) {
+    ids.add(decodeCid(match[1]!).toLowerCase());
+  }
+  return ids;
+}
+
+function decodeCid(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function isInlineContent(part: GogMessagePayloadT, cids: Set<string>): boolean {
+  const contentId = partHeader(part, "content-id")?.trim().replace(/^<|>$/g, "");
+  return contentId !== undefined && contentId.length > 0 && cids.has(contentId.toLowerCase());
+}
+
+function walkAttachments(
+  part: GogMessagePayloadT | undefined,
+  cids: Set<string>,
+  acc: AttachmentMeta[],
+): void {
   if (!part) return;
   const attachmentId = part.body?.attachmentId;
-  if (attachmentId) {
+  if (attachmentId && !isInlineContent(part, cids)) {
     acc.push({
       attachmentId,
       filename: part.filename ?? "",
@@ -51,12 +84,13 @@ function walkAttachments(part: GogMessagePayloadT | undefined, acc: AttachmentMe
       size: part.body?.size ?? 0,
     });
   }
-  for (const child of part.parts ?? []) walkAttachments(child, acc);
+  for (const child of part.parts ?? []) walkAttachments(child, cids, acc);
 }
 
 export function extractAttachments(msg: GogMessageRawT): AttachmentMeta[] {
   const acc: AttachmentMeta[] = [];
-  walkAttachments(msg.payload, acc);
+  const cids = referencedContentIds(extractBodies(msg).bodyHtml);
+  walkAttachments(msg.payload, cids, acc);
   return acc;
 }
 
