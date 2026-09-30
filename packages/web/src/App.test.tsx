@@ -16,6 +16,14 @@ import { CREDENTIAL_PROVIDERS } from "@miel/core/providerModels";
 import { App, type LayoutContext } from "./App";
 import { queryKeys } from "./api/queries";
 import { PageTopBar } from "./features/shell/PageTopBar";
+import {
+  DEFAULT_VIEW_STORAGE_KEY,
+  LAST_ACCOUNT_STORAGE_KEY,
+  pinnedAccountPreference,
+  readLastAccountId,
+  writeDefaultViewPreference,
+  writeLastAccountId,
+} from "./features/preferences/defaultView";
 import type { Account, ClaudeCodeTokenStatus, ModelSettings } from "./api/types";
 
 const originalFetch = globalThis.fetch;
@@ -30,6 +38,8 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  localStorage.removeItem(DEFAULT_VIEW_STORAGE_KEY);
+  localStorage.removeItem(LAST_ACCOUNT_STORAGE_KEY);
 });
 
 const ACCOUNT: Account = {
@@ -213,3 +223,51 @@ const AccountProbe = () => {
   const { selectedAccountId } = useOutletContext<LayoutContext>();
   return <div data-testid={`page-${selectedAccountId}`} />;
 };
+
+describe("the default view", () => {
+  const renderAt = (entry: string) =>
+    render(
+      <QueryClientProvider client={seeded([ACCOUNT, OTHER_ACCOUNT])}>
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route index element={<AccountProbe />} />
+              <Route path="account/:accountId" element={<AccountProbe />} />
+              <Route path="settings" element={<AccountProbe />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+  test("a browser that has never focused an account opens on the first", async () => {
+    renderAt("/");
+    await screen.findByTestId("page-acc-1");
+  });
+
+  test("by default it reopens on the account last looked at", async () => {
+    writeLastAccountId("acc-2");
+    renderAt("/");
+    await screen.findByTestId("page-acc-2");
+  });
+
+  test("a pinned account wins over the last one looked at", async () => {
+    writeLastAccountId("acc-2");
+    writeDefaultViewPreference(pinnedAccountPreference("acc-1"));
+    renderAt("/");
+    await screen.findByTestId("page-acc-1");
+  });
+
+  test("a pinned account that was disconnected falls back to the first", async () => {
+    writeDefaultViewPreference(pinnedAccountPreference("gone"));
+    writeLastAccountId("acc-2");
+    renderAt("/");
+    await screen.findByTestId("page-acc-1");
+  });
+
+  test("opening an account records it as the last one looked at", async () => {
+    renderAt("/account/acc-2");
+    await screen.findByTestId("page-acc-2");
+    await waitFor(() => expect(readLastAccountId()).toBe("acc-2"));
+  });
+});

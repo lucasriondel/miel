@@ -1283,6 +1283,15 @@ this one message in. Inline `data:` and `cid:` images are never stripped under
 either. The frame's image `load`/`error` listeners are what size it once the
 images arrive, so they stay load-bearing now that a first render can carry them.
 
+A third browser-local preference sits in the same card: the **default view**,
+which mailbox `/` opens on (`features/preferences/defaultView.ts`,
+`DefaultViewRow`). Either `"last"` (the default — the account last opened,
+recorded by `App` whenever the route names a valid account, whatever the
+preference) or `"account:<id>"`, a pin. `resolveDefaultAccount` is the rule and
+falls back to the first account when the pinned or remembered one is gone. Only
+`/` consults it: a standalone route (settings, logs, promo codes) keeps the
+account already selected rather than switching to the default.
+
 ## Conventions
 
 - All public exports live in `packages/core/src/index.ts`. Add new service/schema/adapter exports there.

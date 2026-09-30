@@ -10,6 +10,12 @@ import { TriageActivityProvider } from "./contexts/TriageActivityContext";
 import { useScrollRestoration } from "./hooks/useScrollRestoration";
 import { AppShell, AppMain, TopBar, AppContent } from "@/components/ui/app-shell";
 import { TopBarNodeProvider } from "./features/shell/PageTopBar";
+import {
+  readDefaultViewPreference,
+  readLastAccountId,
+  resolveDefaultAccount,
+  writeLastAccountId,
+} from "./features/preferences/defaultView";
 
 export interface LayoutContext {
   selectedAccountId: string | undefined;
@@ -76,18 +82,23 @@ export const App = () => {
     if (isDrawerViewport()) setSidebarCollapsed(true);
   }, [locationKey]);
 
+  // The route names the account when it can. When it doesn't, `/` opens on the
+  // browser's default view (a pinned account, or the last one looked at), and a
+  // standalone page keeps whatever account was already selected — visiting
+  // Settings must not quietly switch mailboxes.
   useEffect(() => {
-    if (accounts.data && accounts.data.length > 0) {
-      const validAccount = routeAccountId
-        ? accounts.data.find((a) => a.id === routeAccountId)
-        : accounts.data[0];
-      if (validAccount && selectedAccountId !== validAccount.id) {
-        setSelectedAccountId(validAccount.id);
-        if (!routeAccountId && isAccountScope) {
-          navigate(`/account/${validAccount.id}`, { replace: true });
-        }
-      }
-    }
+    const list = accounts.data;
+    if (!list || list.length === 0) return;
+    const current = list.find((a) => a.id === selectedAccountId);
+    const target = routeAccountId
+      ? list.find((a) => a.id === routeAccountId)
+      : !isAccountScope && current
+        ? current
+        : resolveDefaultAccount(list, readDefaultViewPreference(), readLastAccountId());
+    if (!target) return;
+    if (selectedAccountId !== target.id) setSelectedAccountId(target.id);
+    if (routeAccountId) writeLastAccountId(target.id);
+    else if (isAccountScope) navigate(`/account/${target.id}`, { replace: true });
   }, [accounts.data, routeAccountId, selectedAccountId, navigate, isAccountScope]);
 
   useEffect(() => {
