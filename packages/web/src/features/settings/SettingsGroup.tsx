@@ -8,9 +8,9 @@ interface Props {
 }
 
 /**
- * One titled settings group in the single-scroll layout. The label is a sticky,
- * blurred header (`.settings-group-head`) that floats over its cards while the
- * group is in view; content scrolls beneath it. `scroll-mt` keeps anchor jumps
+ * One titled settings group in the single-scroll layout. The label is a sticky
+ * header (`.settings-group-head`), painted in the column's own colour, that
+ * stays over its cards while the group is in view; content scrolls beneath it. `scroll-mt` keeps anchor jumps
  * from tucking the header under the page top.
  */
 export const SettingsGroup = ({ id, label, children }: Props) => (
