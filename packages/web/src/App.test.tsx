@@ -10,10 +10,10 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate, useOutletContext } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CREDENTIAL_PROVIDERS } from "@miel/core/providerModels";
-import { App } from "./App";
+import { App, type LayoutContext } from "./App";
 import { queryKeys } from "./api/queries";
 import { PageTopBar } from "./features/shell/PageTopBar";
 import type { Account, ClaudeCodeTokenStatus, ModelSettings } from "./api/types";
@@ -53,12 +53,12 @@ const SETTINGS: ModelSettings = {
 const TOKEN: ClaudeCodeTokenStatus = { configured: true, hint: "sk-ant-…o4t" };
 
 /** Enough in the cache for the onboarding gate to stay closed. */
-const seeded = () => {
+const seeded = (accounts: Account[] = [ACCOUNT]) => {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   qc.setQueryData(queryKeys.googleOAuthConfig, { configured: true, missing: [] });
-  qc.setQueryData(queryKeys.accounts, [ACCOUNT]);
+  qc.setQueryData(queryKeys.accounts, accounts);
   qc.setQueryData(queryKeys.settings, SETTINGS);
   qc.setQueryData(queryKeys.claudeCodeToken, TOKEN);
   for (const vendor of CREDENTIAL_PROVIDERS) {
@@ -156,3 +156,60 @@ describe("the layout's frame", () => {
     await waitFor(() => expect(region.scrollTop).toBe(120));
   });
 });
+
+const OTHER_ACCOUNT: Account = { ...ACCOUNT, id: "acc-2", email: "other@example.com" };
+
+describe("the Shift+U account shortcut", () => {
+  test("switches straight to the next account, never back through the one it left", async () => {
+    // Every account the page is rendered for, in order. Setting the layout's
+    // state ahead of the URL let the route-sync effect put the old account
+    // back for a render before the navigation landed — a visible A→B→A→B.
+    const seen: (string | undefined)[] = [];
+    const Recorder = () => {
+      const { selectedAccountId } = useOutletContext<LayoutContext>();
+      if (seen.at(-1) !== selectedAccountId) seen.push(selectedAccountId);
+      return <div data-testid={`page-${selectedAccountId}`} />;
+    };
+    render(
+      <QueryClientProvider client={seeded([ACCOUNT, OTHER_ACCOUNT])}>
+        <MemoryRouter initialEntries={["/account/acc-1"]}>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route path="account/:accountId" element={<Recorder />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("page-acc-1");
+
+    fireEvent.keyDown(window, { code: "KeyU", key: "U", shiftKey: true });
+    await screen.findByTestId("page-acc-2");
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(seen.filter(Boolean)).toEqual(["acc-1", "acc-2"]);
+  });
+
+  test("a held key does not keep cycling", async () => {
+    render(
+      <QueryClientProvider client={seeded([ACCOUNT, OTHER_ACCOUNT])}>
+        <MemoryRouter initialEntries={["/account/acc-1"]}>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route path="account/:accountId" element={<AccountProbe />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("page-acc-1");
+    fireEvent.keyDown(window, { code: "KeyU", key: "U", shiftKey: true, repeat: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("page-acc-1")).toBeTruthy();
+  });
+});
+
+const AccountProbe = () => {
+  const { selectedAccountId } = useOutletContext<LayoutContext>();
+  return <div data-testid={`page-${selectedAccountId}`} />;
+};

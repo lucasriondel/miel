@@ -101,13 +101,18 @@ export const App = () => {
 
   useFocusSync(selectedAccount?.email);
 
+  // Shift+U cycles accounts. It only navigates: the effect above derives
+  // `selectedAccountId` from the route, and setting the state here as well ran
+  // ahead of the URL — that effect then saw the old route and put the old
+  // account back for a render before the navigation landed, a visible A→B→A→B.
+  // A held key is ignored, or auto-repeat would spin through every account.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       if (e.shiftKey && e.code === "KeyU" && accounts.data && accounts.data.length > 0) {
         e.preventDefault();
         const currentIndex = accounts.data.findIndex((a) => a.id === selectedAccountId);
         const nextIndex = (currentIndex + 1) % accounts.data.length;
-        setSelectedAccountId(accounts.data[nextIndex].id);
         navigate(`/account/${accounts.data[nextIndex].id}`, { replace: true });
       }
     };
