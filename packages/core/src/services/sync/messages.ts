@@ -44,6 +44,27 @@ export const upsertMessages = (rows: NormalizedMessage[]): Effect.Effect<void> =
         }),
     );
 
+    // Replace rather than merge: a message's attachment set is whatever its
+    // payload says now, so a row an older extraction rule wrote (an inline
+    // signature image, before those were excluded) goes when the message is
+    // fetched again.
+    const byAccount = new Map<string, string[]>();
+    for (const r of rows) {
+      byAccount.set(r.accountId, [...(byAccount.get(r.accountId) ?? []), r.gmailMessageId]);
+    }
+    for (const [accountId, ids] of byAccount) {
+      yield* Effect.promise(() =>
+        db
+          .delete(messageAttachments)
+          .where(
+            and(
+              eq(messageAttachments.accountId, accountId),
+              inArray(messageAttachments.gmailMessageId, ids),
+            ),
+          ),
+      );
+    }
+
     const attachmentRows = rows.flatMap((r) =>
       r.attachments.map((a) => ({
         accountId: r.accountId,
