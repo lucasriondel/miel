@@ -337,10 +337,15 @@ body {
    (`--gousse-panel`, what `AppMain` sits on), so the cards scrolling under it
    are covered rather than showing through the label and its rule — and, being
    the exact colour around it, it reads as the page itself rather than as a
-   band. The fade-and-blur mask it once had is what drew a visible dark box. */
+   band. The fade-and-blur mask it once had is what drew a visible dark box.
+
+   `top` is negative because a sticky box sticks to its scroll container's
+   *content* edge, and `AppContent` pads that by `py-6`: at `top: 0` the header
+   parked 1.5rem below the top bar and the cards stayed visible in the strip
+   above it. Keep this in step with `AppContent`'s top padding. */
 .settings-group-head {
   position: sticky;
-  top: 0;
+  top: -1.5rem;
   z-index: 5;
   background: rgb(var(--gousse-panel));
 }
