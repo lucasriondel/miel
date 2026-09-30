@@ -8,6 +8,7 @@
     "build": "turbo run build --filter=!@miel/landing-page",
     "build:landing": "turbo run build --filter=@miel/landing-page",
     "dev": "turbo run dev --filter=@miel/api --filter=@miel/web",
+    "kill": "pkill -f 'portless' ; pkill -f 'packages/api/src/index.ts' ; pkill -f 'packages/web' ; pkill -f 'packages/landing-page' ; for p in 5230 5531 5200; do lsof -ti tcp:$p | xargs -r kill -9; done",
     "start": "turbo run start --filter=@miel/api --filter=@miel/web",
     "format": "turbo run format",
     "format:check": "turbo run format:check",
