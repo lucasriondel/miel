@@ -151,15 +151,16 @@ describe("the root entry points", () => {
 });
 
 describe("the documentation", () => {
-  const claudeMd = read("CLAUDE.md");
+  // Formatting rules are coding standards, so CODING_STANDARDS.md owns them.
+  const standardsMd = read("CODING_STANDARDS.md");
 
-  test("CLAUDE.md names the formatter", () => {
-    expect(claudeMd).toContain("oxfmt");
-    expect(claudeMd).toContain("bun run format");
+  test("CODING_STANDARDS.md names the formatter", () => {
+    expect(standardsMd).toContain("oxfmt");
+    expect(standardsMd).toContain("bun run format");
   });
 
-  test("CLAUDE.md says the vendored gousse-ui source is exempt", () => {
-    const paragraph = claudeMd
+  test("CODING_STANDARDS.md says the vendored gousse-ui source is exempt", () => {
+    const paragraph = standardsMd
       .split("\n\n")
       .find((block) => block.includes("oxfmt") && block.includes("gousse"));
     expect(paragraph).toBeDefined();

@@ -1,5 +1,9 @@
 # AI providers and credentials
 
+## What a prompt sends
+
+What goes to a provider is stated in `packages/core/src/claudeUsage.ts` — batch size (default 15, configurable, capped at 50), the 8000-char body truncation, and `BODY_BEARING_TASKS` (reply drafting and promo extraction). Triage sends only sender/subject/snippet/labels; through the CLI the model fetches a body from the local API when it needs one. Four surfaces publish that module: the landing page's disclosure, the privacy policy, the README's "What the AI sees" and `SECURITY.md`'s scope list — change the constants, never a copy. `claude/tasks.test.ts` requires the tasks whose prompts inline a body to be exactly the published list.
+
 ## Providers
 
 Each AI task — triage, reply, filter-suggest, `promo-extract` — runs through a provider of its own: `claude-code` (the local `claude` subprocess) or a hosted vendor — `anthropic`, `google`, `openai` — over HTTP through the Vercel ai-sdk. The catalogue is `packages/core/src/providerModels.ts`, a leaf module: which providers exist, each one's curated model list, its default, and `MODEL_TASKS`. The API validates a save against it and the web pickers are built from it. `UpdateSettingsRequest`'s shape and `ModelsCard`'s `MODEL_ROWS` each carry a `satisfies` over a record keyed by `ModelTask`, so a fifth task stops both files compiling until it is named. Note the spelling the hyphen forces: `promo-extract.provider` as a settings key, `"promo-extractProvider"` on `ModelSettings` and on the patch.

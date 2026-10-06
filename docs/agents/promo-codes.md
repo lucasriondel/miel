@@ -37,7 +37,7 @@ Nothing is shared with the verification-code strip (browser-side regex over subj
 
 `features/promos/promoExpiryLabel.ts` is pinned to UTC — read in a local zone, the stored `…T23:59:59.999Z` would show as the next day east of Greenwich — and answers "No end date" rather than inventing one.
 
-Bun module mocks are process-global, so a suite whose seam is `fetch` inherits whichever `api/client` stub ran last. `promoSuggestionsWiring.test.tsx` restores the real client by importing `"../../api/client.ts?real"` (declared in `vite-env.d.ts`) and re-registering it *spread*, since a module namespace object registers as no replacement at all.
+`promoSuggestionsWiring.test.tsx` restores the real `api/client` after other suites mocked it — the technique is in `packages/web/docs/testing.md`.
 
 ## Saving a promo, and trashing its mail
 

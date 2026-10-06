@@ -6,7 +6,7 @@ There are six: `SettingsStore` and `SecretStore` (`app_settings`, `encrypted_sec
 
 The requirement rides in the `R` channel, so the *boundary* answers it: Promise facades call `runWithStores(effect)` (`stores/postgres.ts`), and `AppLive` and the sync entry points provide `StoresLive`. An effect with no store provided does not compile, so a test that forgets to inject gets a type error rather than a connection attempt.
 
-`makeTestStores({ settings, secrets, mailbox })` is what a suite uses: `stores.run(effect)` at the Promise boundary, `stores.provide(effect)` when the Exit is asserted, seeded rows for "already stored", recorded `writes`/`removals` (and the mailbox row arrays) for storage assertions, and `offline = true` for "the database is unreachable". Mailbox rows are seeded with only the columns a test cares about. `testkit/gmail.ts` is a recording `GmailDataAdapter` that can be told to refuse. Write suites against these rather than `mock.module("../db/client")`.
+`makeTestStores({ settings, secrets, mailbox })` is what a suite uses: `stores.run(effect)` at the Promise boundary, `stores.provide(effect)` when the Exit is asserted, seeded rows for "already stored", recorded `writes`/`removals` (and the mailbox row arrays) for storage assertions, and `offline = true` for "the database is unreachable". Mailbox rows are seeded with only the columns a test cares about. `testkit/gmail.ts` is a recording `GmailDataAdapter` that can be told to refuse.
 
 What stays in the services is the part worth testing: the cursor's encoding, which suggestions still count as pending, that a label id from another account names nothing, and that Gmail is told before anything is written locally.
 

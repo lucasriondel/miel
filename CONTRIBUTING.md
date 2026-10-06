@@ -2,7 +2,7 @@
 
 Issues and pull requests are welcome. The repository is the whole product — there is no private fork and no hosted variant with extra code in it.
 
-This file is the short version, addressed to a person. [`CLAUDE.md`](CLAUDE.md) at the root is the long version, addressed to the coding agents that work on this repo; it has the full account of the data model, the package layout and the tooling, and points to the per-subsystem docs under `docs/agents/` and `packages/web/docs/`. When the two disagree, `CLAUDE.md` is the one that is kept current with the code.
+This file is the short version, addressed to a person. [`CLAUDE.md`](CLAUDE.md) at the root is the long version, addressed to the coding agents that work on this repo: a map of the stack and packages that points to [`CODING_STANDARDS.md`](CODING_STANDARDS.md) for how code is written here and to the per-subsystem docs under `docs/agents/` and `packages/web/docs/`. When they disagree with this file, those are the ones kept current with the code.
 
 ## Getting set up
 
