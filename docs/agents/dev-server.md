@@ -1,0 +1,5 @@
+# Dev server and portless
+
+Each app name is written **twice**, and both spellings are load-bearing: `portless.json` at the root (read by a bare `portless` run from the root) and the per-package `"portless"` key in each `package.json` (what names the hosts under turbo, which runs portless with the cwd set to each package — it does not walk up to the root file). Renaming an app or pinning its port means editing both. To bypass the proxy and bind the registry's rows (~/dev/PORTS.md — web 5230, api 5531, landing page 5200), run a package's `PORTLESS=0 bun dev:app`. Configs that need an *address* carry both spellings and pick on `PORTLESS_URL`, which portless sets in every child.
+
+Each dev server must bind `PORT` first and fall back to its row — `Number(process.env.PORT ?? API_PORT)` in `packages/api/src/index.ts`, `Number(process.env.PORT ?? webPort)` in web's vite config. A server that binds its own row is routed to a port nothing listens on: every request answers 502 while both sides print a healthy startup. `packages/web/src/devHostnames.test.ts` guards the names and this rule.
