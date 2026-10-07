@@ -10,12 +10,20 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate, useOutletContext } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CREDENTIAL_PROVIDERS } from "@miel/core/providerModels";
-import { App } from "./App";
+import { App, type LayoutContext } from "./App";
 import { queryKeys } from "./api/queries";
 import { PageTopBar } from "./features/shell/PageTopBar";
+import {
+  DEFAULT_VIEW_STORAGE_KEY,
+  LAST_ACCOUNT_STORAGE_KEY,
+  pinnedAccountPreference,
+  readLastAccountId,
+  writeDefaultViewPreference,
+  writeLastAccountId,
+} from "./features/preferences/defaultView";
 import type { Account, ClaudeCodeTokenStatus, ModelSettings } from "./api/types";
 
 const originalFetch = globalThis.fetch;
@@ -30,6 +38,8 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  localStorage.removeItem(DEFAULT_VIEW_STORAGE_KEY);
+  localStorage.removeItem(LAST_ACCOUNT_STORAGE_KEY);
 });
 
 const ACCOUNT: Account = {
@@ -53,12 +63,12 @@ const SETTINGS: ModelSettings = {
 const TOKEN: ClaudeCodeTokenStatus = { configured: true, hint: "sk-ant-…o4t" };
 
 /** Enough in the cache for the onboarding gate to stay closed. */
-const seeded = () => {
+const seeded = (accounts: Account[] = [ACCOUNT]) => {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   qc.setQueryData(queryKeys.googleOAuthConfig, { configured: true, missing: [] });
-  qc.setQueryData(queryKeys.accounts, [ACCOUNT]);
+  qc.setQueryData(queryKeys.accounts, accounts);
   qc.setQueryData(queryKeys.settings, SETTINGS);
   qc.setQueryData(queryKeys.claudeCodeToken, TOKEN);
   for (const vendor of CREDENTIAL_PROVIDERS) {
@@ -154,5 +164,110 @@ describe("the layout's frame", () => {
     fireEvent.click(screen.getByRole("button", { name: "go back" }));
     await screen.findByTestId("inbox-body");
     await waitFor(() => expect(region.scrollTop).toBe(120));
+  });
+});
+
+const OTHER_ACCOUNT: Account = { ...ACCOUNT, id: "acc-2", email: "other@example.com" };
+
+describe("the Shift+U account shortcut", () => {
+  test("switches straight to the next account, never back through the one it left", async () => {
+    // Every account the page is rendered for, in order. Setting the layout's
+    // state ahead of the URL let the route-sync effect put the old account
+    // back for a render before the navigation landed — a visible A→B→A→B.
+    const seen: (string | undefined)[] = [];
+    const Recorder = () => {
+      const { selectedAccountId } = useOutletContext<LayoutContext>();
+      if (seen.at(-1) !== selectedAccountId) seen.push(selectedAccountId);
+      return <div data-testid={`page-${selectedAccountId}`} />;
+    };
+    render(
+      <QueryClientProvider client={seeded([ACCOUNT, OTHER_ACCOUNT])}>
+        <MemoryRouter initialEntries={["/account/acc-1"]}>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route path="account/:accountId" element={<Recorder />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("page-acc-1");
+
+    fireEvent.keyDown(window, { code: "KeyU", key: "U", shiftKey: true });
+    await screen.findByTestId("page-acc-2");
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(seen.filter(Boolean)).toEqual(["acc-1", "acc-2"]);
+  });
+
+  test("a held key does not keep cycling", async () => {
+    render(
+      <QueryClientProvider client={seeded([ACCOUNT, OTHER_ACCOUNT])}>
+        <MemoryRouter initialEntries={["/account/acc-1"]}>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route path="account/:accountId" element={<AccountProbe />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("page-acc-1");
+    fireEvent.keyDown(window, { code: "KeyU", key: "U", shiftKey: true, repeat: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("page-acc-1")).toBeTruthy();
+  });
+});
+
+const AccountProbe = () => {
+  const { selectedAccountId } = useOutletContext<LayoutContext>();
+  return <div data-testid={`page-${selectedAccountId}`} />;
+};
+
+describe("the default view", () => {
+  const renderAt = (entry: string) =>
+    render(
+      <QueryClientProvider client={seeded([ACCOUNT, OTHER_ACCOUNT])}>
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route index element={<AccountProbe />} />
+              <Route path="account/:accountId" element={<AccountProbe />} />
+              <Route path="settings" element={<AccountProbe />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+  test("a browser that has never focused an account opens on the first", async () => {
+    renderAt("/");
+    await screen.findByTestId("page-acc-1");
+  });
+
+  test("by default it reopens on the account last looked at", async () => {
+    writeLastAccountId("acc-2");
+    renderAt("/");
+    await screen.findByTestId("page-acc-2");
+  });
+
+  test("a pinned account wins over the last one looked at", async () => {
+    writeLastAccountId("acc-2");
+    writeDefaultViewPreference(pinnedAccountPreference("acc-1"));
+    renderAt("/");
+    await screen.findByTestId("page-acc-1");
+  });
+
+  test("a pinned account that was disconnected falls back to the first", async () => {
+    writeDefaultViewPreference(pinnedAccountPreference("gone"));
+    writeLastAccountId("acc-2");
+    renderAt("/");
+    await screen.findByTestId("page-acc-1");
+  });
+
+  test("opening an account records it as the last one looked at", async () => {
+    renderAt("/account/acc-2");
+    await screen.findByTestId("page-acc-2");
+    await waitFor(() => expect(readLastAccountId()).toBe("acc-2"));
   });
 });

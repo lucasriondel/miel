@@ -12,7 +12,22 @@ import {
   readRemoteImagesPreference,
   writeRemoteImagesPreference,
 } from "../preferences/remoteImages";
-import { GeneralCard } from "./GeneralCard";
+import { GeneralCard as Card } from "./GeneralCard";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { queryKeys } from "../../api/queries";
+
+// The card's default-view row reads the accounts; an empty list is enough.
+const GeneralCard = () => {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  qc.setQueryData(queryKeys.accounts, []);
+  return (
+    <QueryClientProvider client={qc}>
+      <Card />
+    </QueryClientProvider>
+  );
+};
 
 afterEach(() => localStorage.removeItem(REMOTE_IMAGES_STORAGE_KEY));
 

@@ -49,7 +49,7 @@ Read the doc before editing in its area — each holds the rules and the reasons
 - **Store seam** — `docs/agents/store-seam.md`: a service touching the database, or a core test needing stored rows.
 - **App shell** — `packages/web/docs/app-shell.md`: `App.tsx`, `features/shell/*`, a page's top bar, scrolling.
 - **Message actions** — `packages/web/docs/message-actions.md`: optimistic mutations, labelling, the label picker, multi-select.
-- **Message detail** — `packages/web/docs/message-detail.md`: compose/reply, attachments, remote images.
+- **Message detail** — `packages/web/docs/message-detail.md`: compose/reply, attachments, browser-local preferences (theme, remote images, default view).
 - **Web tests** — `packages/web/docs/testing.md`: the happy-dom harness and its seams.
 - **Design** — `packages/web/DESIGN.md`: visual rules and the vendored primitives.
 - **Issues** — `docs/agents/issue-tracker.md`: GitHub issues in `lucasriondel/miel` via `gh`, what `#NN` points at.
