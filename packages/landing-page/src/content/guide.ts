@@ -138,7 +138,7 @@ export const CONTRIBUTING: GuideSection = {
   heading: "How to contribute",
   body: [
     "Issues and pull requests are welcome. The repository is the whole product — there is no private fork and no hosted variant with extra code in it.",
-    "CONTRIBUTING.md at the repository root is the place to start: how to get the stack running, the checks every pull request is gated on, and the conventions the codebase follows — one component per file, business logic in core services rather than in API routes, external systems reached only through the Effect services in packages/core/src/google and the Claude service beside them. CLAUDE.md beside it has the same ground in full detail, addressed to the coding agents that work on this repository.",
+    "CONTRIBUTING.md at the repository root is the place to start: how to get the stack running, the checks every pull request is gated on, and the conventions the codebase follows — one component per file, business logic in core services rather than in API routes, external systems reached only through the Effect services in packages/core/src/google and the Claude service beside them. CLAUDE.md and CODING_STANDARDS.md beside it cover the same ground in full detail, addressed to the coding agents that work on this repository.",
     "Before opening a pull request, keep the checks green. Type checking is the one that matters most, since the codebase is strict TypeScript throughout.",
     "Good first contributions: a Gmail feature the triage flow does not cover yet, a rough edge in the review UI, or documentation that was wrong or missing when you tried to follow it.",
   ],

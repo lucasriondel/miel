@@ -226,16 +226,18 @@ describe("the CI gate", () => {
 
 describe("the documentation", () => {
   const claudeMd = read("CLAUDE.md");
+  // The lint rules are coding standards; CLAUDE.md is the map that points there.
+  const standardsMd = read("CODING_STANDARDS.md");
 
-  test("CLAUDE.md names the linter and the categories it enables", () => {
-    expect(claudeMd).toContain("oxlint");
-    expect(claudeMd).toContain("bun run lint");
-    expect(claudeMd).toContain("correctness");
-    expect(claudeMd).toContain("suspicious");
+  test("CODING_STANDARDS.md names the linter and the categories it enables", () => {
+    expect(standardsMd).toContain("oxlint");
+    expect(standardsMd).toContain("bun run lint");
+    expect(standardsMd).toContain("correctness");
+    expect(standardsMd).toContain("suspicious");
   });
 
-  test("CLAUDE.md says the vendored gousse-ui source is exempt from linting too", () => {
-    const paragraph = claudeMd
+  test("CODING_STANDARDS.md says the vendored gousse-ui source is exempt from linting too", () => {
+    const paragraph = standardsMd
       .split("\n\n")
       .find((block) => block.includes("oxlint") && block.includes("gousse"));
     expect(paragraph).toBeDefined();

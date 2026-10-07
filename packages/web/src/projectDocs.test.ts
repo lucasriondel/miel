@@ -16,6 +16,9 @@ const packageRoot = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(join(repoRoot, path), "utf8");
 
 const claudeMd = read("CLAUDE.md");
+// How the design system is consumed is a coding standard, so it lives there;
+// CLAUDE.md keeps the stack line and the map.
+const standardsMd = read("CODING_STANDARDS.md");
 
 const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
   dependencies: Record<string, string>;
@@ -103,39 +106,39 @@ describe("the web stack CLAUDE.md advertises", () => {
   });
 });
 
-describe("how CLAUDE.md says the design system is consumed", () => {
+describe("how CODING_STANDARDS.md says the design system is consumed", () => {
   test("it points at the components.json that configures the registry", () => {
-    expect(claudeMd).toContain("packages/web/components.json");
+    expect(standardsMd).toContain("packages/web/components.json");
   });
 
   test("it names the registry the @gousse namespace resolves against", () => {
-    expect(claudeMd).toContain(componentsJson.registries["@gousse"]);
+    expect(standardsMd).toContain(componentsJson.registries["@gousse"]);
   });
 
   // Derived from the alias, so moving where vendored components land breaks the
   // doc rather than silently outdating it.
   test("it names the directory the ui alias points at", () => {
     const uiDir = componentsJson.aliases.ui!.replace("@/", "src/");
-    expect(claudeMd).toContain(`packages/web/${uiDir}`);
+    expect(standardsMd).toContain(`packages/web/${uiDir}`);
   });
 
   test("it gives the command that vendors an item", () => {
-    expect(claudeMd).toMatch(/bunx shadcn@latest add @gousse\//);
+    expect(standardsMd).toMatch(/bunx shadcn@latest add @gousse\//);
   });
 
   // The behaviour change worth writing down: a copied file has no version to
   // resolve, so the usual "run install to get the fix" reflex does nothing.
   test("it states that vendored components do not update through bun install", () => {
-    expect(claudeMd).toMatch(/vendored components (?:never|do not|don't)[^.]*`bun install`/i);
+    expect(standardsMd).toMatch(/vendored components (?:never|do not|don't)[^.]*`bun install`/i);
   });
 
   test("it says re-running the add is the way in, and that the diff gets reviewed", () => {
-    expect(claudeMd).toMatch(/git diff/);
-    expect(claudeMd.toLowerCase()).toContain("review");
+    expect(standardsMd).toMatch(/git diff/);
+    expect(standardsMd.toLowerCase()).toContain("review");
   });
 
   test("it records that bun install needs no credentials", () => {
-    expect(claudeMd).toMatch(/`bun install` needs no credential/i);
+    expect(standardsMd).toMatch(/`bun install` needs no credential/i);
   });
 });
 
@@ -266,9 +269,12 @@ describe("what no documentation file should still say", () => {
   // registry": a reader skimming for setup steps does not distinguish "needs a
   // private registry token" from "no longer needs" one. The file this repo's
   // agents read first should not contain the phrase at all.
-  test("CLAUDE.md implies no registry credential anywhere", () => {
+  test.each([
+    ["CLAUDE.md", claudeMd],
+    ["CODING_STANDARDS.md", standardsMd],
+  ])("%s implies no registry credential anywhere", (_path, doc) => {
     for (const stale of ["NODE_AUTH_TOKEN", ".npmrc", "private registry", "GitHub Packages"]) {
-      expect(claudeMd).not.toContain(stale);
+      expect(doc).not.toContain(stale);
     }
   });
 });

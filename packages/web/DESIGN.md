@@ -323,7 +323,7 @@ swatch so every row's text aligns.
 
 ## 9. Component conventions (React)
 
-These mirror the repo's CLAUDE.md but matter for design work specifically:
+These mirror the repo's CODING_STANDARDS.md but matter for design work specifically:
 
 - **One component per file**; break long `return`s into named subcomponents.
   The sidebar row, tree row, mailbox row, and list are deliberately separate files.

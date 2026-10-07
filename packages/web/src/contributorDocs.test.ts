@@ -122,9 +122,13 @@ describe("CONTRIBUTING.md", () => {
     expect(contributing).toContain("packages/web/src/components/ui");
   });
 
-  test("links to CLAUDE.md for the full detail instead of copying it", () => {
+  // The agent docs are split into a map and its standards; CONTRIBUTING.md
+  // summarises both, so it links both and stays shorter than the pair.
+  test("links to the agent docs for the full detail instead of copying them", () => {
     expect(contributing).toContain("CLAUDE.md");
-    expect(contributing.length).toBeLessThan(read("CLAUDE.md").length);
+    expect(contributing).toContain("CODING_STANDARDS.md");
+    const agentDocs = read("CLAUDE.md").length + read("CODING_STANDARDS.md").length;
+    expect(contributing.length).toBeLessThan(agentDocs);
   });
 
   test("points at the disclosure process rather than fielding security in issues", () => {

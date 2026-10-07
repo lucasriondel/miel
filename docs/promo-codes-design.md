@@ -140,7 +140,7 @@ drift #126 fixed.
 
 No new sync WebSocket event. It is a step inside fetch, and a new wire event
 would mean the `SyncServerEvent` / `ReceivedSyncServerEvent` compatibility dance
-CLAUDE.md describes. Log it; surface it later if it is missed.
+`docs/agents/ai-providers.md` describes. Log it; surface it later if it is missed.
 
 ## Data model
 
