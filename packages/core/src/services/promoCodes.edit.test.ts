@@ -15,6 +15,7 @@ process.env.DATABASE_URL ??= "postgres://test:test@localhost/test";
 import type { PromoSeed } from "../testkit/mailbox";
 import { makeTestStores, type TestStores } from "../testkit/stores";
 import {
+  clearExpiredSavedPromosEffect,
   deleteSavedPromoEffect,
   listSavedPromosEffect,
   readSavedPromoMailEffect,
@@ -217,6 +218,47 @@ describe("deleting a saved promo", () => {
 
   test("an id that is nobody's promo takes nothing", async () => {
     expect(await remove("p-nobody")).toBe(false);
+    expect(stores.mailbox.promos.map((p) => p.id)).toEqual(["p1"]);
+  });
+});
+
+describe("clearing the expired section", () => {
+  const LAPSED = new Date("2026-07-01T23:59:59.999Z");
+  const clear = () => stores.run(clearExpiredSavedPromosEffect({ now: NOW }));
+
+  test("takes every expired saved promo and answers how many went", async () => {
+    seed([
+      saved({ id: "p1", expiresAt: LAPSED }),
+      saved({ id: "p2", gmailMessageId: "mail-2", expiresAt: LAPSED }),
+      saved({ id: "p3", gmailMessageId: "mail-3" }),
+    ]);
+
+    expect(await clear()).toBe(2);
+    expect(stores.mailbox.promos.map((p) => p.id)).toEqual(["p3"]);
+    expect((await stores.run(listSavedPromosEffect({ now: NOW }))).expired).toEqual([]);
+  });
+
+  // An unstated expiry is not an expired one, so it is not on the section this
+  // clears.
+  test("keeps a promo with no stated end", async () => {
+    seed([saved({ expiresAt: null })]);
+
+    expect(await clear()).toBe(0);
+    expect(stores.mailbox.promos.map((p) => p.id)).toEqual(["p1"]);
+  });
+
+  // The stored instant is the end of the last day, so one lapsing today is
+  // still active for the whole of it.
+  test("keeps a promo lapsing later today", async () => {
+    seed([saved({ expiresAt: new Date("2026-09-05T23:59:59.999Z") })]);
+
+    expect(await clear()).toBe(0);
+  });
+
+  test("leaves an expired detection nobody saved where it is", async () => {
+    seed([saved({ savedAt: null, expiresAt: LAPSED })]);
+
+    expect(await clear()).toBe(0);
     expect(stores.mailbox.promos.map((p) => p.id)).toEqual(["p1"]);
   });
 });

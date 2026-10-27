@@ -250,6 +250,7 @@ export type {
 // what a fetch just brought in and has no caller outside `sync/fetchPhase`,
 // while `extractPromosForMessage` is the door a boundary knocks on.
 export {
+  clearExpiredSavedPromos,
   deleteSavedPromo,
   extractPromosForMessage,
   listPromoSuggestions,
@@ -261,6 +262,7 @@ export {
   updateSavedPromo,
 } from "./services/promoCodes";
 export type {
+  ClearExpiredPromosArgs,
   EditedPromo,
   ExtractPromosForMessageArgs,
   ExtractPromosForMessageResult,

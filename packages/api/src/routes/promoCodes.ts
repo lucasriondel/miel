@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   apiSchemas,
+  clearExpiredSavedPromos,
   deleteSavedPromo,
   listPromoSuggestions,
   listSavedPromos,
@@ -26,6 +27,20 @@ export const promoCodesRoutes = new Hono();
  */
 promoCodesRoutes.get("/saved", async (c) => {
   return c.json(await listSavedPromos());
+});
+
+/**
+ * Emptying the page's Expired section in one request.
+ *
+ * Still a deletion the user asked for — nothing calls it on a timer — just of
+ * every lapsed saved promo at once. Which rows count as expired is the core
+ * service's rule, the same one that files them under that heading, so the
+ * section and what this removes cannot disagree. Answers how many went; zero
+ * is a success, not a 404, since an empty section is already what was asked.
+ */
+promoCodesRoutes.delete("/saved/expired", async (c) => {
+  const removed = await clearExpiredSavedPromos();
+  return c.json({ ok: true, removed });
 });
 
 /**

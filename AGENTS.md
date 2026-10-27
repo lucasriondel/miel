@@ -740,12 +740,19 @@ written through `promoExpiryInstant` in `promoExpiry.ts` — the same function t
 extraction writes through, extracted there in this issue so a date someone typed
 and a date the model read cannot become different kinds of value.
 
-`DELETE /promo-codes/:id` is the only thing anywhere that removes a promo row.
+`DELETE /promo-codes/:id` and the bulk clear below are the only things that remove a promo row.
 Nothing expires itself off the page; an expired promo is greyed and kept, because
 the record of what a shop offered is worth having. Both endpoints act on **saved**
 rows only and answer the same 404 for an unknown id and for a detection nobody
 saved — removing a suggestion would be a *dismissal*, a different act with a
 different meaning that this feature does not have.
+
+Its bulk sibling is `DELETE /promo-codes/saved/expired`
+(`clearExpiredSavedPromosEffect`), behind the Expired section's "Clear expired"
+control: still the user's own act and confirmed in place, it removes every
+saved row `listSavedPromos` files under expired against the same `now` — so a
+promo with no stated end, or one lapsing today, is never cleared — and answers
+how many went, zero included.
 
 On screen, `SavedPromoRow` is now a two-state row: `SavedPromoReadRow` or
 `SavedPromoEditRow`, with the flag the row's own rather than the section's, since

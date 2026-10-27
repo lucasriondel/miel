@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { PromoListing } from "../../api/types";
 import { SavedPromoRow } from "./SavedPromoRow";
 
@@ -10,6 +11,8 @@ interface Props {
    * keeping and deletion is always something they chose.
    */
   faded?: boolean;
+  /** A control beside the heading that acts on the whole section. */
+  action?: ReactNode;
 }
 
 /**
@@ -23,18 +26,22 @@ interface Props {
  * global, so every account's codes are on screen at once and there is nothing
  * to pick before anything is visible.
  */
-export const SavedPromosSection = ({ title, promos, faded }: Props) => {
+export const SavedPromosSection = ({ title, promos, faded, action }: Props) => {
   if (promos.length === 0) return null;
 
   return (
-    <section
-      aria-label={`${title} promo codes`}
-      className={`flex flex-col gap-2${faded ? " opacity-60" : ""}`}
-    >
-      <h2 className="text-xs font-extrabold uppercase tracking-widest text-gousse-muted">
-        {title}
-      </h2>
-      <div className="overflow-hidden rounded-xl border border-gousse-line bg-gousse-panel shadow-gousse-sm">
+    <section aria-label={`${title} promo codes`} className="flex flex-col gap-2">
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        <h2 className="text-xs font-extrabold uppercase tracking-widest text-gousse-muted">
+          {title}
+        </h2>
+        {action}
+      </div>
+      {/* The fade is the rows', not the heading's, so a section-wide control
+          beside the heading reads as live. */}
+      <div
+        className={`overflow-hidden rounded-xl border border-gousse-line bg-gousse-panel shadow-gousse-sm${faded ? " opacity-60" : ""}`}
+      >
         <table className="w-full text-left text-sm">
           <thead className="border-b border-gousse-line bg-gousse-bg/40 text-xs uppercase tracking-wide text-gousse-muted">
             <tr>

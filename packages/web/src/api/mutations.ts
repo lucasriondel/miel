@@ -318,6 +318,40 @@ export function useDeleteSavedPromo() {
   return useMutation(deleteSavedPromoMutationOptions(qc));
 }
 
+export interface ClearExpiredPromosResult {
+  ok: true;
+  removed: number;
+}
+
+/**
+ * Emptying the page's Expired section in one act.
+ *
+ * Still the user's own deletion, of many rows rather than one, and shaped like
+ * the single delete above: behind a confirmation, re-read rather than removed
+ * optimistically. Which rows are expired is the server's rule against its own
+ * clock, so the browser does not guess which ones went.
+ */
+export function clearExpiredPromosMutationOptions(qc: QueryClient) {
+  return {
+    mutationFn: async () =>
+      apiFetch<ClearExpiredPromosResult>({
+        path: "/promo-codes/saved/expired",
+        method: "DELETE" as const,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.savedPromos });
+    },
+    onError: (err: unknown) => {
+      toast.error(`Could not clear the expired promo codes: ${apiErrorMessage(err)}`);
+    },
+  };
+}
+
+export function useClearExpiredPromos() {
+  const qc = useQueryClient();
+  return useMutation(clearExpiredPromosMutationOptions(qc));
+}
+
 export interface ExtractPromosInput extends MessageActionInput {}
 
 /**

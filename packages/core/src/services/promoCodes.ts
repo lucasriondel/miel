@@ -832,6 +832,46 @@ export async function deleteSavedPromo(args: { id: string }): Promise<boolean> {
   return runWithStores(deleteSavedPromoEffect(args));
 }
 
+export interface ClearExpiredPromosArgs {
+  /**
+   * The instant an expiry is judged against — the same parameter the listing
+   * takes, so "which rows go" is assertable and is the Expired section's own
+   * rule rather than a second copy of it.
+   */
+  now?: Date;
+}
+
+/**
+ * Empty the page's Expired section in one act.
+ *
+ * Still the user's own deletion, just of many rows: nothing calls this but a
+ * request for it, so the rule above — nothing tidies itself away — holds. What
+ * goes is exactly what {@link listSavedPromosEffect} files under expired
+ * against the same `now`: saved rows whose stated expiry is past. A promo with
+ * no stated end never expires, so it is never cleared; an unsaved detection is
+ * a suggestion, not a row on this section, and is left alone.
+ *
+ * Answers how many rows went.
+ */
+export const clearExpiredSavedPromosEffect = (
+  args: ClearExpiredPromosArgs = {},
+): Effect.Effect<number, never, PromoStore> =>
+  Effect.gen(function* () {
+    const now = args.now ?? new Date();
+    const rows = yield* PromoStore.saved();
+    const expired = rows.filter((row) => !stillValid(row, now));
+
+    const removed = yield* Effect.forEach(expired, (row) => PromoStore.remove(row.id));
+    const count = removed.reduce((sum, n) => sum + n, 0);
+    debug.info("expired saved promos cleared", { count });
+    return count;
+  });
+
+// Promise facade for the API boundary.
+export async function clearExpiredSavedPromos(args: ClearExpiredPromosArgs = {}): Promise<number> {
+  return runWithStores(clearExpiredSavedPromosEffect(args));
+}
+
 /* ------------------------------------------------------------------------- *
  * Asking for one message, by hand (#165)
  * ------------------------------------------------------------------------- */

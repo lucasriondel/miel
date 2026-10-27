@@ -259,3 +259,12 @@ describe("DELETE /promo-codes/:id", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("DELETE /promo-codes/saved/expired", () => {
+  test("requires bearer auth", async () => {
+    const res = await createApp().fetch(
+      new Request("http://localhost/promo-codes/saved/expired", { method: "DELETE" }),
+    );
+    expect(res.status).toBe(401);
+  });
+});

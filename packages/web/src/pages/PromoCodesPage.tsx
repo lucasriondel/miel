@@ -8,6 +8,7 @@ import { PageTopBar } from "../features/shell/PageTopBar";
 import { BackToInboxButton } from "../components/topbar/BackToInboxButton";
 import { SavedPromosSection } from "../features/promos/SavedPromosSection";
 import { SuggestedPromosSection } from "../features/promos/SuggestedPromosSection";
+import { ClearExpiredPromosButton } from "../features/promos/ClearExpiredPromosButton";
 
 /**
  * Where promo codes live (#162, #154).
@@ -29,7 +30,8 @@ import { SuggestedPromosSection } from "../features/promos/SuggestedPromosSectio
  *
  * Nothing here deletes by itself: an expired promo is greyed and kept, because
  * the record of what a shop offered is worth having and removing one is always
- * the user's own act.
+ * the user's own act — one row at a time, or the whole Expired section through
+ * its "Clear expired" control.
  *
  * Two reads rather than one, because the two halves are invalidated by
  * different acts — a mail leaving the inbox moves the suggestions and not the
@@ -75,7 +77,12 @@ export const PromoCodesPage = () => {
           <>
             <SuggestedPromosSection promos={suggested} />
             <SavedPromosSection title="Active" promos={active} />
-            <SavedPromosSection title="Expired" promos={expired} faded />
+            <SavedPromosSection
+              title="Expired"
+              promos={expired}
+              faded
+              action={<ClearExpiredPromosButton count={expired.length} />}
+            />
           </>
         )}
       </div>

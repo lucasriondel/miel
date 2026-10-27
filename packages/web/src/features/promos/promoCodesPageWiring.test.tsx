@@ -140,6 +140,12 @@ beforeEach(() => {
           headers: { "content-type": "application/json" },
         });
       }
+      // Clearing the expired section: the server drops every lapsed row.
+      if (method === "DELETE" && path.endsWith("/saved/expired")) {
+        const removed = answer.expired.length;
+        answer = { ...answer, expired: [] };
+        return json({ ok: true, removed });
+      }
       const id = path.split("/").pop()!;
       applyWrite(method, id, (body as Record<string, unknown>) ?? {});
       return json(method === "DELETE" ? { ok: true, id } : { id, ...(body as object) });
@@ -407,7 +413,7 @@ describe("the expired section", () => {
     expect(active()!.compareDocumentPosition(found) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(found.className).toContain("opacity");
+    expect(within(found).getByRole("table").parentElement!.className).toContain("opacity");
   });
 
   // No empty heading left behind on a page whose promos are all still good.
@@ -430,6 +436,37 @@ describe("the expired section", () => {
     expect(within(found).getByRole("button", { name: /edit promo code/i })).not.toBeNull();
     // Nothing was asked of the server beyond the page's own read: a promo does
     // not expire off this page, it is deleted off it.
+    expect(sent).toEqual([]);
+  });
+
+  // The whole section at once, still behind a confirmation — each row's copy
+  // of the mail is very often the only one left.
+  test("is cleared in one act once the user confirms", async () => {
+    mountPage({
+      active: [promo({ id: "live", merchant: "Live" })],
+      expired: [promo({ id: "a" }), promo({ id: "b" })],
+    });
+
+    const found = await sectionNamed("Expired promo codes");
+    fireEvent.click(within(found).getByRole("button", { name: /clear expired/i }));
+    expect(sent).toEqual([]);
+    expect(within(found).getByText("Delete 2 expired codes?")).not.toBeNull();
+    fireEvent.click(within(found).getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ method: "DELETE", path: "/api/promo-codes/saved/expired" });
+    await waitFor(() => expect(expired()).toBeNull());
+    expect(rowsOf(active()!)[0]![0]).toBe("Live");
+  });
+
+  test("asks nothing of the server when the confirm is cancelled", async () => {
+    mountPage({ active: [], expired: [promo({ id: "a" })] });
+
+    const found = await sectionNamed("Expired promo codes");
+    fireEvent.click(within(found).getByRole("button", { name: /clear expired/i }));
+    fireEvent.click(within(found).getByRole("button", { name: /cancel/i }));
+
+    expect(within(found).getByRole("button", { name: /clear expired/i })).not.toBeNull();
     expect(sent).toEqual([]);
   });
 });
