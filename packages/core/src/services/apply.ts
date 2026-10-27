@@ -45,17 +45,19 @@ const resolveAccountContextEffect = (args: {
 }): Effect.Effect<ApplyAccountResolved, Error, MessageStore> =>
   Effect.gen(function* () {
     const gmail = args.gmail ?? createGmailAdapter();
-    if (args.accountEmail) {
-      const acc = yield* MessageStore.accountByEmail(args.accountEmail);
+    const accountEmail = args.accountEmail;
+    if (accountEmail) {
+      const acc = yield* MessageStore.use((svc) => svc.accountByEmail(accountEmail));
       if (!acc) {
         return yield* Effect.fail(new Error(`Account not synced: ${args.accountEmail}`));
       }
       return { accountId: acc.id, accountEmail: acc.email, gmail };
     }
-    if (!args.accountId) {
+    const accountId = args.accountId;
+    if (!accountId) {
       return yield* Effect.fail(new Error("accountEmail or accountId is required"));
     }
-    const acc = yield* MessageStore.accountById(args.accountId);
+    const acc = yield* MessageStore.use((svc) => svc.accountById(accountId));
     if (!acc) {
       return yield* Effect.fail(new Error(`Account not found: ${args.accountId}`));
     }
@@ -94,7 +96,9 @@ export const applyLabelsEffect = (args: {
     // Looked up scoped to the account, so a label id from another account is
     // simply not found rather than attached.
     const allIds = [...(args.addLabelIds ?? []), ...(args.removeLabelIds ?? [])];
-    const labelRows = yield* LabelStore.byIds({ accountId: ctx.accountId, ids: allIds });
+    const labelRows = yield* LabelStore.use((svc) =>
+      svc.byIds({ accountId: ctx.accountId, ids: allIds }),
+    );
     const byId = new Map(labelRows.map((l) => [l.id, l]));
 
     const addRows = (args.addLabelIds ?? [])
@@ -118,16 +122,20 @@ export const applyLabelsEffect = (args: {
       }),
     );
 
-    yield* MessageStore.attachLabels({
-      accountId: ctx.accountId,
-      gmailMessageIds: [ctx.gmailMessageId],
-      labelIds: addRows.map((l) => l.id),
-    });
-    yield* MessageStore.detachLabels({
-      accountId: ctx.accountId,
-      gmailMessageIds: [ctx.gmailMessageId],
-      labelIds: removeRows.map((l) => l.id),
-    });
+    yield* MessageStore.use((svc) =>
+      svc.attachLabels({
+        accountId: ctx.accountId,
+        gmailMessageIds: [ctx.gmailMessageId],
+        labelIds: addRows.map((l) => l.id),
+      }),
+    );
+    yield* MessageStore.use((svc) =>
+      svc.detachLabels({
+        accountId: ctx.accountId,
+        gmailMessageIds: [ctx.gmailMessageId],
+        labelIds: removeRows.map((l) => l.id),
+      }),
+    );
 
     debug("applyLabels done", {
       gmailMessageId: ctx.gmailMessageId,
@@ -176,16 +184,18 @@ const threadActionEffect = (
       accountEmail: args.accountEmail,
     });
     const ctx = yield* resolveContextEffect(args);
-    const threadId = yield* MessageStore.threadIdOf(ctx);
+    const threadId = yield* MessageStore.use((svc) => svc.threadIdOf(ctx));
     if (threadId === null) {
       return yield* Effect.fail(new Error(`Message not found: ${ctx.gmailMessageId}`));
     }
     yield* tryAsync(() => action.inGmail(ctx.gmail, { account: ctx.accountEmail, threadId }));
-    yield* MessageStore.setFlagsForThread({
-      accountId: ctx.accountId,
-      gmailThreadId: threadId,
-      flags: action.flags,
-    });
+    yield* MessageStore.use((svc) =>
+      svc.setFlagsForThread({
+        accountId: ctx.accountId,
+        gmailThreadId: threadId,
+        flags: action.flags,
+      }),
+    );
     debug(`${action.name} done`, { gmailMessageId: ctx.gmailMessageId, threadId });
     return { ok: true, threadId } as const;
   });
@@ -281,7 +291,9 @@ const resolveBatchActionEffect = (
   input.action !== "label"
     ? Effect.succeed({ action: input.action })
     : Effect.gen(function* () {
-        const [label] = yield* LabelStore.byIds({ accountId, ids: [input.labelId] });
+        const [label] = yield* LabelStore.use((svc) =>
+          svc.byIds({ accountId, ids: [input.labelId] }),
+        );
         if (!label) {
           return yield* Effect.fail(new Error(`Label not found: ${input.labelId}`));
         }
@@ -327,33 +339,41 @@ export const batchModifyMessagesEffect = (
 
     // A Gmail label we have never synced has no row of ours to mirror the
     // change onto; that is not an error, there is simply nothing to write.
-    const labelRows = yield* LabelStore.byGmailIds({
-      accountId: ctx.accountId,
-      gmailLabelIds: [...addGmailLabels, ...removeGmailLabels],
-    });
+    const labelRows = yield* LabelStore.use((svc) =>
+      svc.byGmailIds({
+        accountId: ctx.accountId,
+        gmailLabelIds: [...addGmailLabels, ...removeGmailLabels],
+      }),
+    );
     const labelByGmailId = new Map(labelRows.map((l) => [l.gmailLabelId, l.id]));
     const idsOf = (gmailLabelIds: string[]) =>
       gmailLabelIds
         .map((gmailLabelId) => labelByGmailId.get(gmailLabelId))
         .filter((id): id is string => Boolean(id));
 
-    yield* MessageStore.detachLabels({
-      accountId: ctx.accountId,
-      gmailMessageIds: args.gmailMessageIds,
-      labelIds: idsOf(removeGmailLabels),
-    });
-    yield* MessageStore.attachLabels({
-      accountId: ctx.accountId,
-      gmailMessageIds: args.gmailMessageIds,
-      labelIds: idsOf(addGmailLabels),
-    });
-
-    if (args.action === "archive" || args.action === "trash") {
-      yield* MessageStore.setFlagsForMessages({
+    yield* MessageStore.use((svc) =>
+      svc.detachLabels({
         accountId: ctx.accountId,
         gmailMessageIds: args.gmailMessageIds,
-        flags: args.action === "archive" ? { isArchived: true } : { isTrashed: true },
-      });
+        labelIds: idsOf(removeGmailLabels),
+      }),
+    );
+    yield* MessageStore.use((svc) =>
+      svc.attachLabels({
+        accountId: ctx.accountId,
+        gmailMessageIds: args.gmailMessageIds,
+        labelIds: idsOf(addGmailLabels),
+      }),
+    );
+
+    if (args.action === "archive" || args.action === "trash") {
+      yield* MessageStore.use((svc) =>
+        svc.setFlagsForMessages({
+          accountId: ctx.accountId,
+          gmailMessageIds: args.gmailMessageIds,
+          flags: args.action === "archive" ? { isArchived: true } : { isTrashed: true },
+        }),
+      );
     }
 
     debug("batchModifyMessages done", {
@@ -381,10 +401,12 @@ export const setMessageReadEffect = (args: {
     });
     const ctx = yield* resolveContextEffect(args);
 
-    const [unreadLabel] = yield* LabelStore.byGmailIds({
-      accountId: ctx.accountId,
-      gmailLabelIds: ["UNREAD"],
-    });
+    const [unreadLabel] = yield* LabelStore.use((svc) =>
+      svc.byGmailIds({
+        accountId: ctx.accountId,
+        gmailLabelIds: ["UNREAD"],
+      }),
+    );
 
     yield* tryAsync(() =>
       ctx.gmail.batchModifyLabels({
@@ -396,7 +418,8 @@ export const setMessageReadEffect = (args: {
     );
 
     if (unreadLabel) {
-      const write = args.read ? MessageStore.detachLabels : MessageStore.attachLabels;
+      const messages = yield* MessageStore;
+      const write = args.read ? messages.detachLabels : messages.attachLabels;
       yield* write({
         accountId: ctx.accountId,
         gmailMessageIds: [ctx.gmailMessageId],

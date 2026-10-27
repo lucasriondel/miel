@@ -145,7 +145,7 @@ const collectEvents = (gmail: GmailDataAdapter, claude: ClaudeImpl) => {
   // mapping rather than about what those settings are: an empty in-memory
   // settings store (#132) answers them as their defaults without a row.
   const layer = Layer.mergeAll(
-    Layer.succeed(GmailService, GmailService.make(gmail)),
+    Layer.succeed(GmailService, gmail),
     // The one seam (#133): the fake is the Claude interface itself.
     Layer.succeed(Claude, claude),
     makeTestStores().layer,

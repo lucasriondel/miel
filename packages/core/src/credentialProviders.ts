@@ -8,7 +8,7 @@
  * One entry per vendor miel can talk to over HTTP. `providerModels.ts` builds
  * the pickable-provider list out of this plus the local `claude-code` CLI, so a
  * vendor added here becomes selectable once it also has a model list and an
- * ai-sdk factory in `ai-task-runner-effect`'s hosted transport (#105).
+ * ai-sdk factory in `claude/hosted.ts`, the hosted transport (#105).
  */
 export const CREDENTIAL_PROVIDERS = ["anthropic", "google", "openai"] as const;
 export type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];

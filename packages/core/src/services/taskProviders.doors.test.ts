@@ -10,7 +10,7 @@
 // free of a database and of a `mock.module` of the db client — that mock is
 // process-global in Bun, and two suites in this package install their own.
 import { describe, expect, test } from "bun:test";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import type { CredentialProvider } from "../providerModels";
 import { ProviderNotRunnableError } from "../errors";
 import { taskProviderDoors, type TaskProviderStore } from "./taskProviders";
@@ -55,10 +55,10 @@ function recordingDoors(
 
 /** Run a door that is expected to refuse, and hand back its rejection. */
 const refusalOf = <A, E>(effect: Effect.Effect<A, E>): ProviderNotRunnableError => {
-  const result = Effect.runSync(Effect.either(effect));
-  if (!Either.isLeft(result)) throw new Error("expected the door to refuse, but it wrote");
-  expect(result.left).toBeInstanceOf(ProviderNotRunnableError);
-  return result.left as ProviderNotRunnableError;
+  const result = Effect.runSync(Effect.result(effect));
+  if (!Result.isFailure(result)) throw new Error("expected the door to refuse, but it wrote");
+  expect(result.failure).toBeInstanceOf(ProviderNotRunnableError);
+  return result.failure as ProviderNotRunnableError;
 };
 
 describe("checkedUpdateModelSettingsEffect", () => {

@@ -9,7 +9,7 @@ import { describe, expect, test } from "bun:test";
 
 process.env.DATABASE_URL ??= "postgres://test:test@localhost/test";
 
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { recoverUnlessProviderUnavailable } from "./providerFailure";
 import {
   ClaudeAuthError,
@@ -24,12 +24,12 @@ import {
 const recovered = (err: unknown) =>
   Effect.runPromise(
     Effect.fail(err).pipe(
-      Effect.catchAll(
+      Effect.catch(
         recoverUnlessProviderUnavailable((message) =>
           Effect.succeed({ persisted: 0, errors: [`triage: ${message}`] }),
         ),
       ),
-      Effect.either,
+      Effect.result,
     ),
   );
 
@@ -49,8 +49,8 @@ describe("recoverUnlessProviderUnavailable", () => {
     ]) {
       const result = await recovered(err);
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) expect(tagOf(result.left)).toBe(tagOf(err));
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) expect(tagOf(result.failure)).toBe(tagOf(err));
     }
   });
 
@@ -59,14 +59,14 @@ describe("recoverUnlessProviderUnavailable", () => {
     // batch's problem, not the install's, so the sync carries on.
     const result = await recovered(new HostedApiError({ detail: "429 rate limited" }));
 
-    expect(result).toEqual(Either.right({ persisted: 0, errors: ["triage: "] }));
+    expect(result).toEqual(Result.succeed({ persisted: 0, errors: ["triage: "] }));
   });
 
   test("recovers from anything else, with the failure's message", async () => {
     const result = await recovered(new Error("model returned nonsense"));
 
     expect(result).toEqual(
-      Either.right({
+      Result.succeed({
         persisted: 0,
         errors: ["triage: model returned nonsense"],
       }),
@@ -76,6 +76,6 @@ describe("recoverUnlessProviderUnavailable", () => {
   test("recovers from a tagged failure that is not about the provider", async () => {
     const result = await recovered(new GmailApiError({ op: "labels.list", cause: "500" }));
 
-    expect(Either.isRight(result)).toBe(true);
+    expect(Result.isSuccess(result)).toBe(true);
   });
 });

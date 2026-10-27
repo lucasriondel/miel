@@ -25,7 +25,9 @@ accountsRoutes.post("/:accountId/refresh-profile", async (c) => {
   if (!account) {
     return c.json({ error: "account_not_found" }, 404);
   }
-  const profile = await runWithApp(GmailProfile.profile({ accountId: account.id }));
+  const profile = await runWithApp(
+    GmailProfile.use((svc) => svc.profile({ accountId: account.id })),
+  );
   await refreshAccountProfile({
     id: account.id,
     displayName: profile.displayName,

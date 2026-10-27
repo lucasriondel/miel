@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("the in-memory message store", () => {
   test("fills in the columns a seed leaves out", async () => {
-    const detail = await stores.run(MessageStore.detail(REF));
+    const detail = await stores.run(MessageStore.use((svc) => svc.detail(REF)));
 
     expect(detail).toMatchObject({
       accountEmail: "me@example.com",
@@ -47,21 +47,25 @@ describe("the in-memory message store", () => {
 
   test("answers null for a message it does not hold", async () => {
     expect(
-      await stores.run(MessageStore.detail({ accountId: ACCOUNT, gmailMessageId: "nope" })),
+      await stores.run(
+        MessageStore.use((svc) => svc.detail({ accountId: ACCOUNT, gmailMessageId: "nope" })),
+      ),
     ).toBeNull();
     expect(
-      await stores.run(MessageStore.threadIdOf({ accountId: ACCOUNT, gmailMessageId: "nope" })),
+      await stores.run(
+        MessageStore.use((svc) => svc.threadIdOf({ accountId: ACCOUNT, gmailMessageId: "nope" })),
+      ),
     ).toBeNull();
   });
 
   test("lists newest first and never more than the limit", async () => {
-    const rows = await stores.run(MessageStore.list({ limit: 1 }));
+    const rows = await stores.run(MessageStore.use((svc) => svc.list({ limit: 1 })));
 
     expect(rows.map((r) => r.gmailMessageId)).toEqual(["m2"]);
   });
 
   test("joins the label's own columns onto an attachment of it", async () => {
-    const rows = await stores.run(MessageStore.labelsFor([REF]));
+    const rows = await stores.run(MessageStore.use((svc) => svc.labelsFor([REF])));
 
     expect(rows).toEqual([
       {
@@ -77,18 +81,20 @@ describe("the in-memory message store", () => {
   });
 
   test("reads nothing for no refs, rather than everything", async () => {
-    expect(await stores.run(MessageStore.labelsFor([]))).toEqual([]);
-    expect(await stores.run(MessageStore.attachmentsFor([]))).toEqual([]);
+    expect(await stores.run(MessageStore.use((svc) => svc.labelsFor([])))).toEqual([]);
+    expect(await stores.run(MessageStore.use((svc) => svc.attachmentsFor([])))).toEqual([]);
   });
 
   test("attaching a label twice leaves one row, and detaching drops it", async () => {
     const attach = () =>
       stores.run(
-        MessageStore.attachLabels({
-          accountId: ACCOUNT,
-          gmailMessageIds: ["m2"],
-          labelIds: ["label-1"],
-        }),
+        MessageStore.use((svc) =>
+          svc.attachLabels({
+            accountId: ACCOUNT,
+            gmailMessageIds: ["m2"],
+            labelIds: ["label-1"],
+          }),
+        ),
       );
 
     await attach();
@@ -96,22 +102,26 @@ describe("the in-memory message store", () => {
     expect(stores.mailbox.messageLabels).toHaveLength(2);
 
     await stores.run(
-      MessageStore.detachLabels({
-        accountId: ACCOUNT,
-        gmailMessageIds: ["m2"],
-        labelIds: ["label-1"],
-      }),
+      MessageStore.use((svc) =>
+        svc.detachLabels({
+          accountId: ACCOUNT,
+          gmailMessageIds: ["m2"],
+          labelIds: ["label-1"],
+        }),
+      ),
     );
     expect(stores.mailbox.messageLabels.map((ml) => ml.gmailMessageId)).toEqual(["m1"]);
   });
 
   test("sets only the flags it is given", async () => {
     await stores.run(
-      MessageStore.setFlagsForMessages({
-        accountId: ACCOUNT,
-        gmailMessageIds: ["m1"],
-        flags: { isArchived: true },
-      }),
+      MessageStore.use((svc) =>
+        svc.setFlagsForMessages({
+          accountId: ACCOUNT,
+          gmailMessageIds: ["m1"],
+          flags: { isArchived: true },
+        }),
+      ),
     );
 
     expect(stores.mailbox.messages[0]).toMatchObject({ isArchived: true, isTrashed: false });
@@ -121,23 +131,27 @@ describe("the in-memory message store", () => {
 describe("the in-memory triage store", () => {
   test("orders a message's history newest first", async () => {
     await stores.run(
-      TriageStore.insert({
-        accountId: ACCOUNT,
-        gmailMessageId: "m1",
-        priority: "low",
-        reasoning: "first",
-      }),
+      TriageStore.use((svc) =>
+        svc.insert({
+          accountId: ACCOUNT,
+          gmailMessageId: "m1",
+          priority: "low",
+          reasoning: "first",
+        }),
+      ),
     );
     await stores.run(
-      TriageStore.insert({
-        accountId: ACCOUNT,
-        gmailMessageId: "m1",
-        priority: "high",
-        reasoning: "second",
-      }),
+      TriageStore.use((svc) =>
+        svc.insert({
+          accountId: ACCOUNT,
+          gmailMessageId: "m1",
+          priority: "high",
+          reasoning: "second",
+        }),
+      ),
     );
 
-    const history = await stores.run(TriageStore.historyFor(REF));
+    const history = await stores.run(TriageStore.use((svc) => svc.historyFor(REF)));
 
     expect(history.map((t) => t.reasoning)).toEqual(["second", "first"]);
   });
@@ -145,26 +159,36 @@ describe("the in-memory triage store", () => {
 
 describe("the in-memory label store", () => {
   test("scopes every lookup to one account", async () => {
-    expect(await stores.run(LabelStore.byIds({ accountId: OTHER, ids: ["label-1"] }))).toEqual([]);
     expect(
-      await stores.run(LabelStore.byGmailIds({ accountId: OTHER, gmailLabelIds: ["Label_Work"] })),
+      await stores.run(LabelStore.use((svc) => svc.byIds({ accountId: OTHER, ids: ["label-1"] }))),
     ).toEqual([]);
-    expect(await stores.run(LabelStore.byName({ accountId: OTHER, name: "Work" }))).toBeNull();
-    expect(await stores.run(LabelStore.byAccount(ACCOUNT))).toHaveLength(1);
+    expect(
+      await stores.run(
+        LabelStore.use((svc) =>
+          svc.byGmailIds({ accountId: OTHER, gmailLabelIds: ["Label_Work"] }),
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      await stores.run(LabelStore.use((svc) => svc.byName({ accountId: OTHER, name: "Work" }))),
+    ).toBeNull();
+    expect(await stores.run(LabelStore.use((svc) => svc.byAccount(ACCOUNT)))).toHaveLength(1);
   });
 
   test("upserts on the Gmail id: a second sync updates rather than duplicates", async () => {
     const [updated] = await stores.run(
-      LabelStore.upsert([
-        {
-          accountId: ACCOUNT,
-          gmailLabelId: "Label_Work",
-          name: "Work renamed",
-          type: "user",
-          colorBg: "#111",
-          colorFg: "#eee",
-        },
-      ]),
+      LabelStore.use((svc) =>
+        svc.upsert([
+          {
+            accountId: ACCOUNT,
+            gmailLabelId: "Label_Work",
+            name: "Work renamed",
+            type: "user",
+            colorBg: "#111",
+            colorFg: "#eee",
+          },
+        ]),
+      ),
     );
 
     expect(updated.id).toBe("label-1");
@@ -174,22 +198,24 @@ describe("the in-memory label store", () => {
 
   test("gives a brand-new label an id of its own", async () => {
     const [created] = await stores.run(
-      LabelStore.upsert([
-        {
-          accountId: ACCOUNT,
-          gmailLabelId: "Label_New",
-          name: "New",
-          type: "user",
-          colorBg: null,
-          colorFg: null,
-        },
-      ]),
+      LabelStore.use((svc) =>
+        svc.upsert([
+          {
+            accountId: ACCOUNT,
+            gmailLabelId: "Label_New",
+            name: "New",
+            type: "user",
+            colorBg: null,
+            colorFg: null,
+          },
+        ]),
+      ),
     );
 
     expect(created.id).not.toBe("label-1");
-    expect(await stores.run(LabelStore.byName({ accountId: ACCOUNT, name: "New" }))).toEqual(
-      created,
-    );
+    expect(
+      await stores.run(LabelStore.use((svc) => svc.byName({ accountId: ACCOUNT, name: "New" }))),
+    ).toEqual(created);
   });
 });
 
@@ -205,7 +231,9 @@ describe("the in-memory promo store", () => {
       },
     });
 
-    const suggestions = await seeded.run(PromoStore.unsaved({ accountId: ACCOUNT }));
+    const suggestions = await seeded.run(
+      PromoStore.use((svc) => svc.unsaved({ accountId: ACCOUNT })),
+    );
 
     expect(suggestions.map((p) => p.code)).toEqual(["SUMMER20"]);
     // A seed carries no copy of the mail: that is written by a save, and this
@@ -215,9 +243,11 @@ describe("the in-memory promo store", () => {
 
   test("leaves the rows readable after a write, for suites that assert what is stored", async () => {
     await stores.run(
-      PromoStore.insert([
-        { ...REF, code: "A", discount: "10% off", terms: null, expiresAt: null, merchant: null },
-      ]),
+      PromoStore.use((svc) =>
+        svc.insert([
+          { ...REF, code: "A", discount: "10% off", terms: null, expiresAt: null, merchant: null },
+        ]),
+      ),
     );
 
     expect(stores.mailbox.promos).toHaveLength(1);
@@ -231,7 +261,7 @@ describe("an offline mailbox", () => {
     stores.mailbox.offline = true;
 
     const exit = await Effect.runPromise(
-      Effect.exit(stores.provide(PromoStore.unsaved({ accountId: ACCOUNT }))),
+      Effect.exit(stores.provide(PromoStore.use((svc) => svc.unsaved({ accountId: ACCOUNT })))),
     );
 
     expect(exit._tag).toBe("Failure");
@@ -241,18 +271,20 @@ describe("an offline mailbox", () => {
     stores.mailbox.offline = true;
 
     const read = await Effect.runPromise(
-      Effect.exit(stores.provide(MessageStore.list({ limit: 5 }))),
+      Effect.exit(stores.provide(MessageStore.use((svc) => svc.list({ limit: 5 })))),
     );
     expect(read._tag).toBe("Failure");
 
     const write = await Effect.runPromise(
       Effect.exit(
         stores.provide(
-          MessageStore.attachLabels({
-            accountId: ACCOUNT,
-            gmailMessageIds: ["m2"],
-            labelIds: ["label-1"],
-          }),
+          MessageStore.use((svc) =>
+            svc.attachLabels({
+              accountId: ACCOUNT,
+              gmailMessageIds: ["m2"],
+              labelIds: ["label-1"],
+            }),
+          ),
         ),
       ),
     );

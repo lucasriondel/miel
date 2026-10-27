@@ -5,7 +5,7 @@
 //
 // Run: bun test src/claude/promoExtract.test.ts
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { REPLY_BODY_TRUNCATION } from "../claudeUsage";
 import { Claude, type ClaudeImpl, type ClaudeRunResult } from "./Claude";
 import { fakeClaude } from "../testkit/claude";
@@ -17,6 +17,9 @@ process.env.DATABASE_URL ??= "postgres://test:test@localhost/test";
 const { claudeTaskSpec } = await import("./tasks");
 
 const spec = claudeTaskSpec("promo-extract");
+
+/** The contract as a parser: what both transports decode the model's answer through. */
+const decode = Schema.decodeUnknownSync(PromoExtractOutput);
 
 const INPUT: PromoExtractInputT = {
   from: "Zara <newsletter@email.marketing-cloud.example.com>",
@@ -39,12 +42,12 @@ const PROMOS = {
 
 describe("the promo-extract output contract", () => {
   test("takes zero or more promos, an empty array being the negative answer", () => {
-    expect(PromoExtractOutput.parse({ promos: [] }).promos).toEqual([]);
-    expect(PromoExtractOutput.parse(PROMOS).promos).toHaveLength(1);
+    expect(decode({ promos: [] }).promos).toEqual([]);
+    expect(decode(PROMOS).promos).toHaveLength(1);
   });
 
   test("keeps only the five extracted fields — there is no confidence score", () => {
-    const parsed = PromoExtractOutput.parse({
+    const parsed = decode({
       promos: [{ ...PROMOS.promos[0], confidence: 0.8 }],
     });
 
@@ -61,7 +64,7 @@ describe("the promo-extract output contract", () => {
   // the headline is what makes it a promo at all.
   test("accepts a nulled code, terms, expiry and merchant, but not a missing discount", () => {
     expect(
-      PromoExtractOutput.parse({
+      decode({
         promos: [
           { code: null, discount: "Free shipping", terms: null, expiresAt: null, merchant: null },
         ],
@@ -69,7 +72,7 @@ describe("the promo-extract output contract", () => {
     ).toHaveLength(1);
 
     expect(() =>
-      PromoExtractOutput.parse({
+      decode({
         promos: [{ code: "X", terms: null, expiresAt: null, merchant: null }],
       }),
     ).toThrow();
@@ -79,7 +82,7 @@ describe("the promo-extract output contract", () => {
   // a promo dated "Sunday" is not a date anyone can act on.
   test("refuses an expiry that is not an absolute calendar date", () => {
     expect(() =>
-      PromoExtractOutput.parse({
+      decode({
         promos: [{ ...PROMOS.promos[0], expiresAt: "this Sunday" }],
       }),
     ).toThrow();
@@ -164,7 +167,7 @@ describe("running promo-extract through the Claude tag", () => {
   test("decodes a code-less entry rather than failing the mail", async () => {
     const decoded = expectSuccess(
       await runExit(
-        spec.output.decode({
+        Schema.decodeUnknownEffect(spec.output)({
           promos: [
             { code: null, discount: "Free shipping", terms: null, expiresAt: null, merchant: null },
             PROMOS.promos[0],
@@ -176,10 +179,13 @@ describe("running promo-extract through the Claude tag", () => {
     expect(decoded.promos.map((p) => p.code)).toEqual([null, "WEEKEND20"]);
   });
 
-  test("a malformed answer is the repo's own schema error", async () => {
+  // The contract refuses a malformed answer; which of miel's errors that
+  // becomes is each transport's to say (`ClaudeSchemaError` from the CLI,
+  // `HostedApiError` from a vendor — Claude.test.ts and hosted.test.ts).
+  test("a malformed answer is refused by the contract", async () => {
     expectFailureTag(
-      await runExit(spec.output.decode({ promos: [{ discount: 12 }] })),
-      "ClaudeSchemaError",
+      await runExit(Schema.decodeUnknownEffect(spec.output)({ promos: [{ discount: 12 }] })),
+      "SchemaError",
     );
   });
 });

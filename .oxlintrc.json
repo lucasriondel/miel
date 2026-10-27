@@ -34,7 +34,7 @@
           "_tag",
           "_resetSyncLockForTests",
           "_resetSchedulerRegistryForTests",
-          "_setCommandExecutorLayerForTests",
+          "_setSpawnerLayerForTests",
           "_setHostedGenerateForTests"
         ]
       }

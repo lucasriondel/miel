@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { accounts } from "../../db/schema";
@@ -73,14 +73,14 @@ export const syncAllEffect = (
         onEvent: opts.onEvent,
         triage: opts.triage,
         trigger: opts.trigger,
-      }).pipe(Effect.either);
+      }).pipe(Effect.result);
 
-      if (Either.isRight(runResult)) {
-        results.push(runResult.right);
+      if (Result.isSuccess(runResult)) {
+        results.push(runResult.success);
         continue;
       }
 
-      const err = runResult.left;
+      const err = runResult.failure;
       const tag = tagOf(err);
       // Several tagged errors carry their specifics in fields rather than in a
       // message (a refused provider names its task, vendor and reason), so an

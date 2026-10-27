@@ -57,8 +57,8 @@ export function exchangeCodeAndProfile(
 ): Promise<{ grant: TokenGrant; profile: AccountProfile }> {
   return runWithGoogleAuth(
     Effect.gen(function* () {
-      const grant = yield* GoogleAuth.exchangeCode(code);
-      const profile = yield* GoogleAuth.profileFromToken(grant.accessToken);
+      const grant = yield* GoogleAuth.use((svc) => svc.exchangeCode(code));
+      const profile = yield* GoogleAuth.use((svc) => svc.profileFromToken(grant.accessToken));
       return { grant, profile };
     }),
   );

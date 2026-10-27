@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { messageLabels, messages, triages } from "../../db/schema";
@@ -163,10 +163,10 @@ export const triageUntriagedForAccountEffect = (
       batchConcurrency,
       log,
       emit,
-    }).pipe(Effect.either);
+    }).pipe(Effect.result);
 
-    if (Either.isLeft(either)) {
-      const err = either.left;
+    if (Result.isFailure(either)) {
+      const err = either.failure;
       const message = err instanceof Error ? err.message : String(err);
       yield* stepFinishTriageRun({
         triageRunId,
@@ -178,7 +178,7 @@ export const triageUntriagedForAccountEffect = (
       return yield* Effect.fail(err);
     }
 
-    const result = either.right;
+    const result = either.success;
     yield* stepFinishTriageRun({
       triageRunId,
       status: triageRunStatusFor(result),

@@ -1,7 +1,7 @@
 /**
  * Service contracts for the direct-Google-API backend.
  *
- * Each Gmail REST resource is its own `Context.Tag` service (messages, labels,
+ * Each Gmail REST resource is its own `Context.Service` (messages, labels,
  * filters, threads, modify, profile) so a consumer depends on exactly what it
  * uses and each is independently mockable. `GoogleAuth` is the only service that
  * touches the DB + OAuth2Client; every Gmail service depends on it (its methods
@@ -11,7 +11,7 @@
  *
  * Modeled on worp `src/lib/services/contracts.ts`.
  */
-import { Effect } from "effect";
+import { Context, Effect } from "effect";
 import type { OAuth2Client } from "google-auth-library";
 import type { GogFilterT, GogLabelT, GogMessageRawT } from "../schemas/gmail";
 import type {
@@ -102,7 +102,7 @@ export interface GoogleAuthImpl {
   readonly profileFromToken: (accessToken: string) => Effect.Effect<AccountProfile, GmailApiError>;
 }
 
-export class GoogleAuth extends Effect.Tag("GoogleAuth")<GoogleAuth, GoogleAuthImpl>() {}
+export class GoogleAuth extends Context.Service<GoogleAuth, GoogleAuthImpl>()("GoogleAuth") {}
 
 // ── Gmail resource services ─────────────────────────────────────────────────
 
@@ -148,10 +148,9 @@ export interface GmailMessagesImpl {
   >;
 }
 
-export class GmailMessages extends Effect.Tag("GmailMessages")<
-  GmailMessages,
-  GmailMessagesImpl
->() {}
+export class GmailMessages extends Context.Service<GmailMessages, GmailMessagesImpl>()(
+  "GmailMessages",
+) {}
 
 export interface GmailLabelsImpl {
   readonly list: (
@@ -171,7 +170,7 @@ export interface GmailLabelsImpl {
   >;
 }
 
-export class GmailLabels extends Effect.Tag("GmailLabels")<GmailLabels, GmailLabelsImpl>() {}
+export class GmailLabels extends Context.Service<GmailLabels, GmailLabelsImpl>()("GmailLabels") {}
 
 export interface GmailFiltersImpl {
   readonly list: (
@@ -200,7 +199,9 @@ export interface GmailFiltersImpl {
   >;
 }
 
-export class GmailFilters extends Effect.Tag("GmailFilters")<GmailFilters, GmailFiltersImpl>() {}
+export class GmailFilters extends Context.Service<GmailFilters, GmailFiltersImpl>()(
+  "GmailFilters",
+) {}
 
 export interface GmailThreadsImpl {
   readonly trash: (
@@ -221,7 +222,9 @@ export interface GmailThreadsImpl {
   >;
 }
 
-export class GmailThreads extends Effect.Tag("GmailThreads")<GmailThreads, GmailThreadsImpl>() {}
+export class GmailThreads extends Context.Service<GmailThreads, GmailThreadsImpl>()(
+  "GmailThreads",
+) {}
 
 export interface GmailModifyImpl {
   readonly batch: (
@@ -236,7 +239,7 @@ export interface GmailModifyImpl {
   >;
 }
 
-export class GmailModify extends Effect.Tag("GmailModify")<GmailModify, GmailModifyImpl>() {}
+export class GmailModify extends Context.Service<GmailModify, GmailModifyImpl>()("GmailModify") {}
 
 export interface GmailProfileImpl {
   readonly profile: (
@@ -248,4 +251,6 @@ export interface GmailProfileImpl {
   >;
 }
 
-export class GmailProfile extends Effect.Tag("GmailProfile")<GmailProfile, GmailProfileImpl>() {}
+export class GmailProfile extends Context.Service<GmailProfile, GmailProfileImpl>()(
+  "GmailProfile",
+) {}

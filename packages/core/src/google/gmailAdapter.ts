@@ -35,7 +35,7 @@ export interface AttachmentBytes {
 
 /** Find the original message's threadId + Message-ID header for threading. */
 function threadingFor(ref: AccountRef, messageId: string) {
-  return GmailMessages.get(ref, messageId);
+  return GmailMessages.use((svc) => svc.get(ref, messageId));
 }
 
 /** Extract the `Message-ID` header (for In-Reply-To/References) from a raw msg. */
@@ -90,46 +90,58 @@ const ref = (account: string): AccountRef => ({ email: account });
 
 export function createGmailAdapter(): GmailDataAdapter {
   return {
-    searchMessages: (o) => runWithApp(GmailMessages.search(ref(o.account), o.query, o.max)),
-    getMessage: (o) => runWithApp(GmailMessages.get(ref(o.account), o.messageId)),
-    listLabels: (o) => runWithApp(GmailLabels.list(ref(o.account))),
-    createLabel: (o) => runWithApp(GmailLabels.create(ref(o.account), o.name)),
+    searchMessages: (o) =>
+      runWithApp(GmailMessages.use((svc) => svc.search(ref(o.account), o.query, o.max))),
+    getMessage: (o) => runWithApp(GmailMessages.use((svc) => svc.get(ref(o.account), o.messageId))),
+    listLabels: (o) => runWithApp(GmailLabels.use((svc) => svc.list(ref(o.account)))),
+    createLabel: (o) => runWithApp(GmailLabels.use((svc) => svc.create(ref(o.account), o.name))),
     batchModifyLabels: (o) =>
-      runWithApp(GmailModify.batch(ref(o.account), o.messageIds, o.add, o.remove)),
-    trashThread: (o) => runWithApp(GmailThreads.trash(ref(o.account), o.threadId)),
-    archiveThread: (o) => runWithApp(GmailThreads.archive(ref(o.account), o.threadId)),
+      runWithApp(
+        GmailModify.use((svc) => svc.batch(ref(o.account), o.messageIds, o.add, o.remove)),
+      ),
+    trashThread: (o) =>
+      runWithApp(GmailThreads.use((svc) => svc.trash(ref(o.account), o.threadId))),
+    archiveThread: (o) =>
+      runWithApp(GmailThreads.use((svc) => svc.archive(ref(o.account), o.threadId))),
     // Fetch the original first for its threadId + Message-ID header so the
     // reply threads correctly, then send.
     sendReply: async (o) => {
       const original = await runWithApp(threadingFor(ref(o.account), o.replyToMessageId));
       return runWithApp(
-        GmailMessages.send(ref(o.account), {
-          to: o.to,
-          cc: o.cc,
-          subject: o.subject,
-          body: o.body,
-          replyToMessageId: o.replyToMessageId,
-          threadId: original.threadId,
-          inReplyToHeader: messageIdHeader(original),
-        }),
+        GmailMessages.use((svc) =>
+          svc.send(ref(o.account), {
+            to: o.to,
+            cc: o.cc,
+            subject: o.subject,
+            body: o.body,
+            replyToMessageId: o.replyToMessageId,
+            threadId: original.threadId,
+            inReplyToHeader: messageIdHeader(original),
+          }),
+        ),
       );
     },
-    listFilters: (o) => runWithApp(GmailFilters.list(ref(o.account))),
+    listFilters: (o) => runWithApp(GmailFilters.use((svc) => svc.list(ref(o.account)))),
     createFilter: (o) =>
       runWithApp(
-        GmailFilters.create(ref(o.account), {
-          from: o.from,
-          to: o.to,
-          subject: o.subject,
-          query: o.query,
-          addLabelId: o.addLabel,
-          addLabelIds: o.addLabelIds,
-          removeLabelIds: o.removeLabelIds,
-          forward: o.forward,
-        }),
+        GmailFilters.use((svc) =>
+          svc.create(ref(o.account), {
+            from: o.from,
+            to: o.to,
+            subject: o.subject,
+            query: o.query,
+            addLabelId: o.addLabel,
+            addLabelIds: o.addLabelIds,
+            removeLabelIds: o.removeLabelIds,
+            forward: o.forward,
+          }),
+        ),
       ),
-    deleteFilter: (o) => runWithApp(GmailFilters.delete(ref(o.account), o.filterId)),
+    deleteFilter: (o) =>
+      runWithApp(GmailFilters.use((svc) => svc.delete(ref(o.account), o.filterId))),
     getAttachment: (o) =>
-      runWithApp(GmailMessages.getAttachment(ref(o.account), o.messageId, o.attachmentId)),
+      runWithApp(
+        GmailMessages.use((svc) => svc.getAttachment(ref(o.account), o.messageId, o.attachmentId)),
+      ),
   };
 }

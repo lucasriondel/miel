@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { z } from "zod";
 
 export const ReplyGenInput = z.object({
@@ -9,8 +10,14 @@ export const ReplyGenInput = z.object({
 });
 export type ReplyGenInputT = z.infer<typeof ReplyGenInput>;
 
-export const ReplyGenOutput = z.object({
-  subject: z.string(),
-  body: z.string(),
+/**
+ * What the model answers. An `effect` Schema rather than Zod because it is the
+ * output contract both transports constrain the model with — the CLI through
+ * `effect/ai`'s `generateObject`, which takes a Schema and nothing else — and
+ * the one JSON Schema both send is derived from it.
+ */
+export const ReplyGenOutput = Schema.Struct({
+  subject: Schema.String,
+  body: Schema.String,
 });
-export type ReplyGenOutputT = z.infer<typeof ReplyGenOutput>;
+export type ReplyGenOutputT = typeof ReplyGenOutput.Type;

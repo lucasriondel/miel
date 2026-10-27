@@ -6,9 +6,10 @@
 // What this suite is for is the *shape* of that knowledge, since the shape is
 // the acceptance criterion: a task is a row, so a fourth task is a fourth row
 // and nothing else. The per-transport behaviour is Claude.test.ts's and
-// hosted.test.ts's (plus the transport's own suite in `ai-task-runner-effect`).
+// hosted.test.ts's.
 // Run: bun test src/claude/tasks.test.ts
 import { describe, expect, test } from "bun:test";
+import { Schema } from "effect";
 
 process.env.DATABASE_URL ??= "postgres://test:test@localhost/test";
 // The CLI triage prompt embeds these; the hosted ones must not.
@@ -16,6 +17,7 @@ process.env.API_SECRET = "top-secret-bearer-token";
 process.env.API_PORT = "5531";
 
 const { CLAUDE_TASKS, claudeTaskSpec } = await import("./tasks");
+const { hostedJsonSchema } = await import("./hosted");
 // The published list of tasks that put a message body in a prompt (#158). This
 // suite is the half that keeps it honest against the prompts themselves.
 import { BODY_BEARING_TASKS } from "../claudeUsage";
@@ -79,11 +81,11 @@ describe("the task table", () => {
   test.each([...MODEL_TASKS])("%s carries its own codec and prompts", (task) => {
     const spec = claudeTaskSpec(task);
 
-    // The row's output contract is an ObjectCodec now (#105 → the runner
-    // package): the JSON Schema the model is constrained with, and the decode
-    // both transports validate through.
-    expect(typeof spec.output.decode).toBe("function");
-    expect(spec.output.jsonSchema).toBeTruthy();
+    // The row's output contract is an `effect` Schema: the JSON Schema the
+    // model is constrained with, and the decode both transports validate
+    // through, derive from it.
+    expect(Schema.isSchema(spec.output)).toBe(true);
+    expect(hostedJsonSchema(spec.output).type).toBe("object");
     const { cli, hosted } = promptsFor(task);
     expect(cli.length).toBeGreaterThan(0);
     expect(hosted.length).toBeGreaterThan(0);

@@ -104,20 +104,20 @@ const assertProvider = (
 /** The stored ciphertext, or null when the name has no row. */
 export const readSecretBlobEffect = (
   name: string,
-): Effect.Effect<string | null, never, SecretStore> => SecretStore.read(name);
+): Effect.Effect<string | null, never, SecretStore> => SecretStore.use((svc) => svc.read(name));
 
 const writeSecretEffect = (
   name: string,
   plaintext: string,
 ): Effect.Effect<void, never, SecretStore> =>
   Effect.gen(function* () {
-    yield* SecretStore.write(name, encrypt(plaintext));
+    yield* SecretStore.use((svc) => svc.write(name, encrypt(plaintext)));
     debug("set", { name });
   });
 
 const removeSecretEffect = (name: string): Effect.Effect<number, never, SecretStore> =>
   Effect.gen(function* () {
-    const removed = yield* SecretStore.remove(name);
+    const removed = yield* SecretStore.use((svc) => svc.remove(name));
     debug("delete", { name, removed });
     return removed;
   });

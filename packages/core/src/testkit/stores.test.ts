@@ -48,14 +48,14 @@ beforeEach(() => {
 
 describe("the in-memory settings store", () => {
   test("upserts rather than keeping two rows for one key", async () => {
-    await stores.run(SettingsStore.write("triage.model", "a"));
-    await stores.run(SettingsStore.write("triage.model", "b"));
+    await stores.run(SettingsStore.use((svc) => svc.write("triage.model", "a")));
+    await stores.run(SettingsStore.use((svc) => svc.write("triage.model", "b")));
     expect(stores.settings.rows.size).toBe(1);
   });
 
   test("records every write in order, for suites that assert what was stored", async () => {
-    await stores.run(SettingsStore.write("a", "1"));
-    await stores.run(SettingsStore.write("b", "2"));
+    await stores.run(SettingsStore.use((svc) => svc.write("a", "1")));
+    await stores.run(SettingsStore.use((svc) => svc.write("b", "2")));
     expect(stores.settings.writes).toEqual([
       { key: "a", value: "1" },
       { key: "b", value: "2" },
@@ -64,7 +64,7 @@ describe("the in-memory settings store", () => {
 
   test("can be seeded with rows a test wants to find already there", async () => {
     const seeded = makeTestStores({ settings: { "schedule.since": "7d" } });
-    expect(await seeded.run(SettingsStore.read("schedule.since"))).toBe("7d");
+    expect(await seeded.run(SettingsStore.use((svc) => svc.read("schedule.since")))).toBe("7d");
     // Seeding is not a write — a suite asserting "nothing was stored" still can.
     expect(seeded.settings.writes).toEqual([]);
   });
@@ -72,15 +72,15 @@ describe("the in-memory settings store", () => {
 
 describe("the in-memory secret store", () => {
   test("records writes and removals for suites that assert what was stored", async () => {
-    await stores.run(SecretStore.write("anthropic", "iv:tag:cipher"));
-    await stores.run(SecretStore.remove("anthropic"));
+    await stores.run(SecretStore.use((svc) => svc.write("anthropic", "iv:tag:cipher")));
+    await stores.run(SecretStore.use((svc) => svc.remove("anthropic")));
     expect(stores.secrets.writes).toEqual([{ name: "anthropic", ciphertext: "iv:tag:cipher" }]);
     expect(stores.secrets.removals).toEqual(["anthropic"]);
   });
 
   test("can be seeded with a ciphertext a test wants to find already stored", async () => {
     const seeded = makeTestStores({ secrets: { anthropic: "iv:tag:cipher" } });
-    expect(await seeded.run(SecretStore.read("anthropic"))).toBe("iv:tag:cipher");
+    expect(await seeded.run(SecretStore.use((svc) => svc.read("anthropic")))).toBe("iv:tag:cipher");
     expect(seeded.secrets.writes).toEqual([]);
   });
 });
@@ -92,7 +92,7 @@ describe("an offline store", () => {
   test("fails every read rather than answering null", async () => {
     stores.secrets.offline = true;
     const exit = await Effect.runPromise(
-      Effect.exit(stores.provide(SecretStore.read("anthropic"))),
+      Effect.exit(stores.provide(SecretStore.use((svc) => svc.read("anthropic")))),
     );
     expect(exit._tag).toBe("Failure");
   });
@@ -100,7 +100,7 @@ describe("an offline store", () => {
   test("fails writes and removals too", async () => {
     stores.settings.offline = true;
     const exit = await Effect.runPromise(
-      Effect.exit(stores.provide(SettingsStore.write("triage.model", "x"))),
+      Effect.exit(stores.provide(SettingsStore.use((svc) => svc.write("triage.model", "x")))),
     );
     expect(exit._tag).toBe("Failure");
     expect(stores.settings.rows.size).toBe(0);

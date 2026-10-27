@@ -21,7 +21,7 @@ const impl: GmailProfileImpl = {
   profile: (ref) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const info = yield* Effect.tryPromise({
         try: () => google.oauth2({ version: "v2", auth }).userinfo.get(),
         catch: (cause) => new GmailApiError({ op: "userinfo.get", cause }),

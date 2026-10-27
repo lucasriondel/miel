@@ -50,7 +50,7 @@ googleOAuthStartRoutes.get("/google/start", async (c) => {
   // here and kept server-side — the consent URL carries only the opaque state.
   const target = parseConnectReturnTarget(c.req.query("return"));
   const state = connectStates.issue(target);
-  const url = await runWithGoogleAuth(GoogleAuth.consentUrl(state));
+  const url = await runWithGoogleAuth(GoogleAuth.use((svc) => svc.consentUrl(state)));
   return c.json({ url });
 });
 
