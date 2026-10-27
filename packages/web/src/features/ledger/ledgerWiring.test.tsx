@@ -1,10 +1,10 @@
 // The sources arriving as one list, rendered as a user meets it.
 //
-// This is the claim the merge is for and the one no source-reading test can
-// make: a verification code and an extracted promo — two sources, two shapes,
-// two lifetimes — reach the screen as rows of a single ledger, in one
-// container, in a fixed order. `fetch` is the seam, so
-// each source really is read from its own endpoint.
+// The claim no source-reading test can make: a verification code found in the
+// mailbox reaches the screen as a row of the ledger, in one container. An
+// extracted promo is answered too, to show it is no longer one of them: it sits
+// on its message's row instead. `fetch` is the seam, so each source really is
+// read from its own endpoint.
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
@@ -144,7 +144,7 @@ const mountInbox = () => {
 const ledger = () => screen.queryByRole("region", { name: "Found in your mail" });
 /**
  * A row is labelled by the kind that names it, so this is how a test asks for
- * "the promo row" without matching the word wherever else it appears.
+ * "the code row" without matching the word wherever else it appears.
  */
 const rowsOfKind = (kind: string) =>
   screen.queryAllByRole("listitem", { name: new RegExp(`^${kind} — `) });
@@ -153,43 +153,27 @@ const shownLedger = async () => {
   return ledger()!;
 };
 
-describe("the sources as one list", () => {
-  test("a code and a promo are rows of the same ledger", async () => {
+describe("the ledger", () => {
+  test("a code is a row of the ledger, and a promo is not", async () => {
     promos = [PROMO];
     mountInbox();
 
     const found = await shownLedger();
     // The sources answer independently, so the last of them to land is what
-    // the assertions below wait on.
-    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(2));
+    // the assertions below wait on — the promo, on its message's row.
+    await waitFor(() => expect(screen.queryByText("AUTUMN30") !== null).toBe(true));
+    await waitFor(() => expect(within(found).getAllByRole("listitem")).toHaveLength(1));
 
-    // One row of each kind, in one list.
     expect(rowsOfKind("Code")).toHaveLength(1);
-    expect(rowsOfKind("Promo")).toHaveLength(1);
-
-    // And the value each row was opened for.
     expect(within(found).queryByText("482913") !== null).toBe(true);
-    expect(within(found).queryByText("AUTUMN30") !== null).toBe(true);
+    expect(within(found).queryByText("AUTUMN30") === null).toBe(true);
   });
 
-  test("the header counts what is in it, by kind", async () => {
-    promos = [PROMO];
+  test("the header counts what is in it", async () => {
     mountInbox();
 
     const found = await shownLedger();
-    await waitFor(() =>
-      expect(within(found).queryByText("2 items · 1 code · 1 promo") !== null).toBe(true),
-    );
-  });
-
-  // Each source stands alone: the ledger is not a container for the promos
-  // that the codes happen to join.
-  test("a code alone is enough to draw the ledger", async () => {
-    mountInbox();
-
-    await shownLedger();
-    expect(rowsOfKind("Code")).toHaveLength(1);
-    expect(rowsOfKind("Promo")).toHaveLength(0);
+    await waitFor(() => expect(within(found).queryByText("1 item · 1 code") !== null).toBe(true));
   });
 
   // Nothing to act on is the common case on a quiet inbox, and an
@@ -207,7 +191,6 @@ describe("the sources as one list", () => {
   });
 
   test("is hidden in select mode, whatever it holds", async () => {
-    promos = [PROMO];
     mountInbox();
     await shownLedger();
 

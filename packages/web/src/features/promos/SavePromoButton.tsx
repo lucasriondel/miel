@@ -22,8 +22,8 @@ interface Props {
  * It is the labelled face of that act, for the Promo Codes page's suggested
  * rows (#154), where a table cell has the width to say both halves out loud.
  * The inbox's own surface spends the same mutation through
- * `features/ledger/PromoLedgerRow`, where an act column one icon wide moves the
- * label into a tooltip instead. A "Save" that silently deleted a message would
+ * `components/MessageRowPromoChip`, where a chip on the row's second line has
+ * room for one icon and moves the label into a tooltip instead. A "Save" that silently deleted a message would
  * be the kind of surprise no undo makes up for, so neither face leaves the
  * second half unsaid.
  *

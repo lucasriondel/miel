@@ -1,57 +1,46 @@
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Sparkles } from "lucide-react";
-import { usePromoSuggestions } from "../../api/queries";
 import type { ListedMessage } from "../../api/types";
 import { collectVerificationCodes } from "../codes/collectVerificationCodes";
 import { messageDetailPath } from "../inbox/inboxLocation";
 import { buildLedger } from "./buildLedger";
 import { CodeLedgerRow } from "./CodeLedgerRow";
-import { PromoLedgerRow } from "./PromoLedgerRow";
 import { ledgerSummary } from "./ledgerSummary";
 
 interface Props {
-  accountId: string;
   /** The messages on screen, which the verification codes are detected in. */
   messages: ListedMessage[];
-  /** The period the list is showing, so the promos talk about the same mail. */
-  internalDateFrom?: string;
-  internalDateTo?: string;
 }
 
 /**
  * Everything the sync found that can be cleared in a click, as one list.
  *
- * This replaces the stacked sections — the verification-code strip and the
- * promo suggestion cards (and, until it was removed, the AI filter proposals
- * card) — that each cost the inbox a container, a header and a shape of action
- * before the first message. They were never separate features to the user: each is
- * the sync saying "here is something I found, deal with it", and the answer is
- * always one click.
+ * This replaced the stacked sections above the message list — each cost the
+ * inbox a container, a header and a shape of action before the first message. They were never separate features
+ * to the user: each is the sync saying "here is something I found, deal with
+ * it", and the answer is always one click.
  *
- * The sources keep their own rules and their own endpoints — nothing is
- * merged on the server, and the queries, keys and invalidation are exactly what
- * they were. Only the presentation is one thing now.
+ * Promo codes were rows here too, and moved onto the second line of the message
+ * row they were found in: a promo is a fact about one mail, and the row already
+ * has a line for those (`MessageRowSecondLine`).
+ *
+ * The sources keep their own rules and their own endpoints — nothing is merged
+ * on the server. Only the presentation is one thing.
  *
  * Renders nothing at all when there is nothing to act on, which is the common
  * case on a quiet inbox. An always-present section that is usually empty is a
  * permanent chrome tax, so there is no empty state and no heading left behind.
  */
-export const ActionablesLedger = ({
-  accountId,
-  messages,
-  internalDateFrom,
-  internalDateTo,
-}: Props) => {
+export const ActionablesLedger = ({ messages }: Props) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const promos = usePromoSuggestions({ accountId, internalDateFrom, internalDateTo });
 
   /**
    * Dismissals are this page's, not the server's. A code is browser-side regex
-   * over a list the server does not know it produced, and a promo the user
-   * waves away is not a *saved* decision — there is no dismissed state on the
-   * row, and inventing one would mean a write for an act that means "not now".
+   * over a list the server does not know it produced — there is no dismissed
+   * state to write, and inventing one would mean a write for an act that means
+   * "not now".
    * So it lives here and lasts as long as the view does.
    */
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
@@ -61,9 +50,8 @@ export const ActionablesLedger = ({
     () =>
       buildLedger({
         codes: collectVerificationCodes(messages),
-        promos: promos.data?.items ?? [],
       }),
-    [messages, promos.data],
+    [messages],
   );
 
   const visible = items.filter((item) => !dismissed.has(item.id));
@@ -89,16 +77,6 @@ export const ActionablesLedger = ({
 
       <ul>
         {visible.map((item) => {
-          if (item.kind === "promo") {
-            return (
-              <PromoLedgerRow
-                key={item.id}
-                item={item}
-                onOpenMessage={openMessage}
-                onDismiss={dismiss}
-              />
-            );
-          }
           return (
             <CodeLedgerRow
               key={item.id}

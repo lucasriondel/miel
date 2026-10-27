@@ -22,7 +22,7 @@ interface Props {
  * deadline is right-aligned and tabular for the same reason.
  */
 export const LedgerRow = ({ kind, issuer, value, context, when, act }: Props) => (
-  // A real list item, so the ledger's rows are reachable as a list. The kinds
+  // A real list item, so the ledger's rows are reachable as a list. Five kinds
   // share one layout and the kind is the only thing that names a row, so the
   // kind and the issuer are what label it.
   <li
@@ -69,5 +69,4 @@ export const LedgerRow = ({ kind, issuer, value, context, when, act }: Props) =>
 const KIND_CLASS: Record<LedgerKind, string> = {
   code: "text-[rgb(77_171_247)]",
   link: "text-[rgb(77_171_247)]",
-  promo: "text-gousse-accent",
 };

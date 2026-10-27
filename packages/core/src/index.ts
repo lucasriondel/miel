@@ -237,7 +237,6 @@ export {
   listPromoSuggestions,
   listSavedPromos,
   listSuggestedPromos,
-  MAX_PROMO_SUGGESTIONS,
   readSavedPromoMail,
   savePromo,
   updateSavedPromo,

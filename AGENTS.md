@@ -492,38 +492,41 @@ the other things read out of the mail rather than in the top bar. Unlike that
 neighbour the panel is always drawn — one that hid itself until it had news
 could never be *asked*, and being askable is the feature. The mutation is not
 optimistic, because its whole content is an answer nobody can predict; it
-invalidates `["promo-suggestions"]`, since the run rewrote what the inbox strip
-holds for that mail, and reads its own result rather than that cache, which is
+invalidates `["promo-suggestions"]`, since the run rewrote what the inbox rows
+hold for that mail, and reads its own result rather than that cache, which is
 scoped to an account and a period this page has no reason to satisfy.
 
-## Promo suggestions above the inbox
+## Promo suggestions on their inbox rows
 
-The codes the sync found become visible (#160): a horizontally scrolling row of
-cards above the message list, first thing under the filter suggestions and the
-verification-code strip, and gone entirely when there is nothing to suggest.
+The codes the sync found become visible (#160). They were first a strip of cards
+above the list, then rows of the actionables ledger; now each sits on the
+**second line of the message row it was found in**, beside the attachments, as a
+chip with the code, the discount and one icon — the save. The line still exists
+only when there is something on it.
 
-`listPromoSuggestionsEffect` in `services/promoCodes.ts` is where every rule
-lives, and the split between it and `PromoStore` is the part to keep. Three of
+`listPromoSuggestionsEffect` in `services/promoCodes.ts` is where the rules
+live, and the split between it and `PromoStore` is the part to keep. Three of
 them are storage's, because they *are* the read model: unsaved only, one
 account, and the mailbox rule — an unsaved detection whose mail was archived,
-trashed or removed follows it out, which is why `unsaved` joins `messages`.
-Three are the section's: an expired promo is not a suggestion (an unstated
-expiry is not an expired one, and the stored instant is the end of the day, so a
-promo lapsing today is shown for the whole of it), a repeated code is one card
-(deduped *before* the cap, so a shop's third reminder cannot spend a slot; a row
-with no code is passed through rather than folded, since only a code identifies
-an offer — legacy tolerance and nothing more, reaching only rows written before
-#166 stopped storing them, and explained to nobody on screen since #168), and
-`MAX_PROMO_SUGGESTIONS` caps it. `now` is a parameter rather than a call to the
-clock, so "expired" is assertable. The Promise facade put the service in
+trashed or removed follows it out, which is why `unsaved` joins `messages`. One
+is the inbox's: an expired promo is not a suggestion (an unstated expiry is not
+an expired one, and the stored instant is the end of the day, so a promo lapsing
+today is shown for the whole of it). `now` is a parameter rather than a call to
+the clock, so "expired" is assertable. The Promise facade put the service in
 `stores/seam.test.ts`'s `SEAMED_SERVICES`.
 
-The cap is the one rule with a cost, and #154 paid it: the store answers newest
-mail first, so a heavy week's seventh distinct code would sit unread until the
-six ahead of it were saved or lapsed — a cap with nowhere to overflow into is a
-cap that loses offers. `listSuggestedPromosEffect` is where the rest are (see
-*The Promo Codes page* below): the same read model with the two rules the page
-differs by — no account, no cap — and nothing else re-decided.
+It is deliberately **neither capped nor deduped by code** any more. Both were
+rules of a section above the list; a promo on a row is a fact about that mail,
+so a cap would leave some rows silently without theirs and a dedupe would strip
+a shop's reminder mail of its own copy of the code. `listSuggestedPromosEffect`
+(see *The Promo Codes page* below) still folds a repeated code into one row,
+because a table of offers is read as offers rather than as mail.
+
+The rows get their promos through one read for the list, not one per row:
+`features/promos/RowPromosHost.tsx` is mounted by `InboxPage`'s body beside
+`RowLabelPickerHost`, calls `usePromoSuggestions` with the account and period on
+screen, and hands each row its own through `rowPromosContext.ts`. No host above
+— a row mounted outside the inbox — answers no promos.
 
 `GET /promo-codes` is its own endpoint and `["promo-suggestions", params]` its
 own query key, deliberately not an array widened onto the listed-message
@@ -543,19 +546,14 @@ see below.
 The page's suggestions (#154) sit under the **same** key root —
 `["promo-suggestions", "all"]` beside `["promo-suggestions", params]` — and that
 is load-bearing rather than tidy. They are one read model, so the optimistic
-removal, which is a `setQueriesData` over the root, takes a card out of both
+removal, which is a `setQueriesData` over the root, takes a promo out of both
 lists on the click, and the one `alsoInvalidate` entry re-reads both. Two roots
 would have meant two of each, and the second would have been the one forgotten.
 
-Nothing is reused from the verification-code strip. That strip is browser-side
-regex over subject and snippet with no persistence, which works because an OTP
-is in the subject; a promo code is three screens down inside the HTML, so this
-is a server-side extraction the section merely reads. The two share a position
-and nothing else — a pill cannot hold four fields, so these are cards, and the
-strip's 24h age rule does not transfer (a promo's own expiry is the age rule).
-The strip stays above the cards: a verification code is worth minutes and one
-row of height, so it must not be scrolled past to reach codes that keep for
-weeks. Both are hidden in select mode.
+Nothing is reused from the verification codes in the ledger. Those are
+browser-side regex over subject and snippet with no persistence, which works
+because an OTP is in the subject; a promo code is three screens down inside the
+HTML, so this is a server-side extraction the row merely reads.
 
 `features/promos/promoExpiryLabel.ts` is pinned to UTC on purpose — read in a
 local zone, the stored `…T23:59:59.999Z` would show as the next day east of
@@ -564,7 +562,7 @@ extraction is told never to guess a date.
 
 One thing that suite had to solve and the next fetch-seam suite will too: a bun
 module mock is process-global, so a suite whose seam is `fetch` inherits
-whichever `api/client` stub ran last. `promoSuggestionsWiring.test.tsx` puts the
+whichever `api/client` stub ran last. `rowPromosWiring.test.tsx` puts the
 real client back by importing it as `"../../api/client.ts?real"` — the same
 source under a specifier no mock is registered against, declared in
 `vite-env.d.ts` — and re-registering it *spread*, since a module namespace
@@ -602,7 +600,7 @@ re-reads the lists (the mail is still in the inbox, so the row must come back)
 and says so, which is the only way the user learns there is something left to do
 by hand. `mutations.savePromo.test.ts` covers that branch, because no render can
 reach it; the click, the removal and the refusal are rendered in
-`promoSuggestionsWiring.test.tsx`.
+`rowPromosWiring.test.tsx`.
 
 ## The Promo Codes page
 

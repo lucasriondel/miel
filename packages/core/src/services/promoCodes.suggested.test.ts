@@ -12,7 +12,7 @@ process.env.DATABASE_URL ??= "postgres://test:test@localhost/test";
 import { endOfDayUtc } from "../promoExpiry";
 import { makeTestStores, type TestStores } from "../testkit/stores";
 import type { MailboxSeed, PromoSeed } from "../testkit/mailbox";
-import { MAX_PROMO_SUGGESTIONS, listSuggestedPromosEffect, type PromoListing } from "./promoCodes";
+import { listSuggestedPromosEffect, type PromoListing } from "./promoCodes";
 
 const ACCOUNT = "11111111-1111-4111-8111-111111111111";
 const OTHER_ACCOUNT = "22222222-2222-4222-8222-222222222222";
@@ -96,16 +96,12 @@ describe("the suggestions the Promo Codes page reads", () => {
     expect(rows.find((p) => p.code === "THEIRS")?.accountEmail).toBe("other@example.com");
   });
 
-  // The reason this read exists. The inbox section shows six cards so a heavy
-  // newsletter week does not push the list off the screen; the rest have to be
-  // somewhere, and this is where.
-  test("is not capped, so a heavy week's detections past the inbox's cap are here", async () => {
-    const many = Array.from({ length: MAX_PROMO_SUGGESTIONS + 4 }, (_, i) =>
-      detection(`p${i}`, { code: `CODE${i}` }),
-    );
+  // Every detection is reachable here at once, whatever period the inbox shows.
+  test("is not capped", async () => {
+    const many = Array.from({ length: 10 }, (_, i) => detection(`p${i}`, { code: `CODE${i}` }));
     const stores = seed(many);
 
-    expect(await suggested(stores)).toHaveLength(MAX_PROMO_SUGGESTIONS + 4);
+    expect(await suggested(stores)).toHaveLength(10);
   });
 
   test("leaves out an expired detection, and keeps one with no stated end", async () => {

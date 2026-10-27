@@ -3,11 +3,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { ListedMessage } from "../api/types";
 import { messageDetailPath } from "../features/inbox/inboxLocation";
 import { relativeAge } from "./relativeAge";
-import { MessageRowAttachmentLine } from "./MessageRowAttachmentLine";
+import { MessageRowSecondLine } from "./MessageRowSecondLine";
 import { MessageRowEndCell } from "./MessageRowEndCell";
 import { MessageRowLabels } from "./MessageRowLabels";
 import { MessageRowActions } from "./MessageRowActions";
 import { rowLabelKey, useRowLabelPicker } from "../features/labels/rowLabelPickerContext";
+import { useRowPromos } from "../features/promos/rowPromosContext";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { useSwipeReveal } from "../hooks/useSwipeReveal";
 
@@ -32,8 +33,8 @@ interface Props {
  * (req. 1), and the category band inside that section is the Gmail category
  * (req. 3), so neither needs restating per row.
  *
- * A second line appears only when there are attachments (req. 2), and it is
- * static — rows never collapse, and nothing about hovering a row changes its
+ * A second line appears only when there are attachments (req. 2) or promo
+ * codes found in the mail, and it is static — rows never collapse, and nothing about hovering a row changes its
  * height or the position of anything in it (req. 9).
  */
 export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Props) => {
@@ -58,6 +59,8 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
   // from under its own popover the moment the pointer reached it.
   const picker = useRowLabelPicker();
   const labelling = picker?.openRow === rowLabelKey(message);
+
+  const promos = useRowPromos(message);
 
   const isMobile = useIsMobile();
   const showActions = !selectMode;
@@ -137,10 +140,11 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
           showActions={showActions}
         />
       </div>
-      <MessageRowAttachmentLine
+      <MessageRowSecondLine
         accountId={message.accountId}
         gmailMessageId={message.gmailMessageId}
         attachments={message.attachments}
+        promos={promos}
       />
       {/* Mobile only: the swipe-revealed action strip, which is still an overlay
           because there is no room to reserve a cell for it. */}

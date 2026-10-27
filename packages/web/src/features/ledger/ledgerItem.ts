@@ -1,10 +1,10 @@
-import type { PromoSuggestion } from "../../api/types";
 import type { VerificationEntry } from "../codes/collectVerificationCodes";
 
 /**
  * The things the sync finds that can be cleared in a click — a verification
- * code it spotted, a promo it extracted — as one row shape (the "actionables
- * ledger"). AI filter proposals were a kind too, and are gone.
+ * code or a magic link it spotted — as one row shape (the "actionables
+ * ledger"). Promos were a kind too and now sit on the second line of the
+ * message row they came from; AI filter proposals were another, and are gone.
  *
  * They used to be three components stacked above the message list, each with
  * its own container, its own header and its own idea of what an action looks
@@ -18,27 +18,19 @@ import type { VerificationEntry } from "../codes/collectVerificationCodes";
  * differs per kind is the *value* — a code is a literal to copy, a magic link
  * is an opaque token nobody reads — and which acts apply. Everything else lines up.
  */
-export type LedgerKind = "code" | "link" | "promo";
+export type LedgerKind = "code" | "link";
 
 interface LedgerItemBase {
   /** Unique within the ledger, and stable across refetches — the React key. */
   id: string;
   kind: LedgerKind;
-  /** Who sent it. A merchant or a service. */
+  /** Who sent it. */
   issuer: string;
-  /** The prose after the value: subject, terms. */
+  /** The prose after the value: the code's label. */
   context: string | null;
-  /**
-   * The right-hand column. An age for a code, an expiry for a promo — already
-   * formatted, because what "when" means differs per kind and only the builder
-   * knows which.
-   */
+  /** The right-hand column: the code's age, already formatted. */
   when: string;
-  /**
-   * Sort key: how long the user has to act, soonest first. Codes are minutes
-   * and promos are weeks — so this is what keeps a code that expires in ten
-   * minutes above a promo that runs to Christmas.
-   */
+  /** Sort key: how long the user has to act, soonest first. */
   urgency: number;
 }
 
@@ -47,16 +39,10 @@ export interface CodeLedgerItem extends LedgerItemBase {
   entry: VerificationEntry;
 }
 
-export interface PromoLedgerItem extends LedgerItemBase {
-  kind: "promo";
-  promo: PromoSuggestion;
-}
-
-export type LedgerItem = CodeLedgerItem | PromoLedgerItem;
+export type LedgerItem = CodeLedgerItem;
 
 /** How the kind column labels each row. */
 export const KIND_LABEL: Record<LedgerKind, string> = {
   code: "Code",
   link: "Link",
-  promo: "Promo",
 };

@@ -1,18 +1,18 @@
-// The promo suggestions above the inbox list (#160) and the save on each row
-// (#161), rendered as a user meets them: the page is mounted for real, the
-// message list is seeded in the cache, and the requests that leave are the
-// ledger's own — its reads, and the save a click sends.
+// The promo suggestions on their inbox rows and the save on each (#161),
+// rendered as a user meets them: the page is mounted for real, the message list
+// is seeded in the cache, and the requests that leave are the page's own — the
+// suggestions read, and the save a click sends.
 //
-// The promos are rows in the actionables ledger now rather than a section of
-// cards of their own, so the ledger is what is mounted and the locators are
-// the row's. What is asserted did not change with the shape: the request the
-// period builds, the fields a promo shows, where it sits relative to the list,
-// and that the row and the mail leave together on a save and come back on a
+// The promos used to be rows of the actionables ledger above the list. They sit
+// on the second line of the message they were found in now, beside its
+// attachments, with a single icon to save. What is asserted did not change with
+// the move: the request the period builds, what a promo shows, where it sits,
+// and that the promo and the mail leave together on a save and come back on a
 // refusal.
 //
-// `fetch` is the seam rather than the api client, so the URL the section builds
-// is part of what is asserted — the period scoping is a claim about the request,
-// and a stubbed client would let a section that filtered client-side pass. Any
+// `fetch` is the seam rather than the api client, so the URL the page builds is
+// part of what is asserted — the period scoping is a claim about the request,
+// and a stubbed client would let a page that filtered client-side pass. Any
 // request the suite has not seeded is refused, so a query escaping the cache
 // fails loudly instead of answering a silent `{}`.
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
@@ -60,8 +60,8 @@ const promo = (over: Partial<PromoSuggestion> = {}): PromoSuggestion => ({
 
 /**
  * Deliberately carries no verification code: `collectVerificationCodes` reads
- * the subjects of the seeded mailbox, and a subject that tripped it would put a
- * second row in the ledger and make the row counts here about two features.
+ * the subjects of the seeded mailbox, and a subject that tripped it would draw
+ * the ledger and put a second feature on screen.
  */
 const SUBJECT = "Weekend only: 20% off everything";
 /** The save, which still says what both halves of the press do — in its label. */
@@ -112,9 +112,9 @@ beforeEach(() => {
     }
     // The rollback's re-read: the mail the list put back is still there.
     if (url.includes("/messages")) return json({ items: MAILBOX, nextCursor: null });
-    // The ledger's other two sources. Empty, so every row on screen is a promo
-    // and the counts below are about this feature alone — but answered rather
-    // than refused, because the ledger really does read them.
+    // The ledger's sources. Empty, so nothing on screen but the rows is about
+    // this feature — but answered rather than refused, because the ledger
+    // really does read them.
     if (url.includes("/filters")) return json({ filters: [], suggestions: [] });
     if (url.includes("/labels")) return json({ labels: [] });
     throw new Error(`unexpected request: ${url}`);
@@ -169,27 +169,23 @@ const mountInbox = (suggestions: PromoSuggestion[]) => {
   );
 };
 
-const section = () => screen.queryByRole("region", { name: "Found in your mail" });
-/**
- * A promo row is identified by the act only it has. The ledger's rows are not
- * landmarks — they are rows of one list — so the save button is what counts
- * them, and counting the buttons counts the rows.
- */
-const rows = () => screen.queryAllByRole("button", { name: SAVE_LABEL });
-const shownSection = async () => {
-  await waitFor(() => expect(section()).not.toBeNull());
-  return section()!;
+/** The ledger, which promos are no longer part of. */
+const ledger = () => screen.queryByRole("region", { name: "Found in your mail" });
+/** A promo is identified by the act only it has, so counting saves counts promos. */
+const saves = () => screen.queryAllByRole("button", { name: SAVE_LABEL });
+const messageRow = () => screen.queryByText(SUBJECT)?.closest<HTMLElement>(".message-row") ?? null;
+const shownPromos = async () => {
+  await waitFor(() => expect(saves().length).toBeGreaterThan(0));
+  return messageRow()!;
 };
 
-describe("the suggestions section", () => {
-  // No empty state: an always-present section that is usually empty is
-  // permanent chrome tax on the inbox.
-  test("renders nothing at all when the endpoint answers empty", async () => {
+describe("the suggestions read", () => {
+  test("draws no promo when the endpoint answers empty", async () => {
     mountInbox([]);
 
     await waitFor(() => expect(urls).toHaveLength(1));
-    expect(section()).toBeNull();
-    expect(rows()).toHaveLength(0);
+    expect(saves()).toHaveLength(0);
+    expect(ledger()).toBeNull();
   });
 
   test("asks the server for the account and the period the list is showing", async () => {
@@ -203,168 +199,127 @@ describe("the suggestions section", () => {
     expect(url.searchParams.get("internalDateTo")).toBe(RANGE_END.toISOString());
   });
 
-  test("shows one row per suggestion the server answered with", async () => {
+  test("shows one promo per suggestion the server answered with", async () => {
     mountInbox([promo(), promo({ id: "promo-2", code: "SUMMER10", merchant: "Uniqlo" })]);
 
-    await shownSection();
-    expect(rows()).toHaveLength(2);
+    await shownPromos();
+    expect(saves()).toHaveLength(2);
+  });
+
+  // A suggestion whose mail is not on screen has no row to sit on.
+  test("draws nothing for a promo whose mail is not in the list", async () => {
+    mountInbox([promo({ gmailMessageId: "elsewhere" })]);
+
+    await waitFor(() => expect(urls).toHaveLength(1));
+    await waitFor(() => expect(messageRow()).not.toBeNull());
+    expect(saves()).toHaveLength(0);
   });
 });
 
-describe("what a promo row carries", () => {
-  test("the discount, the terms, the merchant, the expiry and the code", async () => {
+describe("where a promo sits", () => {
+  test("on the row of the mail it was found in, not in the ledger", async () => {
     mountInbox([promo()]);
 
-    const found = await shownSection();
-    expect(within(found).getByText("WEEKEND20")).not.toBeNull();
-    expect(within(found).getByText("Zara")).not.toBeNull();
-    expect(within(found).getByText("20% off")).not.toBeNull();
-    // Discount and terms share the context cell, so they are read together.
-    expect(within(found).getByText(/orders over £50, excl\. sale/)).not.toBeNull();
-    // The deadline column is a bare date — the ledger's right column is always
-    // the deadline, so a cell repeating the word would say it twice.
-    expect(within(found).getByText(/24/)).not.toBeNull();
-  });
-
-  // A detection written before #166 stopped storing code-less promos, and a
-  // mail that named no deadline: neither may be shown something the mail never
-  // said — and since #168 neither is explained as a kind of promo this
-  // produces. The row stays readable; the copy about it is gone.
-  test("draws a row with no code as an unstated value, and guesses no date", async () => {
-    mountInbox([promo({ code: null, expiresAt: null, terms: null })]);
-
-    const found = await shownSection();
-    // The chip stays: vanishing would leave the value column empty and the row
-    // misaligned against the ones above it. What it holds is the same dash the
-    // ledger gives every unstated field — here the code and the deadline both —
-    // and not a sentence about offers that need no code.
-    expect(within(found).getAllByText("—")).toHaveLength(2);
-    expect(within(found).queryByText(/no code needed/i)).toBeNull();
-    expect(within(found).queryByText("WEEKEND20")).toBeNull();
-    // And there is no copy act at all — a disabled one presents "no code" as an
-    // answer this still gives.
-    expect(within(found).queryByRole("button", { name: /copy|no code/i })).toBeNull();
-  });
-
-  test("falls back to the sender-less case without an empty merchant cell", async () => {
-    mountInbox([promo({ merchant: null })]);
-
-    const found = await shownSection();
-    expect(within(found).queryByText("Zara")).toBeNull();
-    expect(within(found).getByText("20% off")).not.toBeNull();
+    const row = await shownPromos();
+    expect(row.contains(saves()[0]!)).toBe(true);
+    expect(ledger()).toBeNull();
   });
 });
 
-describe("where the ledger sits", () => {
-  test("above the message list", async () => {
+describe("what a promo carries", () => {
+  test("the code and the discount, with the shop and the terms in its title", async () => {
     mountInbox([promo()]);
 
-    const found = await shownSection();
-    const firstMessage = screen.getAllByRole("link")[0]!;
-    // DOCUMENT_POSITION_FOLLOWING: the list comes after the section.
-    expect(found.compareDocumentPosition(firstMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    const row = await shownPromos();
+    expect(within(row).getByText("WEEKEND20")).not.toBeNull();
+    expect(within(row).getByText("20% off")).not.toBeNull();
+    expect(within(row).getByTitle("Zara · 20% off · orders over £50, excl. sale")).not.toBeNull();
   });
 
-  // Rows, stacked, in one container: what the cards bought with a sideways
-  // scroll the ledger gets from a row costing one line each. Several promos
-  // must not push the first message off the screen.
-  test("stacks the suggestions as rows in a single container", async () => {
-    mountInbox([promo(), promo({ id: "promo-2" })]);
-
-    const found = await shownSection();
-    expect(rows()).toHaveLength(2);
-    // Both rows are inside the one ledger, rather than each being its own
-    // section the way the three replaced components were.
-    for (const row of rows()) expect(found.contains(row)).toBe(true);
-  });
-
-  // The bulk-action mode stays uncluttered: every act in the ledger is a
-  // single-item act with nothing to say about a selection.
-  test("is hidden in select mode", async () => {
+  // The one act is the save, as an icon: nothing else is offered.
+  test("offers only the save", async () => {
     mountInbox([promo()]);
-    await shownSection();
 
-    fireEvent.click(screen.getByRole("button", { name: "Enter select mode" }));
+    const row = await shownPromos();
+    expect(within(row).queryByRole("button", { name: /copy|dismiss/i })).toBeNull();
+  });
 
-    expect(section()).toBeNull();
+  // A detection written before #166 stopped storing code-less promos: still
+  // drawn, with the discount and no code invented for it (#168).
+  test("draws a row with no code by its discount alone", async () => {
+    mountInbox([promo({ code: null, terms: null })]);
+
+    const row = await shownPromos();
+    expect(within(row).queryByText("WEEKEND20")).toBeNull();
+    expect(within(row).getByText("20% off")).not.toBeNull();
   });
 });
 
 // One act does the whole thing (#161): the promo is saved with a copy of its
 // mail and the Gmail original is trashed, in that order, server-side. What the
-// screen owes the user is that the ledger row and the message row leave
-// together the moment they click — the interface should not wait on the network
-// to tell it what it already knows — and that both come back if it is refused.
+// screen owes the user is that the row and its promo leave together the moment
+// they click, and come back if it is refused.
 describe("saving a promo from its row", () => {
-  const saveButton = async () => {
-    await shownSection();
-    return rows()[0]!;
-  };
-
-  const messageRow = () => screen.queryByText(SUBJECT);
-
   test("asks the server to save that promo, and no other", async () => {
     mountInbox([promo(), promo({ id: "promo-2", code: "SUMMER10" })]);
 
-    fireEvent.click(await saveButton());
+    await shownPromos();
+    fireEvent.click(saves()[0]!);
 
     await waitFor(() => expect(urls.some((u) => u.includes("/save"))).toBe(true));
     const url = new URL(urls.find((u) => u.includes("/save"))!);
     expect(url.pathname).toEndWith("/promo-codes/promo-1/save");
   });
 
-  test("removes the ledger row and the message row together, before the network answers", async () => {
+  test("removes the message row and its promo before the network answers", async () => {
     mountInbox([promo()]);
-    expect(messageRow()).not.toBeNull();
+    await shownPromos();
 
     let answered!: () => void;
     holdSave = new Promise<void>((resolve) => {
       answered = resolve;
     });
 
-    fireEvent.click(await saveButton());
+    fireEvent.click(saves()[0]!);
 
     // The server has said nothing yet, and both are already gone.
-    await waitFor(() => expect(section()).toBeNull());
-    expect(messageRow()).toBeNull();
+    await waitFor(() => expect(messageRow()).toBeNull());
+    expect(saves()).toHaveLength(0);
     answered();
   });
 
   // A failure is visible rather than silently swallowed: the promo was not
-  // saved, so the mail is still in the inbox and the row is still an offer.
+  // saved, so the mail is still in the inbox and its promo still an offer.
   test("puts both back when the save is refused", async () => {
     saveRefused = true;
     mountInbox([promo()]);
+    await shownPromos();
 
     let refused!: () => void;
     holdSave = new Promise<void>((resolve) => {
       refused = resolve;
     });
 
-    fireEvent.click(await saveButton());
-    // Gone on the click, as they would be for a save that succeeds…
-    await waitFor(() => expect(section()).toBeNull());
-    expect(messageRow()).toBeNull();
+    fireEvent.click(saves()[0]!);
+    await waitFor(() => expect(messageRow()).toBeNull());
 
     refused();
 
-    // …and back, both of them, once the server has said no.
-    await waitFor(() => expect(rows()).toHaveLength(1));
+    await waitFor(() => expect(saves()).toHaveLength(1));
     expect(messageRow()).not.toBeNull();
   });
 
   // The suggestions are a separate query from the lists, so nothing about a
   // removal reaches them on their own — which is why the save names both.
-  test("leaves the row gone once the server has answered", async () => {
+  test("leaves the promo gone once the server has answered", async () => {
     mountInbox([promo()]);
+    await shownPromos();
 
-    fireEvent.click(await saveButton());
+    fireEvent.click(saves()[0]!);
 
     await waitFor(() => expect(urls.some((u) => u.includes("/save"))).toBe(true));
     // The re-read the save triggers answers without the promo it just saved.
     await waitFor(() => expect(urls.filter((u) => !u.includes("/save"))).toHaveLength(2));
-    expect(section()).toBeNull();
+    expect(saves()).toHaveLength(0);
   });
 });

@@ -8,20 +8,12 @@ const item = (kind: LedgerItem["kind"], id: string): LedgerItem =>
   ({ id, kind, issuer: "x", context: null, when: "—", urgency: 0 }) as LedgerItem;
 
 describe("how the ledger counts itself", () => {
-  test("the total, then a breakdown by kind", () => {
-    expect(ledgerSummary([item("code", "c1"), item("code", "c2"), item("promo", "p1")])).toBe(
-      "3 items · 2 codes · 1 promo",
-    );
-  });
-
-  // A ledger holding one kind says so in three words rather than naming two
-  // zeroes the user would have to read past.
-  test("leaves out the kinds it has none of", () => {
+  test("the total, then the codes", () => {
     expect(ledgerSummary([item("code", "c1"), item("code", "c2")])).toBe("2 items · 2 codes");
   });
 
   test("says one item, singular, when there is one", () => {
-    expect(ledgerSummary([item("promo", "p1")])).toBe("1 item · 1 promo");
+    expect(ledgerSummary([item("code", "c1")])).toBe("1 item · 1 code");
   });
 
   // The kind column tells a link from a code where the difference matters —

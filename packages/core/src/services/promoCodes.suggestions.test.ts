@@ -14,11 +14,7 @@ process.env.DATABASE_URL ??= "postgres://test:test@localhost/test";
 import { endOfDayUtc } from "../promoExpiry";
 import { makeTestStores, type TestStores } from "../testkit/stores";
 import type { MailboxSeed, PromoSeed } from "../testkit/mailbox";
-import {
-  MAX_PROMO_SUGGESTIONS,
-  listPromoSuggestionsEffect,
-  type PromoSuggestion,
-} from "./promoCodes";
+import { listPromoSuggestionsEffect, type PromoSuggestion } from "./promoCodes";
 
 const ACCOUNT = "11111111-1111-4111-8111-111111111111";
 const OTHER_ACCOUNT = "22222222-2222-4222-8222-222222222222";
@@ -130,8 +126,9 @@ describe("the suggestions the inbox section reads", () => {
     expect((await suggestions(stores)).map((p) => p.code)).toEqual(["OPEN"]);
   });
 
-  // One shop's three reminder mails are one offer.
-  test("shows the same code from two messages once", async () => {
+  // Each mail is its own row, so a shop's reminder carries its own copy of the
+  // code rather than being folded into the first mail's.
+  test("answers the same code once per message it came in", async () => {
     const stores = seed([
       detection("first", {
         gmailMessageId: "mail-a",
@@ -143,34 +140,18 @@ describe("the suggestions the inbox section reads", () => {
       }),
     ]);
 
-    const rows = await suggestions(stores);
-    expect(rows).toHaveLength(1);
-    // The newer mail's detection is the one kept — the store answers newest first.
-    expect(rows[0]?.gmailMessageId).toBe("mail-b");
-  });
-
-  // A promo needing no code has nothing to be the same as; two of them are two
-  // offers, not one repeated.
-  test("does not fold two code-less promos into one", async () => {
-    const stores = seed([
-      detection("free-ship", { code: null, discount: "Free shipping" }),
-      detection("gift", { code: null, discount: "Free gift" }),
-    ]);
-
-    expect((await suggestions(stores)).map((p) => p.discount).toSorted()).toEqual([
-      "Free gift",
-      "Free shipping",
+    expect((await suggestions(stores)).map((p) => p.gmailMessageId).toSorted()).toEqual([
+      "mail-a",
+      "mail-b",
     ]);
   });
 
-  test("caps the section, counting distinct codes rather than rows", async () => {
-    const many = Array.from({ length: MAX_PROMO_SUGGESTIONS + 3 }, (_, i) =>
-      detection(`p${i}`, { code: `CODE${i}` }),
-    );
-    // …and a duplicate, so the cap is not reached by a repeat of a code shown.
-    const stores = seed([...many, detection("dupe", { code: "CODE0" })]);
+  // A promo belongs to its row, so a cap would leave some rows without theirs.
+  test("is not capped", async () => {
+    const many = Array.from({ length: 10 }, (_, i) => detection(`p${i}`, { code: `CODE${i}` }));
+    const stores = seed(many);
 
-    expect(await suggestions(stores)).toHaveLength(MAX_PROMO_SUGGESTIONS);
+    expect(await suggestions(stores)).toHaveLength(10);
   });
 
   test("passes the period to the store rather than answering the whole mailbox", async () => {

@@ -1,17 +1,21 @@
 import { Loader2, Paperclip } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import type { MessageAttachment } from "../api/types";
+import type { MessageAttachment, PromoSuggestion } from "../api/types";
 import { AttachmentMenuContent } from "./AttachmentMenuContent";
+import { MessageRowPromoChip } from "./MessageRowPromoChip";
 import { useAttachmentActions } from "./useAttachmentActions";
 
 interface Props {
   accountId: string;
   gmailMessageId: string;
   attachments: MessageAttachment[];
+  /** The promo codes the sync found in this mail and nobody has saved yet. */
+  promos: readonly PromoSuggestion[];
 }
 
 /**
- * The row's second line, which exists only when the message has files (req. 2).
+ * The row's second line, which exists only when the message has files (req. 2)
+ * or promo codes the sync found in it.
  *
  * It is static — not revealed on hover or by a click — because a file is a fact
  * about the message rather than an action on it, and a line that appeared under
@@ -21,14 +25,22 @@ interface Props {
  * The old compact pill run capped itself at three and clipped names to 18
  * characters to fit the space left over on one line. A line of its own has the
  * width to say the filename in full and the size beside it, so it does neither.
+ *
+ * The promos lead, since saving one is something to do and a file is only
+ * something there. They used to be rows of the ledger above the list, which
+ * spent a container on what is a fact about one mail; here each sits on the
+ * mail it came from.
  */
-export const MessageRowAttachmentLine = ({ accountId, gmailMessageId, attachments }: Props) => {
-  if (attachments.length === 0) return null;
+export const MessageRowSecondLine = ({ accountId, gmailMessageId, attachments, promos }: Props) => {
+  if (attachments.length === 0 && promos.length === 0) return null;
 
   return (
     // Indented to the subject's column on desktop so the files read as hanging
     // off the message rather than starting a new column of their own.
     <div className="flex flex-wrap items-center gap-1.5 pb-2.5 pl-4 pr-3 sm:pl-[13.5rem]">
+      {promos.map((p) => (
+        <MessageRowPromoChip key={p.id} promo={p} />
+      ))}
       {attachments.map((a) => (
         <AttachmentChip
           key={a.attachmentId}

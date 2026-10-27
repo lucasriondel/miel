@@ -1,8 +1,6 @@
 // The fold from the sources into one list of rows. Pure, and given `now`, so
-// "2 min", which promo is next to expire and the order the ledger reads in are
-// all assertable without a clock.
+// "2 min" and the order the ledger reads in are assertable without a clock.
 import { describe, expect, test } from "bun:test";
-import type { PromoSuggestion } from "../../api/types";
 import type { VerificationEntry } from "../codes/collectVerificationCodes";
 import { buildLedger } from "./buildLedger";
 
@@ -17,63 +15,10 @@ const code = (over: Partial<VerificationEntry> = {}): VerificationEntry => ({
   ...over,
 });
 
-const promo = (over: Partial<PromoSuggestion> = {}): PromoSuggestion => ({
-  id: "p1",
-  accountId: "acc-1",
-  gmailMessageId: "m9",
-  code: "AUTUMN30",
-  discount: "30% off everything",
-  terms: "Full-price items only",
-  expiresAt: "2026-09-11T23:59:59.999Z",
-  merchant: "Uniqlo",
-  ...over,
-});
-
 const build = (over: Partial<Parameters<typeof buildLedger>[0]> = {}) =>
-  buildLedger({ codes: [], promos: [], ...over }, NOW);
+  buildLedger({ codes: [], ...over }, NOW);
 
 describe("the order the ledger is read in", () => {
-  test("groups by kind: codes, then promos", () => {
-    const items = build({
-      codes: [code()],
-      promos: [promo()],
-    });
-
-    expect(items.map((i) => i.kind)).toEqual(["code", "promo"]);
-  });
-
-  // The trade the fixed order makes on purpose: a promo expiring tomorrow sits
-  // below a code from this morning, because the kind column is what the eye
-  // scans and a list that reorders between renders is one nobody can point at.
-  test("keeps a soon-expiring promo below the codes", () => {
-    const items = build({
-      codes: [code()],
-      promos: [promo({ expiresAt: new Date(NOW + 60_000).toISOString() })],
-    });
-
-    expect(items.map((i) => i.kind)).toEqual(["code", "promo"]);
-  });
-
-  test("sorts the promos by deadline, soonest first", () => {
-    const items = build({
-      promos: [
-        promo({ id: "late", expiresAt: "2026-12-01T23:59:59.999Z" }),
-        promo({ id: "soon", expiresAt: "2026-09-08T23:59:59.999Z" }),
-      ],
-    });
-
-    expect(items.map((i) => i.id)).toEqual(["promo:soon", "promo:late"]);
-  });
-
-  // An unstated expiry is not an urgent one — and is not an expired one either.
-  test("puts a promo with no end date last among the promos", () => {
-    const items = build({
-      promos: [promo({ id: "open", expiresAt: null }), promo({ id: "dated" })],
-    });
-
-    expect(items.map((i) => i.id)).toEqual(["promo:dated", "promo:open"]);
-  });
-
   // The oldest code is the one about to stop working.
   test("sorts the codes oldest first", () => {
     const items = build({
@@ -97,22 +42,6 @@ describe("what a row carries", () => {
 
     expect(item.kind).toBe("link");
   });
-
-  test("the promo's colour is the merchant, and an unnamed shop is not a header", () => {
-    const [named] = build({ promos: [promo()] });
-    const [unnamed] = build({ promos: [promo({ merchant: null })] });
-
-    expect(named.issuer).toBe("Uniqlo");
-    expect(unnamed.issuer).toBe("—");
-  });
-
-  test("the promo's deadline is a bare date, and an unstated one is a dash", () => {
-    const [dated] = build({ promos: [promo()] });
-    const [open] = build({ promos: [promo({ expiresAt: null })] });
-
-    expect(dated.when).toContain("11");
-    expect(open.when).toBe("—");
-  });
 });
 
 describe("how a code states its age", () => {
@@ -124,13 +53,4 @@ describe("how a code states its age", () => {
     expect(at(2 * 60_000)).toBe("2 min");
     expect(at(3 * 60 * 60_000)).toBe("3 h");
   });
-});
-
-test("the ids are unique across the kinds so nothing collides as a key", () => {
-  const items = build({
-    codes: [code({ code: { type: "code", value: "same" } })],
-    promos: [promo({ id: "same" })],
-  });
-
-  expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
 });

@@ -5,8 +5,7 @@ import type { LedgerItem } from "./ledgerItem";
  *
  * Written out rather than shown as three coloured tallies because it is read
  * once, on arrival, to decide whether the ledger is worth working through —
- * "7 items · 3 codes · 4 promos". Kinds with nothing in them are
- * left out, so a ledger holding only codes says so in three words.
+ * "3 items · 3 codes".
  *
  * Links count as codes. The kind column tells them apart where the difference
  * matters — what the row's value is — and a summary that split them would be
@@ -14,11 +13,9 @@ import type { LedgerItem } from "./ledgerItem";
  */
 export function ledgerSummary(items: LedgerItem[]): string {
   const codes = items.filter((i) => i.kind === "code" || i.kind === "link").length;
-  const promos = items.filter((i) => i.kind === "promo").length;
 
   const parts = [`${items.length} ${plural(items.length, "item")}`];
   if (codes > 0) parts.push(`${codes} ${plural(codes, "code")}`);
-  if (promos > 0) parts.push(`${promos} ${plural(promos, "promo")}`);
 
   return parts.join(" · ");
 }

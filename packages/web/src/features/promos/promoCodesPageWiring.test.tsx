@@ -16,7 +16,7 @@ import type { Account, PromoListing, SavedPromoMail, SavedPromosPage } from "../
 /**
  * The real api client, put back before the subjects are imported — a bun module
  * mock is process-global, and this suite's claim is that the *real* client
- * builds the URL the server is asked for. See `promoSuggestionsWiring` for why
+ * builds the URL the server is asked for. See `rowPromosWiring` for why
  * the spread matters.
  */
 const realClient = await import("../../api/client.ts?real");

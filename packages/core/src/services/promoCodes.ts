@@ -254,14 +254,6 @@ export const extractPromosForMessagesEffect = (
  * ------------------------------------------------------------------------- */
 
 /**
- * How many cards the section shows before the rest are the Promo Codes page's
- * problem. A heavy newsletter week must not push the inbox off the screen, and
- * a horizontal strip past half a dozen cards is a list nobody scrolls to the
- * end of.
- */
-export const MAX_PROMO_SUGGESTIONS = 6;
-
-/**
  * A suggestion on the wire: the four fields a card shows, the code itself, and
  * the mail it came from — which is what the save (#161) will need to name.
  *
@@ -336,14 +328,18 @@ const distinctByCode = <T extends Pick<StoredPromoCode, "code">>(rows: readonly 
 };
 
 /**
- * What the inbox's suggestions section shows: this account's unsaved detections
- * for the period the list below is showing.
+ * What the inbox's rows show: this account's unsaved detections for the period
+ * the list is showing, each drawn on the row of the mail it came from.
  *
  * Three of the rules are storage's, because they are what the read model is —
  * unsaved only, one account, and the mailbox rule that an unsaved detection
- * whose mail was archived, trashed or removed follows it out. The three here
- * are the section's: an expired promo is not a suggestion, a repeated code is
- * one card, and the section is capped.
+ * whose mail was archived, trashed or removed follows it out. The one here is
+ * the inbox's: an expired promo is not a suggestion.
+ *
+ * Deliberately neither capped nor deduped by code, unlike when these were a
+ * strip of cards above the list. A promo is a fact about the row it sits on, so
+ * a cap would leave some rows silently without theirs, and a shop's reminder
+ * mail is its own row with its own copy of the code.
  *
  * The period is passed down rather than applied to what a caller already
  * loaded: the message list's payload carries no bodies and therefore no promos,
@@ -360,10 +356,7 @@ export const listPromoSuggestionsEffect = (
       internalDateTo: args.internalDateTo ? new Date(args.internalDateTo) : undefined,
     });
 
-    // Dedupe before the cap, so a repeated code cannot spend one of the slots.
-    return distinctByCode(rows.filter((row) => stillValid(row, now)))
-      .slice(0, MAX_PROMO_SUGGESTIONS)
-      .map(suggestion);
+    return rows.filter((row) => stillValid(row, now)).map(suggestion);
   });
 
 // Promise facade for the API/CLI boundary.
@@ -495,20 +488,15 @@ export async function listSavedPromos(args: ListSavedPromosArgs = {}): Promise<S
 /**
  * Every detection nobody has acted on yet — the page's top section (#154).
  *
- * This exists because of the cap above it. The inbox shows
- * {@link MAX_PROMO_SUGGESTIONS} cards so a heavy newsletter week cannot push
- * the message list off the screen, and a cap with nowhere to overflow into is a
- * cap that *loses* offers: the store answers newest mail first, so the seventh
- * distinct code of the week would sit unread until the six above it were saved
- * or lapsed. The page is where the rest are reachable, which is the only reason
- * a second read of the same rows exists.
+ * The inbox shows a detection only on its own mail's row, inside the period
+ * on screen; the page is where every one of them is reachable at once.
  *
- * So it is the same read model as the section's, differing in exactly the two
- * places the page differs from an inbox: **no account**, because the page is
- * global and the mailbox is a column; and **no cap**, because hiding rows here
- * would hide them everywhere. Everything else is shared and deliberately not
- * re-decided — unsaved only, the mailbox rule, unexpired, one card per code,
- * newest mail first.
+ * So it is the same read model as the inbox's, differing where the page differs
+ * from an inbox: **no account** and no period, because the page is global and
+ * the mailbox is a column; and **one row per code**, because a table of offers
+ * lists a shop's three reminder mails as the one offer they are. Everything
+ * else is shared and deliberately not re-decided — unsaved only, the mailbox
+ * rule, unexpired, newest mail first.
  *
  * Not folded into {@link listSavedPromosEffect}: that read answers what a promo
  * *is* once the user has acted, and these have no copy of a mail, no saved

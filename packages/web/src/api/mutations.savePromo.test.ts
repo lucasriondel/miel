@@ -2,7 +2,7 @@
 // cannot reach.
 //
 // The click, the removal and the refusal are exercised as a user meets them in
-// `features/promos/promoSuggestionsWiring.test.tsx`. What is left here is the
+// `features/promos/rowPromosWiring.test.tsx`. What is left here is the
 // answer nobody can produce from the UI: a save that succeeded while the trash
 // did not. The promo is kept — that is the whole point of the ordering — so the
 // mail is still in the inbox, and the row the click removed has to come back.
