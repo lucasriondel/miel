@@ -14,18 +14,6 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const priorityEnum = pgEnum("priority", ["high", "medium", "low"]);
-export const suggestionStatusEnum = pgEnum("suggestion_status", [
-  "pending",
-  "applied",
-  "dismissed",
-]);
-
-export const filterSuggestionStatusEnum = pgEnum("filter_suggestion_status", [
-  "pending",
-  "accepted",
-  "dismissed",
-]);
-
 export const syncWindowStatusEnum = pgEnum("sync_window_status", [
   "running",
   "completed",
@@ -159,33 +147,6 @@ export const triages = pgTable(
   }),
 );
 
-export const triageLabelSuggestions = pgTable(
-  "triage_label_suggestions",
-  {
-    triageId: uuid("triage_id")
-      .notNull()
-      .references(() => triages.id, { onDelete: "cascade" }),
-    labelId: uuid("label_id")
-      .notNull()
-      .references(() => labels.id, { onDelete: "cascade" }),
-    status: suggestionStatusEnum("status").notNull().default("pending"),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.triageId, t.labelId] }),
-  }),
-);
-
-export const suggestedLabels = pgTable("suggested_labels", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  triageId: uuid("triage_id")
-    .notNull()
-    .references(() => triages.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  reasoning: text("reasoning"),
-  status: suggestionStatusEnum("status").notNull().default("pending"),
-  createdLabelId: uuid("created_label_id").references(() => labels.id),
-});
-
 export const gmailFilters = pgTable(
   "gmail_filters",
   {
@@ -203,31 +164,6 @@ export const gmailFilters = pgTable(
       t.accountId,
       t.gmailFilterId,
     ),
-  }),
-);
-
-export const suggestedFilters = pgTable(
-  "suggested_filters",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    accountId: uuid("account_id")
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
-    criteriaFrom: text("criteria_from"),
-    criteriaSubject: text("criteria_subject"),
-    criteriaQuery: text("criteria_query"),
-    addLabelId: uuid("add_label_id").references(() => labels.id, {
-      onDelete: "set null",
-    }),
-    addLabelName: text("add_label_name").notNull(),
-    reasoning: text("reasoning"),
-    status: filterSuggestionStatusEnum("status").notNull().default("pending"),
-    createdGmailFilterId: text("created_gmail_filter_id"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    decidedAt: timestamp("decided_at", { withTimezone: true }),
-  },
-  (t) => ({
-    byAccount: index("suggested_filters_account").on(t.accountId, t.status),
   }),
 );
 
@@ -269,7 +205,6 @@ export const triageRuns = pgTable(
     status: triageRunStatusEnum("status").notNull().default("running"),
     candidates: integer("candidates").notNull().default(0),
     triaged: integer("triaged").notNull().default(0),
-    suggestedNewLabels: integer("suggested_new_labels").notNull().default(0),
     failedBatches: integer("failed_batches").notNull().default(0),
     error: text("error"),
     startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),

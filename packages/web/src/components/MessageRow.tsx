@@ -7,7 +7,6 @@ import { MessageRowAttachmentLine } from "./MessageRowAttachmentLine";
 import { MessageRowEndCell } from "./MessageRowEndCell";
 import { MessageRowLabels } from "./MessageRowLabels";
 import { MessageRowActions } from "./MessageRowActions";
-import { SuggestionPill } from "./SuggestionPill";
 import { rowLabelKey, useRowLabelPicker } from "../features/labels/rowLabelPickerContext";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { useSwipeReveal } from "../hooks/useSwipeReveal";
@@ -29,11 +28,6 @@ interface Props {
  * therefore repaints it and never reflows the line, which is what the
  * one-flex-line version could not promise.
  *
- * The suggestion trigger used to be a third such column, an empty 2.5rem
- * reserved at the row's end on every row that had nothing suggested. It is a
- * constant-width member of the label group now (see `MessageRowLabels`), which
- * keeps that promise without spending the width.
- *
  * The row carries no priority dot: the section it sits under is the priority
  * (req. 1), and the category band inside that section is the Gmail category
  * (req. 3), so neither needs restating per row.
@@ -52,11 +46,6 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
   // labels: the picker offers the account's catalogue and only needs to know
   // which of those entries this message is carrying.
   const appliedLabelIds = message.labels.map((l) => l.id);
-  // The same two conditions `SuggestionPill` returns null on. No triage is no
-  // suggestion to act on: the ids the routes take are that run's.
-  const hasSuggestions =
-    message.triageId !== null &&
-    message.pendingSuggestions.existing.length + message.pendingSuggestions.new.length > 0;
   // The inbox's scope rides along on the URL (#95): it is what the user comes
   // back to, and on a deep link it is all `useReturnToInbox` has to rebuild
   // the inbox from.
@@ -123,31 +112,7 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
             a second time. Two copies would read the subject out twice to a
             screen reader and give the row two nodes to keep in step. */}
         <div className="flex min-w-0 basis-full items-center gap-2 sm:basis-auto sm:flex-1">
-          {/* The trigger leads the label group rather than sitting in a slot of
-              its own: it is a constant 20px whatever Claude said, so it can be
-              a member of that list without any row's subject depending on the
-              model's verbosity.
-
-              Whether there is one is decided here rather than by handing the
-              group an element that may render nothing: `MessageRowLabels` sees a
-              prop, not what it returns, so a `SuggestionPill` that renders null
-              would still count as a member and leave the group drawn — an empty
-              flex child spending the row's `gap-2` in front of every unlabelled
-              subject, which is the gap this design promises not to keep. */}
-          <MessageRowLabels
-            labels={message.labels}
-            suggestion={
-              hasSuggestions ? (
-                <SuggestionPill
-                  accountId={message.accountId}
-                  gmailMessageId={message.gmailMessageId}
-                  triageId={message.triageId}
-                  existingSuggestions={message.pendingSuggestions.existing}
-                  newSuggestions={message.pendingSuggestions.new}
-                />
-              ) : null
-            }
-          />
+          <MessageRowLabels labels={message.labels} />
           <Link to={href} className="min-w-0 flex-1 truncate hover:underline">
             <span
               className={isUnread ? "font-bold text-gousse-ink" : "font-medium text-gousse-ink"}

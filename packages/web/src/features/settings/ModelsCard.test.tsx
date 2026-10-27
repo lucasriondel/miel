@@ -59,8 +59,6 @@ const SETTINGS: ModelSettings = {
   triageProvider: "claude-code",
   replyModel: "claude-sonnet-4-6",
   replyProvider: "claude-code",
-  filterModel: "claude-haiku-4-5",
-  filterProvider: "claude-code",
   "promo-extractModel": "claude-haiku-4-5",
   "promo-extractProvider": "claude-code",
 };

@@ -27,7 +27,6 @@ import {
   type StoredLabel,
   type StoredPromoCode,
   type StoredTriage,
-  type SuggestionStatus,
   type TriageStoreImpl,
 } from "../stores/contracts";
 
@@ -56,21 +55,6 @@ export interface MailboxMessageLabelRow extends MessageRef {
   labelId: string;
 }
 
-export interface MailboxExistingSuggestionRow {
-  triageId: string;
-  labelId: string;
-  status: SuggestionStatus;
-}
-
-export interface MailboxNewSuggestionRow {
-  suggestionId: string;
-  triageId: string;
-  name: string;
-  reasoning: string | null;
-  status: SuggestionStatus;
-  createdLabelId: string | null;
-}
-
 /** Everything a mailbox holds, as the four stores see it. */
 export interface MailboxData {
   accounts: StoredAccount[];
@@ -79,8 +63,6 @@ export interface MailboxData {
   messageLabels: MailboxMessageLabelRow[];
   attachments: StoredAttachment[];
   triages: StoredTriage[];
-  existingSuggestions: MailboxExistingSuggestionRow[];
-  newSuggestions: MailboxNewSuggestionRow[];
   /**
    * The promos extracted from those messages (#157). They live here rather than
    * in a fake of their own because the suggestions read joins the mail: it is
@@ -101,8 +83,6 @@ export interface MailboxWriter {
   label: (seed: LabelSeed) => StoredLabel;
   attachment: (seed: AttachmentSeed) => StoredAttachment;
   triage: (seed: TriageSeed) => StoredTriage;
-  existingSuggestion: (seed: ExistingSuggestionSeed) => MailboxExistingSuggestionRow;
-  newSuggestion: (seed: NewSuggestionSeed) => MailboxNewSuggestionRow;
   messageLabel: (row: MailboxMessageLabelRow) => MailboxMessageLabelRow;
   promo: (seed: PromoSeed) => StoredPromoCode;
 }
@@ -131,8 +111,6 @@ export type AttachmentSeed = Seed<
   "accountId" | "gmailMessageId" | "attachmentId"
 >;
 export type TriageSeed = Seed<StoredTriage, "id" | "accountId" | "gmailMessageId">;
-export type ExistingSuggestionSeed = Seed<MailboxExistingSuggestionRow, "triageId" | "labelId">;
-export type NewSuggestionSeed = Seed<MailboxNewSuggestionRow, "suggestionId" | "triageId" | "name">;
 export type PromoSeed = Seed<StoredPromoCode, "id" | "accountId" | "gmailMessageId" | "discount">;
 
 export interface MailboxSeed {
@@ -142,8 +120,6 @@ export interface MailboxSeed {
   messageLabels?: MailboxMessageLabelRow[];
   attachments?: AttachmentSeed[];
   triages?: TriageSeed[];
-  existingSuggestions?: ExistingSuggestionSeed[];
-  newSuggestions?: NewSuggestionSeed[];
   promos?: PromoSeed[];
 }
 
@@ -198,18 +174,6 @@ const triage = (seed: TriageSeed): StoredTriage => ({
   model: null,
   ...seed,
   createdAt: at(seed.createdAt, EPOCH),
-});
-
-const existingSuggestion = (seed: ExistingSuggestionSeed): MailboxExistingSuggestionRow => ({
-  status: "pending",
-  ...seed,
-});
-
-const newSuggestion = (seed: NewSuggestionSeed): MailboxNewSuggestionRow => ({
-  reasoning: null,
-  status: "pending",
-  createdLabelId: null,
-  ...seed,
 });
 
 /**
@@ -275,8 +239,6 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
     messageLabels: [...(seed?.messageLabels ?? [])],
     attachments: (seed?.attachments ?? []).map(attachment),
     triages: (seed?.triages ?? []).map(triage),
-    existingSuggestions: (seed?.existingSuggestions ?? []).map(existingSuggestion),
-    newSuggestions: (seed?.newSuggestions ?? []).map(newSuggestion),
     promos: (seed?.promos ?? []).map(promo),
     offline: false,
     // Filled in below; the writer and the impls close over `data` so a test can
@@ -294,8 +256,6 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
     label: pushing(() => data.labels, label),
     attachment: pushing(() => data.attachments, attachment),
     triage: pushing(() => data.triages, triage),
-    existingSuggestion: pushing(() => data.existingSuggestions, existingSuggestion),
-    newSuggestion: pushing(() => data.newSuggestions, newSuggestion),
     messageLabel: pushing(
       () => data.messageLabels,
       (row: MailboxMessageLabelRow) => row,
@@ -510,57 +470,6 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
             createdAt: new Date(EPOCH.getTime() + data.triages.length + 1),
           }),
         );
-      }),
-
-    existingSuggestionsFor: (triageIds) =>
-      answer(() =>
-        data.existingSuggestions
-          .filter((s) => triageIds.includes(s.triageId))
-          .flatMap((s) => {
-            const l = data.labels.find((row) => row.id === s.labelId);
-            return l
-              ? [
-                  {
-                    triageId: s.triageId,
-                    labelId: s.labelId,
-                    status: s.status,
-                    name: l.name,
-                    colorBg: l.colorBg,
-                    colorFg: l.colorFg,
-                  },
-                ]
-              : [];
-          }),
-      ),
-
-    newSuggestionsFor: (triageIds) =>
-      answer(() => data.newSuggestions.filter((s) => triageIds.includes(s.triageId))),
-
-    markExistingApplied: ({ triageId, labelIds }) =>
-      answer(() => {
-        for (const s of data.existingSuggestions) {
-          if (s.triageId === triageId && labelIds.includes(s.labelId)) s.status = "applied";
-        }
-      }),
-
-    markNewApplied: ({ suggestionId, createdLabelId }) =>
-      answer(() => {
-        for (const s of data.newSuggestions) {
-          if (s.suggestionId === suggestionId) {
-            s.status = "applied";
-            s.createdLabelId = createdLabelId;
-          }
-        }
-      }),
-
-    dismissPending: ({ triageId }) =>
-      answer(() => {
-        for (const s of data.existingSuggestions) {
-          if (s.triageId === triageId && s.status === "pending") s.status = "dismissed";
-        }
-        for (const s of data.newSuggestions) {
-          if (s.triageId === triageId && s.status === "pending") s.status = "dismissed";
-        }
       }),
   };
 

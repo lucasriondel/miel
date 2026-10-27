@@ -22,8 +22,7 @@ interface Props {
  * popover wraps its trigger and the panel is absolutely positioned inside that
  * wrapper, which is exactly what a list cannot do — the wrapper would be per
  * row. So the panel is portalled to the body and fixed-positioned against
- * whichever trigger asked, the way `FilterSimilarPopover` escapes the same
- * clipping, and `useAnchoredPosition` keeps it there through a scroll and off
+ * whichever trigger asked, and `useAnchoredPosition` keeps it there through a scroll and off
  * the viewport's edges on a narrow screen. What is inside it is
  * `LabelPickerMenu` — the same filter field, the same list, the same four
  * answers — so the row's picker and the other two are one picker.
@@ -61,7 +60,7 @@ export const RowLabelPickerPanel = ({ accountId, anchor, applied, onPick, onClos
   }, [anchor, onClose]);
 
   // One frame with no position rather than one in the wrong place: the panel is
-  // measured and clamped before it paints, as `FilterSimilarPopover` is.
+  // measured and clamped before it paints.
   if (!pos) return null;
 
   return createPortal(

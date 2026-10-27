@@ -95,7 +95,7 @@ describe("the feature list", () => {
     ["the week/month/year pager", /week, a month or a year/i],
     ["several accounts", /accounts/i],
     ["priority triage", /high, medium or low/i],
-    ["label and filter suggestions", /filters/i],
+    ["Gmail filter management", /filters/i],
     ["promo codes", /discount codes/i],
     ["verification codes", /verification codes/i],
     ["drafted replies", /drafts an answer/i],

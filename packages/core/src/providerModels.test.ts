@@ -94,7 +94,7 @@ describe("DEFAULT_PROVIDER", () => {
 // provider runs which task" pair come from.
 describe("MODEL_TASKS", () => {
   test("names the tasks that each carry their own provider and model", () => {
-    expect(MODEL_TASKS).toEqual(["triage", "reply", "filter", "promo-extract"]);
+    expect(MODEL_TASKS).toEqual(["triage", "reply", "promo-extract"]);
   });
 
   test("each task is a key prefix the settings service can build a pair from", () => {

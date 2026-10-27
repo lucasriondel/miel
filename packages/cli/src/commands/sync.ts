@@ -23,7 +23,7 @@ export function syncCommand(): Command {
       console.log("Summary:");
       for (const r of results) {
         console.log(
-          `  ${r.account}\tfetched=${r.fetched}\ttriaged=${r.triaged}\tnewLabelSuggestions=${r.suggestedNewLabels}\tfilters=${r.filtersSynced}\tnewFilterSuggestions=${r.suggestedFilters}\terrors=${r.errors.length}`,
+          `  ${r.account}\tfetched=${r.fetched}\ttriaged=${r.triaged}\tfilters=${r.filtersSynced}\terrors=${r.errors.length}`,
         );
         for (const e of r.errors) {
           console.log(`    ! ${e}`);

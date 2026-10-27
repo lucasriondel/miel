@@ -19,7 +19,6 @@ export * as gmailSchemas from "./schemas/gmail";
 export * as triageSchemas from "./schemas/triage";
 export * as replySchemas from "./schemas/reply";
 export * as apiSchemas from "./schemas/api";
-export * as filterSuggestSchemas from "./schemas/filterSuggest";
 export * as promoSchemas from "./schemas/promo";
 export * as syncEventSchemas from "./schemas/syncEvents";
 
@@ -182,20 +181,8 @@ export {
   listAllFilters,
   deleteFilterForAccount,
   mergeFiltersForAccount,
-  listSuggestedFilters,
-  suggestFiltersForBatch,
-  suggestFilterForMessage,
-  acceptSuggestedFilter,
-  dismissSuggestedFilter,
 } from "./services/filters";
-export type {
-  GmailFilterRow,
-  MergeFiltersResult,
-  FilterDeletionFailure,
-  SuggestedFilterRow,
-  SuggestedFilterWithAccount,
-  SuggestFilterForMessageResult,
-} from "./services/filters";
+export type { GmailFilterRow, MergeFiltersResult, FilterDeletionFailure } from "./services/filters";
 export { fetchAndTriage, syncAll, triageUntriagedForAccount } from "./services/sync";
 export type {
   SyncRunResult,
@@ -206,22 +193,16 @@ export type {
 } from "./services/sync";
 export {
   applyLabels,
-  applySuggestions,
-  dismissSuggestions,
   archiveMessage,
   trashMessage,
   setMessageRead,
   batchModifyMessages,
-  getLatestTriageForMessage,
 } from "./services/apply";
 export type {
   ApplyLabelsResult,
-  ApplySuggestionsInput,
-  ApplySuggestionsResult,
   BatchMessageAction,
   BatchMessageActionInput,
   BatchModifyMessagesResult,
-  LatestTriageForMessage,
 } from "./services/apply";
 export {
   listMessages,
@@ -371,21 +352,13 @@ export {
   listAllFiltersEffect,
   deleteFilterForAccountEffect,
   mergeFiltersForAccountEffect,
-  listSuggestedFiltersEffect,
-  suggestFiltersForBatchEffect,
-  suggestFilterForMessageEffect,
-  acceptSuggestedFilterEffect,
-  dismissSuggestedFilterEffect,
 } from "./services/filters";
 export {
   applyLabelsEffect,
-  applySuggestionsEffect,
-  dismissSuggestionsEffect,
   archiveMessageEffect,
   trashMessageEffect,
   setMessageReadEffect,
   batchModifyMessagesEffect,
-  getLatestTriageForMessageEffect,
 } from "./services/apply";
 export {
   listMessagesEffect,

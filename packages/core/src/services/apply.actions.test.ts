@@ -12,7 +12,6 @@ import { makeTestStores, type TestStores } from "../testkit/stores";
 import {
   archiveMessageEffect,
   batchModifyMessagesEffect,
-  getLatestTriageForMessageEffect,
   setMessageReadEffect,
   trashMessageEffect,
 } from "./apply";
@@ -381,56 +380,6 @@ describe("batchModifyMessagesEffect", () => {
 
       expect(result).toEqual({ ok: true, action: "label", count: 0 });
       expect(gmail.modifications).toEqual([]);
-    });
-  });
-});
-
-describe("getLatestTriageForMessageEffect", () => {
-  test("answers null for a message that has never been triaged", async () => {
-    expect(
-      await stores.run(
-        getLatestTriageForMessageEffect({ accountId: ACCOUNT, gmailMessageId: "m1" }),
-      ),
-    ).toBeNull();
-  });
-
-  test("answers the newest triage with its suggestions, whatever their status", async () => {
-    stores.mailbox.add.label({ id: "label-work", accountId: ACCOUNT, name: "Work" });
-    stores.mailbox.add.triage({
-      id: "t-old",
-      accountId: ACCOUNT,
-      gmailMessageId: "m1",
-      priority: "low",
-      createdAt: "2026-03-01T10:00:00.000Z",
-    });
-    stores.mailbox.add.triage({
-      id: "t-new",
-      accountId: ACCOUNT,
-      gmailMessageId: "m1",
-      priority: "high",
-      createdAt: "2026-03-01T11:00:00.000Z",
-    });
-    stores.mailbox.add.existingSuggestion({
-      triageId: "t-new",
-      labelId: "label-work",
-      status: "applied",
-    });
-    stores.mailbox.add.existingSuggestion({ triageId: "t-old", labelId: "label-work" });
-    stores.mailbox.add.newSuggestion({
-      suggestionId: "s1",
-      triageId: "t-new",
-      name: "Receipts",
-    });
-
-    const latest = await stores.run(
-      getLatestTriageForMessageEffect({ accountId: ACCOUNT, gmailMessageId: "m1" }),
-    );
-
-    expect(latest).toEqual({
-      triageId: "t-new",
-      priority: "high",
-      existingLabelSuggestions: [{ labelId: "label-work", name: "Work", status: "applied" }],
-      newLabelSuggestions: [{ suggestionId: "s1", name: "Receipts", status: "pending" }],
     });
   });
 });

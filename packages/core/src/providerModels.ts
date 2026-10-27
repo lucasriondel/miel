@@ -33,7 +33,7 @@ export const PROVIDERS = [CLAUDE_CODE_PROVIDER, ...CREDENTIAL_PROVIDERS] as cons
 export type Provider = (typeof PROVIDERS)[number];
 
 /**
- * What a fresh install triages, replies and suggests filters with before anyone
+ * What a fresh install triages, replies and extracts promos with before anyone
  * opens Settings — `SETTING_DEFAULTS` is built from this, and so is the
  * fallback for a stored provider that cannot be read.
  *
@@ -78,7 +78,7 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
  * (`promo-extract`, #156) rather than gaining a case or a separator those two
  * spellings cannot carry.
  */
-export const MODEL_TASKS = ["triage", "reply", "filter", "promo-extract"] as const;
+export const MODEL_TASKS = ["triage", "reply", "promo-extract"] as const;
 export type ModelTask = (typeof MODEL_TASKS)[number];
 
 export interface ProviderModel {

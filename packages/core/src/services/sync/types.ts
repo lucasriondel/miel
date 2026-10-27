@@ -9,9 +9,7 @@ export interface SyncRunResult {
   account: string;
   fetched: number;
   triaged: number;
-  suggestedNewLabels: number;
   filtersSynced: number;
-  suggestedFilters: number;
   errors: string[];
 }
 
@@ -77,6 +75,5 @@ export interface TriageUntriagedResult {
   account: string;
   candidates: number;
   triaged: number;
-  suggestedNewLabels: number;
   errors: string[];
 }

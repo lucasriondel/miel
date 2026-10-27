@@ -17,7 +17,6 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Effect, Exit } from "effect";
 import { ClaudeCodeTest, type SpawnInput } from "claude-code-effect";
 import { defaultModelFor, MODEL_TASKS, type ModelTask, type Provider } from "../providerModels";
-import type { FilterSuggestInputT } from "../schemas/filterSuggest";
 import type { PromoExtractInputT } from "../schemas/promo";
 import type { ReplyGenInputT } from "../schemas/reply";
 import type { TriageInputT } from "../schemas/triage";
@@ -155,7 +154,6 @@ const run = <A, E>(eff: Effect.Effect<A, E, ClaudeTag | Stores>) =>
 const TRIAGE_INPUT: TriageInputT = {
   account: "a@b.c",
   accountId: "acc1",
-  existingLabels: [],
   messages: [],
 };
 
@@ -165,13 +163,6 @@ const REPLY_INPUT: ReplyGenInputT = {
   subject: "Invoice",
   body: "the body",
   userInstruction: "say thanks",
-};
-
-const FILTER_INPUT: FilterSuggestInputT = {
-  account: "a@b.c",
-  existingLabels: [],
-  existingFilters: [],
-  messages: [],
 };
 
 const PROMO_INPUT: PromoExtractInputT = {
@@ -185,7 +176,6 @@ const PROMO_INPUT: PromoExtractInputT = {
 const INPUTS = {
   triage: TRIAGE_INPUT,
   reply: REPLY_INPUT,
-  filter: FILTER_INPUT,
   "promo-extract": PROMO_INPUT,
 } as const;
 
@@ -193,7 +183,6 @@ const INPUTS = {
 const OUTPUTS = {
   triage: { results: [] },
   reply: { subject: "Re: Invoice", body: "thanks" },
-  filter: { suggestions: [] },
   "promo-extract": {
     promos: [
       {
@@ -371,11 +360,10 @@ describe("Claude.run over the task table (#128)", () => {
   });
 
   // The tools are the task's, from its row — triage has the body-fetch escape
-  // hatch and the other two have nothing to reach for.
+  // hatch and the others have nothing to reach for.
   test.each([
     ["triage", true],
     ["reply", false],
-    ["filter", false],
     ["promo-extract", false],
   ] as const)("%s passes --allowedTools only when its row lists one", async (task, hasTools) => {
     spawnResult = {

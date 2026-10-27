@@ -2,7 +2,6 @@
 import { Command } from "commander";
 import { closeDb } from "@miel/core";
 import { accountsCommand } from "./commands/accounts";
-import { applyCommand } from "./commands/apply";
 import { dbCommand } from "./commands/db";
 import { replyCommand } from "./commands/reply";
 import { syncCommand } from "./commands/sync";
@@ -12,7 +11,6 @@ program.name("miel").description("Miel — Gmail triage CLI").version("0.0.0").s
 
 program.addCommand(syncCommand());
 program.addCommand(accountsCommand());
-program.addCommand(applyCommand());
 program.addCommand(replyCommand());
 program.addCommand(dbCommand());
 

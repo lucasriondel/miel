@@ -10,9 +10,8 @@ interface Props {
  * Narrows the label picker as you type (#169). Purely client-side — the
  * account's labels are already loaded — so there is nothing to debounce.
  *
- * It takes the caret when the panel opens, the way `FilterSimilarPopover`'s box
- * does: the panel is only ever there because someone just clicked the trigger,
- * so the focus move is the one they asked for, and it is what makes the field
+ * It takes the caret when the panel opens: the panel is only ever there because
+ * someone just clicked the trigger, so the focus move is the one they asked for, and it is what makes the field
  * reachable without a Tab through the trigger it hangs off.
  *
  * Escape is deliberately left alone. The popover closes on it — that is

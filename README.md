@@ -4,26 +4,26 @@
 
 <h1 align="center">miel</h1>
 
-Self-hosted Gmail triage. Fetches your mail through the Gmail API, asks an AI to rank it by priority and suggest labels, and shows the results in a local web UI where you review, apply, and reply.
+Self-hosted Gmail triage. Fetches your mail through the Gmail API, asks an AI to rank it by priority, and shows the results in a local web UI where you review, label, and reply.
 
 Everything runs on your machine: your own Google OAuth client, your own AI provider credential, your own Postgres. The only thing that leaves your machine is what goes to the AI provider you picked — see [What the AI sees](#what-the-ai-sees).
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/miel-dark.webp">
-    <img src="docs/miel-light.webp" alt="miel triaging a week of mail into priority buckets, with a filter suggested by the AI at the top" width="100%">
+    <img src="docs/miel-light.webp" alt="miel triaging a week of mail into priority buckets" width="100%">
   </picture>
 </p>
 
 ## What it does
 
 - **Sync** — pulls recent messages for one or more connected Gmail accounts.
-- **Triage** — the AI assigns a priority and suggests labels (existing ones, plus new ones worth creating). Suggestions are proposals; nothing touches Gmail until you apply it.
+- **Triage** — the AI assigns a priority with its reasoning. A priority is a proposal; nothing touches Gmail until you act.
 - **Apply** — add/remove labels, archive, trash, create labels, all in batch from the UI.
 - **Reply** — draft a reply with the AI, edit it, send it.
 - **Filters** — browse your Gmail filters, and merge several into one.
 
-A CLI (`@miel/cli`) covers the same sync/apply/reply flows headlessly.
+A CLI (`@miel/cli`) covers the same sync/reply flows headlessly.
 
 ## Stack
 
@@ -120,7 +120,7 @@ Your OAuth client starts in *Testing* mode, so add your own address as a test us
 
 Triage sends only sender, subject, snippet, and label names — never the body. Through the Claude Code CLI the model can additionally fetch one message's body from the local API when the snippet is not enough to decide; a hosted provider has no tool to do that and is never sent one.
 
-Two kinds of request carry a whole message body, each truncated to 8000 characters: **drafting a reply**, which sends the body of the message being answered, and **extracting discount codes from promotional mail**, which runs during a sync and sends the message's visible text with its HTML markup stripped — and only for mail a local, content-only check judged promotional first. Filter suggestions send sender, subject and snippet only. The batch size, the truncation and the list of body-bearing tasks live in `packages/core/src/claudeUsage.ts`, which the landing page and the privacy policy publish from.
+Two kinds of request carry a whole message body, each truncated to 8000 characters: **drafting a reply**, which sends the body of the message being answered, and **extracting discount codes from promotional mail**, which runs during a sync and sends the message's visible text with its HTML markup stripped — and only for mail a local, content-only check judged promotional first. The batch size, the truncation and the list of body-bearing tasks live in `packages/core/src/claudeUsage.ts`, which the landing page and the privacy policy publish from.
 
 Every AI task has a row of its own in *Settings → AI & Triage*, and each runs through the provider you pick there: the local Claude Code CLI, or Anthropic, Google or OpenAI over their API with a key you paste in the same panel (stored encrypted, never an env var). A task you never touch runs on the shipped default.
 

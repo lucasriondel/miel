@@ -31,7 +31,6 @@ const triageEntry = (overrides: Partial<TriageLogEntry> = {}): TriageLogEntry =>
   error: null,
   candidates: 10,
   triaged: 9,
-  suggestedNewLabels: 2,
   failedBatches: 1,
   syncWindowId: null,
   ...overrides,

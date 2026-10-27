@@ -34,21 +34,17 @@ const vendorNames = CREDENTIAL_PROVIDERS.map((p) => PROVIDER_LABELS[p])
  * promo extraction was the one task nobody could point anywhere — it ran on the
  * shipped default on every sync, and an install running everything else on a
  * vendor had no credential for it. `satisfies Record<ModelTask, …>` is what
- * makes the fourth row mandatory rather than aspirational, the way the task
- * table in core does it: a fifth task stops this file compiling until it is
- * named here too.
+ * makes every row mandatory rather than aspirational, the way the task table
+ * in core does it: a new task stops this file compiling until it is named here
+ * too.
  *
  * The copy is what a picker is worth — a title alone leaves a reader guessing
- * what "Filter" spends money on — so each row says when its task runs.
+ * what "Promo codes" spends money on — so each row says when its task runs.
  */
 export const MODEL_ROWS = {
   triage: {
     title: "Triage",
-    description: "Classifies priority and suggests labels in each sync batch.",
-  },
-  filter: {
-    title: "Filter",
-    description: "Proposes Gmail filters from each synced batch.",
+    description: "Classifies priority in each sync batch.",
   },
   reply: {
     title: "Reply",

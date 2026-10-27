@@ -51,11 +51,9 @@ export const FiltersPage = () => {
 
   const account = accounts.data?.find((a) => a.id === selectedAccountId);
   const filterList = filters.data?.filters ?? [];
-  const suggestionList = filters.data?.suggestions ?? [];
   const labelList = labels.data ?? [];
 
   const totalFilters = filterList.length;
-  const totalSuggestions = suggestionList.length;
 
   return (
     <>
@@ -63,12 +61,10 @@ export const FiltersPage = () => {
       <div className="flex flex-1 flex-col gap-6">
         <div className="flex flex-col gap-1">
           <p className="max-w-prose text-sm text-pretty text-gousse-muted">
-            Gmail filters synced from this account. AI proposes new filters based on patterns it
-            sees during sync — review and create them in one click.
+            Gmail filters synced from this account.
           </p>
           <p className="text-xs tabular-nums text-gousse-muted">
             {totalFilters} filter{totalFilters === 1 ? "" : "s"}
-            {totalSuggestions > 0 ? ` · ${totalSuggestions} proposed` : ""}
           </p>
         </div>
 
@@ -84,7 +80,6 @@ export const FiltersPage = () => {
             key={account.id}
             account={account}
             filters={filterList}
-            suggestions={suggestionList}
             labels={labelList}
           />
         )}

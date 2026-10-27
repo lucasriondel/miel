@@ -9,14 +9,9 @@ const item = (kind: LedgerItem["kind"], id: string): LedgerItem =>
 
 describe("how the ledger counts itself", () => {
   test("the total, then a breakdown by kind", () => {
-    expect(
-      ledgerSummary([
-        item("filter", "f1"),
-        item("code", "c1"),
-        item("code", "c2"),
-        item("promo", "p1"),
-      ]),
-    ).toBe("4 items · 1 filter · 2 codes · 1 promo");
+    expect(ledgerSummary([item("code", "c1"), item("code", "c2"), item("promo", "p1")])).toBe(
+      "3 items · 2 codes · 1 promo",
+    );
   });
 
   // A ledger holding one kind says so in three words rather than naming two

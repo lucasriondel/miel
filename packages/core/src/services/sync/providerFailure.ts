@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { isProviderUnavailable, type ProviderUnavailableError } from "../../errors";
 
 /**
- * The catch both of sync's AI call sites share (#126).
+ * The catch sync's AI call sites share (#126).
  *
  * A provider that cannot run is not this batch's failure — it is the install's,
  * and every remaining batch and account would fail the same way — so it
@@ -11,9 +11,9 @@ import { isProviderUnavailable, type ProviderUnavailableError } from "../../erro
  * is handed to `recover` with its message, and the run continues.
  *
  * Which failures are in the first class is {@link isProviderUnavailable}'s
- * answer, not this module's: triage and filter-suggest each used to carry their
- * own copy of the tag list, and only one of the two would have been updated when
- * a third tag arrived.
+ * answer, not this module's: each call site used to carry its own copy of the
+ * tag list, and only one of them would have been updated when a third tag
+ * arrived.
  */
 export const recoverUnlessProviderUnavailable =
   <A, R = never>(recover: (message: string) => Effect.Effect<A, never, R>) =>

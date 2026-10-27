@@ -26,8 +26,8 @@ export const ConnectStep = ({ titleId, descriptionId, errorId, error, onRetry }:
       Connect a Gmail account
     </h1>
     <p id={descriptionId} className="mt-2 text-sm font-medium leading-relaxed text-gousse-muted">
-      miel reads your mail, triages it with AI and suggests labels — all of which needs a mailbox to
-      work on. Connect a Google account to get started.
+      miel reads your mail and triages it with AI — all of which needs a mailbox to work on. Connect
+      a Google account to get started.
     </p>
     {error ? <ConnectFailureNotice id={errorId} message={error} /> : null}
     <div className="mt-6">

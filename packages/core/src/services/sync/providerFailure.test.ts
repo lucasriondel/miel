@@ -1,7 +1,7 @@
-// The catch triage and filter-suggest share (#126).
+// The catch sync's AI call sites share (#126).
 //
-// Both used to carry their own copy of "which failures stop the sync", and both
-// copies listed the two Claude tags only — so filter-suggest, like triage,
+// Each used to carry its own copy of "which failures stop the sync", and those
+// copies listed the two Claude tags only — so a call site, like triage,
 // swallowed a keyless hosted vendor as one more non-fatal batch error. There is
 // one catch now, and this is what it decides: propagate, or hand the message to
 // the caller's recovery and let the run continue.
@@ -19,14 +19,14 @@ import {
   ProviderNotRunnableError,
 } from "../../errors";
 
-// The shape filter-suggest uses: the message becomes one entry in the run's
-// error list, and the run reports zero suggestions rather than failing.
+// The shape a triage batch uses: the message becomes one entry in the run's
+// error list, and the batch reports nothing persisted rather than failing.
 const recovered = (err: unknown) =>
   Effect.runPromise(
     Effect.fail(err).pipe(
       Effect.catchAll(
         recoverUnlessProviderUnavailable((message) =>
-          Effect.succeed({ suggestedFilters: 0, errors: [`filterSuggest: ${message}`] }),
+          Effect.succeed({ persisted: 0, errors: [`triage: ${message}`] }),
         ),
       ),
       Effect.either,
@@ -41,7 +41,7 @@ describe("recoverUnlessProviderUnavailable", () => {
       new ClaudeTokenMissingError(),
       new ClaudeAuthError({ detail: "invalid token" }),
       new ProviderNotRunnableError({
-        task: "filter",
+        task: "promo-extract",
         provider: "openai",
         reason: "missing_provider_credential",
         phase: "run",
@@ -59,7 +59,7 @@ describe("recoverUnlessProviderUnavailable", () => {
     // batch's problem, not the install's, so the sync carries on.
     const result = await recovered(new HostedApiError({ detail: "429 rate limited" }));
 
-    expect(result).toEqual(Either.right({ suggestedFilters: 0, errors: ["filterSuggest: "] }));
+    expect(result).toEqual(Either.right({ persisted: 0, errors: ["triage: "] }));
   });
 
   test("recovers from anything else, with the failure's message", async () => {
@@ -67,8 +67,8 @@ describe("recoverUnlessProviderUnavailable", () => {
 
     expect(result).toEqual(
       Either.right({
-        suggestedFilters: 0,
-        errors: ["filterSuggest: model returned nonsense"],
+        persisted: 0,
+        errors: ["triage: model returned nonsense"],
       }),
     );
   });

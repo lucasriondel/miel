@@ -80,9 +80,7 @@ export const fetchAndTriageEffect = (
         account: fetch.account.email,
         fetched: fetch.normalized.length,
         triaged: 0,
-        suggestedNewLabels: 0,
         filtersSynced: fetch.filtersSynced,
-        suggestedFilters: 0,
         errors,
       };
     }
@@ -99,7 +97,6 @@ export const fetchAndTriageEffect = (
       accountEmail: fetch.account.email,
       normalized: fetch.normalized,
       labelsByGmailId: fetch.labelsByGmailId,
-      labelsByName: fetch.labelsByName,
       log,
       emit,
     }).pipe(Effect.either);
@@ -111,7 +108,6 @@ export const fetchAndTriageEffect = (
         triageRunId,
         status: "failed",
         triaged: 0,
-        suggestedNewLabels: 0,
         failedBatches: 0,
         errors: [message],
       });
@@ -125,7 +121,6 @@ export const fetchAndTriageEffect = (
       triageRunId,
       status: triageRunStatusFor(triage),
       triaged: triage.triaged,
-      suggestedNewLabels: triage.suggestedNewLabels,
       failedBatches: triage.failedBatches,
       errors: triage.errors,
     });
@@ -137,9 +132,7 @@ export const fetchAndTriageEffect = (
       account: fetch.account.email,
       fetched: fetch.normalized.length,
       triaged: triage.triaged,
-      suggestedNewLabels: triage.suggestedNewLabels,
       filtersSynced: fetch.filtersSynced,
-      suggestedFilters: triage.suggestedFilters,
       errors,
     };
   });

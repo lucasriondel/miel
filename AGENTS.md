@@ -1,6 +1,6 @@
 # Miel
 
-Gmail triage tool. Fetches messages via the Google Gmail REST API (`googleapis`), classifies them with Claude (priority + label suggestions), and surfaces them in a local web UI for review/apply/reply.
+Gmail triage tool. Fetches messages via the Google Gmail REST API (`googleapis`), classifies them with Claude (priority), and surfaces them in a local web UI for review/apply/reply.
 
 ## Stack
 
@@ -66,7 +66,6 @@ CLI examples:
 cd packages/cli
 bun run src/index.ts accounts list          # list connected accounts in the db
 bun run src/index.ts sync --since 7d        # fetch + triage
-bun run src/index.ts apply <messageId> ...  # apply suggestions
 ```
 
 ## Environment
@@ -103,8 +102,6 @@ than editing source (#99).
 - `messages` — fetched Gmail messages (PK: `accountId + gmailMessageId`). Bodies stored as text + html.
 - `message_labels` — join.
 - `triages` — one row per Claude triage run per message (priority + reasoning + model/runId).
-- `triage_label_suggestions` — existing labels Claude suggests (status: pending/applied/dismissed).
-- `suggested_labels` — *new* labels Claude proposes that don't exist yet.
 - `promo_codes` — one discount code extracted from a marketing mail, keyed back to it. Two states on one row: suggested (the extraction wrote it) and saved (`saved_at`, the user acted) — the save also writes the six denormalised copies of the mail (subject, sender name/address, `internal_date`, HTML and stripped text), which is what makes a saved promo outlive the Gmail original it trashes. `expires_at` is stored at end-of-day UTC and treated as a date (`promoExpiry.ts`), never an instant.
 - `app_settings` — KV for model picks etc. (see `services/settings.ts`).
 - `encrypted_secrets` — every secret that is not a Gmail refresh token, one row per secret, value AES-256-GCM ciphertext: an LLM vendor's API key (named for the vendor), worp's key and proxy headers, and the Claude Code token (dotted names). See below.
@@ -133,21 +130,30 @@ database.
 
 ## Providers
 
-Each AI task — triage, reply, filter-suggest, and since #156 `promo-extract` —
+Each AI task — triage, reply and, since #156, `promo-extract` —
 runs through a provider of its own: `claude-code` (the local `claude` subprocess) or
 one of the hosted vendors — `anthropic`, `google`, `openai` — over HTTP through
 the Vercel ai-sdk (#105). The catalogue is `packages/core/src/providerModels.ts`,
 a leaf module: which providers exist, each one's curated model list, its
 default, and `MODEL_TASKS`. The API validates a save against it and the web
 pickers are built from it, so there is one list rather than three — and since
-#154 that is true of all four tasks rather than a claim the card and the wire
-schema each undercut by naming three by hand. Both doors now derive the list:
+#154 that is true of every task rather than a claim the card and the wire
+schema each undercut by naming some by hand. Both doors now derive the list:
 `UpdateSettingsRequest`'s shape and `ModelsCard`'s `MODEL_ROWS` table each carry
 a `satisfies` over a record keyed by `ModelTask` — zod needs the field pairs
-spelled out to infer them, so the guard is a type rather than a loop. A fifth
+spelled out to infer them, so the guard is a type rather than a loop. A new
 task stops both files compiling until it is named. Note the spelling the hyphen forces:
 `promo-extract.provider` as a settings key, `"promo-extractProvider"` on
 `ModelSettings` and on the patch, quoted wherever it appears.
+
+There used to be a fourth task, `filter` — AI-proposed Gmail filters, from each
+synced batch and from a message's "Filter similar" button — and triage used to
+propose labels (existing ones to apply, new ones to create). Both are gone:
+triage answers a priority and its reasoning and nothing else, and migration
+`0013` dropped `suggested_filters`, `suggested_labels`,
+`triage_label_suggestions`, `triage_runs.suggested_new_labels` and the stored
+`filter.*` settings. The Filters page still lists, deletes and merges the
+account's real Gmail filters.
 
 Why that mattered rather than being tidy: `promo-extract` had no picker and no
 schema field while running on every sync (#159), so a patch naming it was
@@ -158,7 +164,7 @@ sync.
 
 `DEFAULT_PROVIDER` in that module is `claude-code`, and `SETTING_DEFAULTS` is
 built from it, so a fresh install with no settings row triages, replies and
-suggests filters through the local CLI before anyone opens Settings (#112). Two
+extracts promos through the local CLI before anyone opens Settings (#112). Two
 consequences the docs have to keep saying: a Claude Code token is required
 unless the operator switches provider first, and it has to be pasted in Settings
 because there is no env var that supplies one; and no copy may claim an install
@@ -241,7 +247,7 @@ and no module mocks.
 
 That service is also the only place a fake goes in (#133). `Claude`, the Effect
 tag in `claude/Claude.ts`, is the single injection seam: triage, reply and
-filter-suggest all `yield* Claude`, the boundaries provide `ClaudeLive`, and a
+promo extraction all `yield* Claude`, the boundaries provide `ClaudeLive`, and a
 suite provides a `ClaudeImpl` through `Layer.succeed(Claude, …)` —
 `testkit/claude.ts` is the one fake, and no test mocks the module. There used to
 be two seams with a pure pass-through between them: sync owned a `ClaudeService`
@@ -412,7 +418,7 @@ The rules the shape is load-bearing for:
 - **Two classes of failure, and only one is ours.** A malformed answer on one
   mail is logged and skipped, so a sync that triaged fine is not lost to it; a
   provider that cannot run propagates through the same
-  `sync/providerFailure.ts` combinator triage and filter-suggest use, and
+  `sync/providerFailure.ts` combinator triage uses, and
   `syncAll` stops the run and emits `sync.provider_unavailable` as it already
   does. A third AI call site with its own catch is the drift #126 fixed. Note
   what that costs: an extraction whose provider cannot run loses the sync even
@@ -474,8 +480,8 @@ three ways, each of which is the point rather than an inconsistency:
   cannot run surfaces as the same `ProviderUnavailableError` every other call
   site raises and the middleware maps it to the usual 503.
 
-The route is a sibling of `filter-suggest` rather than a `/promo-codes` route,
-and the path states why: it acts on a *message*, which is what it is given and
+The route is a message route rather than a `/promo-codes` route, and the path
+states why: it acts on a *message*, which is what it is given and
 what it reads, while `/promo-codes/:id` names a promo — and before this runs
 there may be no promo to name. It takes no body; the task has no steer.
 
@@ -933,8 +939,7 @@ serve. Those fakes asserted query shapes rather than behaviour and, being
 process-global, decided what `db/client` meant for every file loaded after them.
 
 What stays in the services is the part worth testing: the cursor's encoding,
-which suggestions still count as pending, that a label id from another account
-names nothing, and that Gmail is told before anything is written locally — so a
+that a label id from another account names nothing, and that Gmail is told before anything is written locally — so a
 modification Gmail refuses leaves the mailbox and the database agreeing.
 
 The seam is drawn at the ciphertext, not at the row: `encrypt`/`decrypt` stay in
@@ -1054,8 +1059,7 @@ of that: a mutation declares `optimistic` for the `["messages"]` lists and
 `optimisticDetail` for the `["message", …]` query behind the open page, and the
 factory cancels, snapshots, writes and rolls back each of them. The detail is a
 plan of its own rather than the list's applied twice, because it spells the same
-facts differently — a priority lives on the newest triage run, a suggestion is a
-`status` on that run — while the field the two share, `labels`, is edited by
+facts differently — a priority lives on the newest triage run — while the field the two share, `labels`, is edited by
 helpers generic over the carrier so the pair cannot drift. Nothing is invented
 for a message nobody opened: `optimisticDetail` only ever rewrites a detail
 already cached.
@@ -1087,9 +1091,8 @@ opening an unread message leaves no "Mark as read" to click.
 ## Labelling the message you are reading
 
 The last gap in that set (#167). A label could be taken off one message (the ✕
-on its badge), put on many at once (the bulk bar, in select mode) or accepted
-from a triage suggestion — so a message with no run, or one whose suggestions
-were all settled, could not be labelled without going back to the list and
+on its badge) or put on many at once (the bulk bar, in select mode), so a
+single message could not be labelled without going back to the list and
 selecting it. `features/message-detail/AddLabelButton.tsx` is the trigger,
 `useAddMessageLabel` the mutation, and there is no new endpoint, service or
 schema: `POST /messages/:accountId/:gmailMessageId/labels` has always taken both
@@ -1189,8 +1192,7 @@ There is no new endpoint, service or mutation: it is `useAddMessageLabel`
   the element to hang the panel off. Fifty rows would otherwise be fifty
   popovers, fifty outside-click listeners and fifty readers of the same account's
   labels.
-- **So the panel is portalled and anchored**, the way `FilterSimilarPopover` is,
-  rather than absolutely positioned inside a per-row wrapper the way
+- **So the panel is portalled and anchored** rather than absolutely positioned inside a per-row wrapper the way
   `LabelPicker`'s is — a wrapper is exactly the thing a list cannot have. It is
   keyed by the row, so each open starts from a fresh position and an unfiltered
   list.
@@ -1245,7 +1247,7 @@ The files that arrived with a message sit *under* it (#143), not in its header.
 `features/message-detail/MessageAttachmentsSection.tsx` is the section — a
 heading and one full-width `AttachmentRow` per file on the shared detail card —
 and it renders nothing at all when there are none. The header's badge row is
-labels and label suggestions only now, and the condition that decides whether it
+labels only now, and the condition that decides whether it
 is drawn had to lose its attachment clause with them: it asks the same question
 its children do, so a message whose only "badge" was a file would otherwise have
 left an empty flex row spending the header's gap.
@@ -1386,9 +1388,8 @@ last.
 - `bun run format` / `bun run format:check` — turbo runs oxfmt across packages (write / verify).
 - `bun run lint` — turbo runs oxlint across packages. This plus `format:check`, `typecheck` and `test` is exactly what CI gates a PR on.
 - `packages/api/scripts/smoke-api.ts`, `packages/cli/scripts/smoke-cli.ts` — quick end-to-end smoke tests.
-- `packages/cli/scripts/seed-apply.ts` — seed helper for apply flows.
 
-All three seed against a Gmail account you name in `MIEL_TEST_ACCOUNT` (they exit
+Both seed against a Gmail account you name in `MIEL_TEST_ACCOUNT` (they exit
 with that instruction when it is unset) rather than one baked into the file:
 `MIEL_TEST_ACCOUNT=you@example.com bun scripts/smoke-cli.ts`. Note that they are
 stale as of #99 — they still import `syncAccountsFromGog` and `GogAdapter`, which

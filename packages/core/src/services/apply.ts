@@ -1,41 +1,25 @@
-// Everything a message action does: attach and detach labels, accept a triage's
-// suggestions, archive, trash, mark read, and the batch versions of those.
+// Everything a message action does: attach and detach labels, archive, trash,
+// mark read, and the batch versions of those.
 //
 // Two collaborators, and the split between them is the point. Gmail is reached
 // through `GmailDataAdapter` and is always called *before* the local write, so a
 // refused modification leaves the mailbox and the database agreeing. Storage is
-// reached only through the store seam (#136) — `MessageStore`, `TriageStore` and
-// `LabelStore` — so what is left here is the ordering, the label-id scoping and
-// the bookkeeping that turns an accepted suggestion into an attached label.
+// reached only through the store seam (#136) — `MessageStore` and `LabelStore` —
+// so what is left here is the ordering and the label-id scoping.
 import { Effect } from "effect";
-import {
-  LabelStore,
-  MessageStore,
-  TriageStore,
-  type StoredNewSuggestion,
-} from "../stores/contracts";
+import { LabelStore, MessageStore } from "../stores/contracts";
 import { runWithStores } from "../stores/postgres";
 import { createGmailAdapter, type GmailDataAdapter } from "../google/gmailAdapter";
 import { createDebug } from "../util/debug";
 import { tryAsync } from "../util/effect";
-import { ensureLabelEffect, type LabelRow } from "./labels";
+import type { LabelRow } from "./labels";
 
 const debug = createDebug("service:apply");
-
-/** What every action needs before it can act: the stores and Gmail. */
-type ApplyStores = MessageStore | TriageStore | LabelStore;
 
 export interface ApplyLabelsResult {
   ok: true;
   added: { labelId: string; gmailLabelId: string; name: string }[];
   removed: { labelId: string; gmailLabelId: string; name: string }[];
-}
-
-export interface ApplySuggestionsResult {
-  ok: true;
-  appliedExistingLabelIds: string[];
-  createdLabels: { suggestionId: string; labelId: string; name: string }[];
-  attached: { gmailLabelId: string; name: string }[];
 }
 
 interface ApplyAccountResolved {
@@ -163,174 +147,6 @@ export const applyLabelsEffect = (args: {
         name: l.name,
       })),
     } satisfies ApplyLabelsResult;
-  });
-
-export interface ApplySuggestionsInput {
-  triageId: string;
-  accountId?: string;
-  accountEmail?: string;
-  gmailMessageId: string;
-  acceptExistingLabelIds?: string[];
-  acceptNewSuggestionIds?: string[];
-  gmail?: GmailDataAdapter;
-}
-
-export const applySuggestionsEffect = (
-  input: ApplySuggestionsInput,
-): Effect.Effect<ApplySuggestionsResult, Error, ApplyStores> =>
-  Effect.gen(function* () {
-    debug("applySuggestions", {
-      triageId: input.triageId,
-      gmailMessageId: input.gmailMessageId,
-      acceptExisting: input.acceptExistingLabelIds ?? [],
-      acceptNew: input.acceptNewSuggestionIds ?? [],
-    });
-    const ctx = yield* resolveContextEffect(input);
-
-    const triage = yield* TriageStore.byId(input.triageId);
-    if (!triage) {
-      return yield* Effect.fail(new Error(`Triage not found: ${input.triageId}`));
-    }
-    if (triage.gmailMessageId !== ctx.gmailMessageId) {
-      return yield* Effect.fail(
-        new Error(`Triage ${input.triageId} does not belong to message ${ctx.gmailMessageId}`),
-      );
-    }
-
-    const existingIds = input.acceptExistingLabelIds ?? [];
-    const newIds = input.acceptNewSuggestionIds ?? [];
-
-    const existingRows = yield* LabelStore.byIds({
-      accountId: ctx.accountId,
-      ids: existingIds,
-    });
-
-    // Only this triage's suggestions, in the order they were accepted: a
-    // suggestion id belonging to another triage names nothing here.
-    const suggestions = yield* TriageStore.newSuggestionsFor([input.triageId]);
-    const byId = new Map(suggestions.map((s) => [s.suggestionId, s]));
-    const accepted = newIds
-      .map((id) => byId.get(id))
-      .filter((s): s is StoredNewSuggestion => Boolean(s));
-
-    const createdLabels: ApplySuggestionsResult["createdLabels"] = [];
-    const labelsToAttach: { id: string; gmailLabelId: string; name: string }[] = existingRows.map(
-      (l) => ({
-        id: l.id,
-        gmailLabelId: l.gmailLabelId,
-        name: l.name,
-      }),
-    );
-
-    for (const sug of accepted) {
-      const label = yield* ensureLabelEffect({
-        accountId: ctx.accountId,
-        accountEmail: ctx.accountEmail,
-        name: sug.name,
-        gmail: ctx.gmail,
-      });
-      yield* TriageStore.markNewApplied({
-        suggestionId: sug.suggestionId,
-        createdLabelId: label.id,
-      });
-      createdLabels.push({
-        suggestionId: sug.suggestionId,
-        labelId: label.id,
-        name: label.name,
-      });
-      labelsToAttach.push({
-        id: label.id,
-        gmailLabelId: label.gmailLabelId,
-        name: label.name,
-      });
-    }
-
-    if (labelsToAttach.length > 0) {
-      yield* tryAsync(() =>
-        ctx.gmail.batchModifyLabels({
-          account: ctx.accountEmail,
-          messageIds: [ctx.gmailMessageId],
-          add: labelsToAttach.map((l) => l.gmailLabelId),
-        }),
-      );
-      yield* MessageStore.attachLabels({
-        accountId: ctx.accountId,
-        gmailMessageIds: [ctx.gmailMessageId],
-        labelIds: labelsToAttach.map((l) => l.id),
-      });
-    }
-
-    yield* TriageStore.markExistingApplied({
-      triageId: input.triageId,
-      labelIds: existingRows.map((l) => l.id),
-    });
-
-    debug("applySuggestions done", {
-      triageId: input.triageId,
-      appliedExisting: existingRows.map((l) => l.name),
-      createdLabels: createdLabels.map((l) => l.name),
-      attached: labelsToAttach.map((l) => l.name),
-    });
-    return {
-      ok: true,
-      appliedExistingLabelIds: existingRows.map((l) => l.id),
-      createdLabels,
-      attached: labelsToAttach.map((l) => ({
-        gmailLabelId: l.gmailLabelId,
-        name: l.name,
-      })),
-    } satisfies ApplySuggestionsResult;
-  });
-
-export interface DismissSuggestionsInput {
-  triageId: string;
-  accountId?: string;
-  accountEmail?: string;
-  gmailMessageId: string;
-  gmail?: GmailDataAdapter;
-}
-
-export interface DismissSuggestionsResult {
-  ok: true;
-  triageId: string;
-}
-
-/**
- * Turns down every pending suggestion of one triage — the row pill's "Dismiss
- * all", which is one gesture over both suggestion tables because the pill counts
- * them together.
- *
- * Unlike its apply counterpart this reaches nothing outside Postgres: declining
- * a suggestion changes what miel offers, never what Gmail holds, so there is no
- * remote call to keep in step and `GmailDataAdapter` rides along only so the
- * caller can resolve the message the same way every other action does. The
- * triage is still checked against the message for the reason apply checks it: a
- * triage id from another message must name nothing here.
- */
-export const dismissSuggestionsEffect = (
-  input: DismissSuggestionsInput,
-): Effect.Effect<DismissSuggestionsResult, Error, ApplyStores> =>
-  Effect.gen(function* () {
-    debug("dismissSuggestions", {
-      triageId: input.triageId,
-      gmailMessageId: input.gmailMessageId,
-    });
-    const ctx = yield* resolveContextEffect(input);
-
-    const triage = yield* TriageStore.byId(input.triageId);
-    if (!triage) {
-      return yield* Effect.fail(new Error(`Triage not found: ${input.triageId}`));
-    }
-    if (triage.gmailMessageId !== ctx.gmailMessageId) {
-      return yield* Effect.fail(
-        new Error(`Triage ${input.triageId} does not belong to message ${ctx.gmailMessageId}`),
-      );
-    }
-
-    yield* TriageStore.dismissPending({ triageId: input.triageId });
-
-    debug("dismissSuggestions done", { triageId: input.triageId });
-    return { ok: true, triageId: input.triageId } satisfies DismissSuggestionsResult;
   });
 
 /**
@@ -595,50 +411,6 @@ export const setMessageReadEffect = (args: {
     return { ok: true, read: args.read } as const;
   });
 
-export interface LatestTriageForMessage {
-  triageId: string;
-  priority: "high" | "medium" | "low";
-  existingLabelSuggestions: {
-    labelId: string;
-    name: string;
-    status: "pending" | "applied" | "dismissed";
-  }[];
-  newLabelSuggestions: {
-    suggestionId: string;
-    name: string;
-    status: "pending" | "applied" | "dismissed";
-  }[];
-}
-
-export const getLatestTriageForMessageEffect = (args: {
-  accountId: string;
-  gmailMessageId: string;
-}): Effect.Effect<LatestTriageForMessage | null, never, TriageStore> =>
-  Effect.gen(function* () {
-    const [latest] = yield* TriageStore.historyFor(args);
-    if (!latest) return null;
-
-    const [existing, proposed] = yield* Effect.all([
-      TriageStore.existingSuggestionsFor([latest.id]),
-      TriageStore.newSuggestionsFor([latest.id]),
-    ]);
-
-    return {
-      triageId: latest.id,
-      priority: latest.priority,
-      existingLabelSuggestions: existing.map((e) => ({
-        labelId: e.labelId,
-        name: e.name,
-        status: e.status,
-      })),
-      newLabelSuggestions: proposed.map((p) => ({
-        suggestionId: p.suggestionId,
-        name: p.name,
-        status: p.status,
-      })),
-    };
-  });
-
 // Promise facades for the API/CLI boundary.
 export async function applyLabels(args: {
   accountId?: string;
@@ -649,18 +421,6 @@ export async function applyLabels(args: {
   gmail?: GmailDataAdapter;
 }): Promise<ApplyLabelsResult> {
   return runWithStores(applyLabelsEffect(args));
-}
-
-export async function applySuggestions(
-  input: ApplySuggestionsInput,
-): Promise<ApplySuggestionsResult> {
-  return runWithStores(applySuggestionsEffect(input));
-}
-
-export async function dismissSuggestions(
-  input: DismissSuggestionsInput,
-): Promise<DismissSuggestionsResult> {
-  return runWithStores(dismissSuggestionsEffect(input));
 }
 
 export async function archiveMessage(args: {
@@ -700,11 +460,4 @@ export async function setMessageRead(args: {
   gmail?: GmailDataAdapter;
 }): Promise<{ ok: true; read: boolean }> {
   return runWithStores(setMessageReadEffect(args));
-}
-
-export async function getLatestTriageForMessage(args: {
-  accountId: string;
-  gmailMessageId: string;
-}): Promise<LatestTriageForMessage | null> {
-  return runWithStores(getLatestTriageForMessageEffect(args));
 }

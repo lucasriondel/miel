@@ -11,8 +11,6 @@ export const UntriagedNotice = () => (
     className={`${detailSurfaceClass()} flex items-center gap-3 border-dashed px-5 py-4 text-sm text-gousse-muted`}
   >
     <Sparkles className="h-5 w-5 shrink-0 text-gousse-muted" aria-hidden />
-    <span className="font-medium">
-      Not triaged yet — run a sync to generate a priority and label suggestions.
-    </span>
+    <span className="font-medium">Not triaged yet — run a sync to generate a priority.</span>
   </section>
 );

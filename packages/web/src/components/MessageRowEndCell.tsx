@@ -102,14 +102,14 @@ export const MessageRowEndCell = ({ relative, showActions, ...actions }: Props) 
           the moment a row is taller. `inset-y-0` has no such number in it.
 
           The fade is long — `pl-32` gives it 8rem of room and the opaque stop
-          ends right where the buttons do (16.5rem: seven 32px buttons, six 4px
+          ends right where the buttons do (14.25rem: six 32px buttons, five 4px
           gaps and this strip's own `pr-4`, so adding or dropping an action means
           moving that stop) — because a short ramp reads as a
           hard-edged slab sliding over the text: the eye catches the boundary,
           which is the thing this backing exists to avoid. Running the gradient
           to zero across the whole approach lets the subject dissolve into the
           row with no seam. */}
-      <span className="pointer-events-none absolute inset-y-0 right-0 col-start-1 row-start-1 flex items-center justify-end bg-[linear-gradient(to_left,var(--row-surface)_0,var(--row-surface)_16.5rem,transparent_100%)] pl-32 pr-4 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-data-[labelling=true]:pointer-events-auto group-data-[labelling=true]:opacity-100">
+      <span className="pointer-events-none absolute inset-y-0 right-0 col-start-1 row-start-1 flex items-center justify-end bg-[linear-gradient(to_left,var(--row-surface)_0,var(--row-surface)_14.25rem,transparent_100%)] pl-32 pr-4 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-data-[labelling=true]:pointer-events-auto group-data-[labelling=true]:opacity-100">
         <MessageActions {...actions} variant="row" forceVisible />
       </span>
     </span>

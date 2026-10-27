@@ -45,8 +45,6 @@ export function triageRun(
     reasoning: "Routine mail.",
     model: "claude-haiku-4-5",
     createdAt: "2026-08-01T00:00:00.000Z",
-    existingLabelSuggestions: [],
-    newLabelSuggestions: [],
     ...over,
   };
 }

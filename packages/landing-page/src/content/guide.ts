@@ -54,8 +54,8 @@ export const MOTIVATION: GuideSection = {
   heading: "Motivation",
   body: [
     "A busy Gmail inbox is mostly noise, and the work of deciding what matters is the part no filter rule ever got right. Rules match senders and subjects; they cannot read a message and tell you it is the one thing worth answering today.",
-    "Miel hands that judgement to an AI. It pulls in your recent mail, asks the AI to rank each message by priority and suggest labels, and shows you the result grouped high to low — so the triage pass you were doing by hand is already done when you sit down to it.",
-    "Nothing it proposes is applied behind your back. Priorities, label suggestions and new labels worth creating are all proposals; Gmail is not touched until you apply them. The tool does the reading, you keep the decision.",
+    "Miel hands that judgement to an AI. It pulls in your recent mail, asks the AI to rank each message by priority, and shows you the result grouped high to low — so the triage pass you were doing by hand is already done when you sit down to it.",
+    "Nothing is applied behind your back. Its priorities are proposals — a reading of your inbox, not an action on it — and Gmail is not touched until you apply a label, archive or reply yourself. The tool does the reading, you keep the decision.",
     /* Every provider a reader can actually pick belongs in this sentence, not
        the hosted three (#114): the default is the local Claude Code CLI, so the
        reader who changes nothing was being told their mail goes to one of three

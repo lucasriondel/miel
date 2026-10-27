@@ -28,8 +28,6 @@ const run = (over: Partial<Run> = {}): MessageDetail["triageHistory"][number] =>
   reasoning: `${REASONING_FIRST_LINE}\n${REASONING_SECOND_LINE}`,
   model: "claude-opus-5",
   createdAt: "2026-08-09T09:30:00.000Z",
-  existingLabelSuggestions: [],
-  newLabelSuggestions: [],
   ...over,
 });
 

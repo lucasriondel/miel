@@ -5,9 +5,7 @@ const SyncRunResult = z.object({
   account: z.string(),
   fetched: z.number().int(),
   triaged: z.number().int(),
-  suggestedNewLabels: z.number().int(),
   filtersSynced: z.number().int(),
-  suggestedFilters: z.number().int(),
   errors: z.array(z.string()),
 });
 export type SyncRunResultT = z.infer<typeof SyncRunResult>;
@@ -55,13 +53,6 @@ export const TriageResultItem = z.object({
   id: z.string(),
   priority: z.enum(["high", "medium", "low"]),
   reasoning: z.string(),
-  applyExistingLabels: z.array(z.string()),
-  suggestNewLabels: z.array(
-    z.object({
-      name: z.string(),
-      reasoning: z.string(),
-    }),
-  ),
 });
 export type TriageResultItemT = z.infer<typeof TriageResultItem>;
 
@@ -88,12 +79,6 @@ export const LabelsFinishedEvent = z.object({
   count: z.number().int().nonnegative(),
 });
 export type LabelsFinishedEventT = z.infer<typeof LabelsFinishedEvent>;
-
-export const FiltersStartedEvent = z.object({
-  type: z.literal("filters.started"),
-  account: z.string(),
-});
-export type FiltersStartedEventT = z.infer<typeof FiltersStartedEvent>;
 
 export const SearchStartedEvent = z.object({
   type: z.literal("search.started"),
@@ -163,18 +148,10 @@ export const TriageFinishedEvent = z.object({
   type: z.literal("triage.finished"),
   account: z.string(),
   triaged: z.number().int().nonnegative(),
-  suggestedNewLabels: z.number().int().nonnegative(),
   elapsedMs: z.number().int().nonnegative(),
   failedBatches: z.number().int().nonnegative(),
 });
 export type TriageFinishedEventT = z.infer<typeof TriageFinishedEvent>;
-
-export const FiltersFinishedEvent = z.object({
-  type: z.literal("filters.finished"),
-  account: z.string(),
-  suggestedFilters: z.number().int().nonnegative(),
-});
-export type FiltersFinishedEventT = z.infer<typeof FiltersFinishedEvent>;
 
 export const SyncFinishedEvent = z.object({
   type: z.literal("sync.finished"),
@@ -228,7 +205,6 @@ export const SyncServerEvent = z.discriminatedUnion("type", [
   SyncStartedEvent,
   LabelsStartedEvent,
   LabelsFinishedEvent,
-  FiltersStartedEvent,
   SearchStartedEvent,
   SearchFinishedEvent,
   SearchDedupeFinishedEvent,
@@ -239,7 +215,6 @@ export const SyncServerEvent = z.discriminatedUnion("type", [
   TriageStartedEvent,
   TriageBatchProgressEvent,
   TriageFinishedEvent,
-  FiltersFinishedEvent,
   SyncFinishedEvent,
   SyncErrorEvent,
   SyncReconnectRequiredEvent,

@@ -36,8 +36,6 @@ export const triageUntriagedForAccountEffect = (
     const { db } = getDb();
 
     const allLabels = yield* getLabelsForAccountEffect(account.id);
-    const labelsByName = new Map(allLabels.map((l) => [l.name, l]));
-    const existingLabelNames = allLabels.filter((l) => l.type === "user").map((l) => l.name);
 
     // Untriaged = no row in `triages` for that (account, gmailMessageId)
     const rows = yield* Effect.promise(() =>
@@ -90,7 +88,6 @@ export const triageUntriagedForAccountEffect = (
         type: "triage.finished",
         account: account.email,
         triaged: 0,
-        suggestedNewLabels: 0,
         elapsedMs: 0,
         failedBatches: 0,
       });
@@ -98,7 +95,6 @@ export const triageUntriagedForAccountEffect = (
         account: account.email,
         candidates: 0,
         triaged: 0,
-        suggestedNewLabels: 0,
         errors: [],
       };
     }
@@ -164,8 +160,6 @@ export const triageUntriagedForAccountEffect = (
       accountEmail: account.email,
       batches,
       labelsByGmailId,
-      labelsByName,
-      existingLabelNames,
       batchConcurrency,
       log,
       emit,
@@ -178,7 +172,6 @@ export const triageUntriagedForAccountEffect = (
         triageRunId,
         status: "failed",
         triaged: 0,
-        suggestedNewLabels: 0,
         failedBatches: 0,
         errors: [message],
       });
@@ -190,7 +183,6 @@ export const triageUntriagedForAccountEffect = (
       triageRunId,
       status: triageRunStatusFor(result),
       triaged: result.triaged,
-      suggestedNewLabels: result.suggestedNewLabels,
       failedBatches: result.failedBatches,
       errors: result.errors,
     });
@@ -199,7 +191,6 @@ export const triageUntriagedForAccountEffect = (
       account: account.email,
       candidates: normalized.length,
       triaged: result.triaged,
-      suggestedNewLabels: result.suggestedNewLabels,
       errors: result.errors,
     };
   });

@@ -350,7 +350,7 @@ describe("when one message's extraction fails", () => {
 describe("when the provider cannot run at all", () => {
   // Not this batch's problem but the install's: the credential and the provider
   // pick are global, so it propagates through the shared combinator and syncAll
-  // stops the run — the same way triage and filter-suggest already do.
+  // stops the run — the same way triage already does.
   test.each([
     ["no Claude Code token", () => new ClaudeTokenMissingError()],
     [

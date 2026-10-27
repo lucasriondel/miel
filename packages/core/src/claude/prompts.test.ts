@@ -18,7 +18,6 @@ import type { TriageInputT } from "../schemas/triage";
 const INPUT: TriageInputT = {
   account: "user@example.com",
   accountId: "acc-1",
-  existingLabels: ["Receipts"],
   messages: [
     {
       id: "m1",
@@ -46,7 +45,7 @@ describe("buildTriagePrompt (Claude Code CLI)", () => {
 
   test("still carries the classification rules and the messages", () => {
     expect(cli).toContain("priority");
-    expect(cli).toContain("Receipts");
+    expect(cli).toContain("INBOX");
     expect(cli).toContain("m1");
   });
 });
@@ -63,10 +62,10 @@ describe("buildHostedTriagePrompt", () => {
   });
 
   test("keeps every rule the CLI variant states", () => {
-    for (const rule of ["priority", "applyExistingLabels", "suggestNewLabels", "reasoning"]) {
+    for (const rule of ["priority", "reasoning"]) {
       expect(hosted).toContain(rule);
     }
-    expect(hosted).toContain("Receipts");
+    expect(hosted).toContain("INBOX");
     expect(hosted).toContain("user@example.com");
   });
 

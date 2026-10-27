@@ -27,18 +27,6 @@ export interface MessageLabel {
   colorFg: string | null;
 }
 
-export interface PendingExistingLabelSuggestion {
-  labelId: string;
-  name: string;
-  colorBg: string | null;
-  colorFg: string | null;
-}
-
-export interface PendingNewLabelSuggestion {
-  suggestionId: string;
-  name: string;
-}
-
 export interface MessageAttachment {
   attachmentId: string;
   filename: string;
@@ -63,10 +51,6 @@ export interface ListedMessage {
   triageId: string | null;
   labels: MessageLabel[];
   attachments: MessageAttachment[];
-  pendingSuggestions: {
-    existing: PendingExistingLabelSuggestion[];
-    new: PendingNewLabelSuggestion[];
-  };
 }
 
 export interface ListMessagesResponse {
@@ -99,19 +83,6 @@ export interface MessageDetail {
     reasoning: string;
     model: string | null;
     createdAt: string;
-    existingLabelSuggestions: {
-      labelId: string;
-      name: string;
-      colorBg: string | null;
-      colorFg: string | null;
-      status: "pending" | "applied" | "dismissed";
-    }[];
-    newLabelSuggestions: {
-      suggestionId: string;
-      name: string;
-      reasoning: string | null;
-      status: "pending" | "applied" | "dismissed";
-    }[];
   }[];
 }
 
@@ -119,9 +90,7 @@ export interface SyncRunResult {
   account: string;
   fetched: number;
   triaged: number;
-  suggestedNewLabels: number;
   filtersSynced: number;
-  suggestedFilters: number;
   errors: string[];
 }
 
@@ -158,23 +127,8 @@ export interface MergeFiltersResult {
   failedDeletions: { gmailFilterId: string; message: string }[];
 }
 
-export interface SuggestedFilter {
-  id: string;
-  accountId: string;
-  accountEmail: string;
-  criteriaFrom: string | null;
-  criteriaSubject: string | null;
-  criteriaQuery: string | null;
-  addLabelId: string | null;
-  addLabelName: string;
-  reasoning: string | null;
-  status: "pending" | "accepted" | "dismissed";
-  createdAt: string;
-}
-
 export interface FiltersResponse {
   filters: GmailFilter[];
-  suggestions: SuggestedFilter[];
 }
 
 /**
@@ -316,11 +270,6 @@ export interface EditedPromo {
   merchant: string | null;
 }
 
-export interface SuggestFilterForMessageResult {
-  suggestion: SuggestedFilter | null;
-  created: boolean;
-}
-
 // Imported rather than restated (#105): which providers exist, and which model
 // each one serves, is one catalogue — `@miel/core/providerModels` is a leaf
 // module, so this pulls in no db or env code.
@@ -332,8 +281,6 @@ export interface ModelSettings {
   triageProvider: Provider;
   replyModel: string;
   replyProvider: Provider;
-  filterModel: string;
-  filterProvider: Provider;
   // Quoted because the task is `promo-extract` (#156): the field name is
   // `${task}Model`, and both the settings service and the pickers index it with
   // exactly that template, so the hyphen has to survive into the field. Absent
@@ -481,7 +428,6 @@ export interface TriageLogEntry extends LogEntryBase {
   type: "triage";
   candidates: number;
   triaged: number;
-  suggestedNewLabels: number;
   failedBatches: number;
   syncWindowId: string | null;
 }

@@ -91,9 +91,8 @@ export type OptimisticPlan<TInput> = (
  * What the mutation expects the open message to become (#145).
  *
  * The detail is a different shape from a list row — a priority lives on its
- * newest triage run, a suggestion is a status on that run rather than an entry
- * in `pendingSuggestions` — so it is a plan of its own rather than the list's
- * applied twice. It is only ever asked about a message that is already cached:
+ * newest triage run — so it is a plan of its own rather than the list's applied
+ * twice. It is only ever asked about a message that is already cached:
  * an action taken from a row must not seed a detail nobody has opened.
  */
 export type OptimisticDetail<TInput> = (input: TInput) => (detail: MessageDetail) => MessageDetail;

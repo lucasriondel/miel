@@ -23,8 +23,6 @@ const NO_TOKEN: ClaudeCodeTokenStatus = { configured: false, hint: null };
 const settingsWith = (provider: Provider, model: string): ModelSettings => ({
   triageProvider: provider,
   triageModel: model,
-  filterProvider: "claude-code",
-  filterModel: "claude-haiku-4-5",
   replyProvider: "claude-code",
   replyModel: "claude-haiku-4-5",
   "promo-extractProvider": "claude-code",

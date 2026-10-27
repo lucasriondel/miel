@@ -31,9 +31,7 @@ export const SETTING_KEYS = {
   triageProvider: "triage.provider",
   replyModel: "reply.model",
   replyProvider: "reply.provider",
-  filterModel: "filter.model",
-  filterProvider: "filter.provider",
-  // The fourth task (#156). The key spelling is the task's own name, so it is
+  // The third task (#156). The key spelling is the task's own name, so it is
   // hyphenated where the field below is camel-cased around it.
   "promo-extractModel": "promo-extract.model",
   "promo-extractProvider": "promo-extract.provider",
@@ -56,8 +54,6 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   [SETTING_KEYS.triageProvider]: DEFAULT_PROVIDER,
   [SETTING_KEYS.replyModel]: "claude-sonnet-4-6",
   [SETTING_KEYS.replyProvider]: DEFAULT_PROVIDER,
-  [SETTING_KEYS.filterModel]: "claude-haiku-4-5",
-  [SETTING_KEYS.filterProvider]: DEFAULT_PROVIDER,
   // The cheap model: extraction is one call per mail and carries a whole body,
   // so it is the task where a stronger model would cost the most for the least.
   [SETTING_KEYS["promo-extractModel"]]: "claude-haiku-4-5",
@@ -93,8 +89,6 @@ export interface ModelSettings {
   triageProvider: Provider;
   replyModel: string;
   replyProvider: Provider;
-  filterModel: string;
-  filterProvider: Provider;
   // Quoted because the task is `promo-extract` (#156): the field name is
   // `${task}Model`, and the settings service indexes it with exactly that
   // template — so the hyphen has to survive into the field.
@@ -192,8 +186,6 @@ export function normalizeModelSettings(raw: Record<string, string>): ModelSettin
     triageProvider: normalizeProvider(value(SETTING_KEYS.triageProvider)),
     replyModel: normalizeModelId(value(SETTING_KEYS.replyModel)),
     replyProvider: normalizeProvider(value(SETTING_KEYS.replyProvider)),
-    filterModel: normalizeModelId(value(SETTING_KEYS.filterModel)),
-    filterProvider: normalizeProvider(value(SETTING_KEYS.filterProvider)),
     "promo-extractModel": normalizeModelId(value(SETTING_KEYS["promo-extractModel"])),
     "promo-extractProvider": normalizeProvider(value(SETTING_KEYS["promo-extractProvider"])),
   };

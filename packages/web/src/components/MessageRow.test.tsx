@@ -27,7 +27,6 @@ const message: ListedMessage = {
   triageId: null,
   labels: [],
   attachments: [],
-  pendingSuggestions: { existing: [], new: [] },
 };
 
 const rowAt = (url: string, over: Partial<ListedMessage> = {}) =>

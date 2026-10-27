@@ -1,6 +1,6 @@
 # Miel
 
-Gmail triage tool. Fetches messages via the Gmail REST API, classifies them with an LLM (priority + label suggestions), and surfaces them in a local web UI for review/apply/reply.
+Gmail triage tool. Fetches messages via the Gmail REST API, classifies them with an LLM (priority), and surfaces them in a local web UI for review/apply/reply.
 
 ## Language
 

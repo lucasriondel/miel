@@ -27,10 +27,6 @@ const DEFAULTS: ModelSettings = {
   triageProvider: "claude-code",
   replyModel: "claude-sonnet-4-6",
   replyProvider: "claude-code",
-  filterModel: "claude-haiku-4-5",
-  filterProvider: "claude-code",
-  // The fourth task (#156). No route names it yet — it is here because the
-  // settings the route hands back are every task's, not the three it edits.
   "promo-extractModel": "claude-haiku-4-5",
   "promo-extractProvider": "claude-code",
 };

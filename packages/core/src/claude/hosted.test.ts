@@ -111,8 +111,6 @@ const TRIAGE_OBJECT: TriageOutputT = {
       id: "m1",
       priority: "high",
       reasoning: "because",
-      applyExistingLabels: [],
-      suggestNewLabels: [],
     },
   ],
 };
@@ -120,7 +118,6 @@ const TRIAGE_OBJECT: TriageOutputT = {
 const TRIAGE_INPUT = {
   account: "a@b.c",
   accountId: "acc1",
-  existingLabels: [],
   messages: [],
 };
 

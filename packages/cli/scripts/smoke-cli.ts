@@ -1,15 +1,12 @@
-// Smoke test for CLI services: seeds messages + triage via stubs, then exercises apply + reply paths.
+// Smoke test for CLI services: seeds messages + triage via stubs, then exercises reply + archive/trash paths.
 // Run with `MIEL_TEST_ACCOUNT=you@example.com bun scripts/smoke-cli.ts`.
 import { sql as dsql } from "drizzle-orm";
 import {
-  applySuggestions,
   archiveMessage,
   closeDb,
   fetchAndTriage,
   generateReply,
   getDb,
-  getLatestTriageForMessage,
-  schema,
   sendReply,
   syncAccountsFromGog,
   trashMessage,
@@ -104,8 +101,6 @@ const fakeClaude: ClaudeAdapter = {
           id: m.id,
           priority: i === 0 ? "high" : "low",
           reasoning: `Stub reasoning for ${m.id}`,
-          applyExistingLabels: i === 0 ? ["Newsletters"] : [],
-          suggestNewLabels: i === 0 ? [{ name: "SmokeNew", reasoning: "stub new label" }] : [],
         })),
       },
       runId: "smoke-run-1",
@@ -123,14 +118,9 @@ const fakeClaude: ClaudeAdapter = {
 
 async function clean() {
   const { db } = getDb();
-  await db.execute(dsql`DELETE FROM suggested_labels WHERE name='SmokeNew' OR name LIKE 'smoke-%'`);
-  await db.execute(
-    dsql`DELETE FROM triage_label_suggestions WHERE triage_id IN (SELECT id FROM triages WHERE gmail_message_id LIKE 'smoke-%')`,
-  );
   await db.execute(dsql`DELETE FROM triages WHERE gmail_message_id LIKE 'smoke-%'`);
   await db.execute(dsql`DELETE FROM message_labels WHERE gmail_message_id LIKE 'smoke-%'`);
   await db.execute(dsql`DELETE FROM messages WHERE gmail_message_id LIKE 'smoke-%'`);
-  await db.execute(dsql`DELETE FROM labels WHERE name='SmokeNew'`);
 }
 
 async function main() {
@@ -150,33 +140,6 @@ async function main() {
       log: (m) => console.log("  " + m),
     });
     console.log("  fetchAndTriage result:", result);
-
-    const { db } = getDb();
-    const acc = await db
-      .select({ id: schema.accounts.id })
-      .from(schema.accounts)
-      .where(dsql`${schema.accounts.email} = ${TEST_ACCOUNT}`)
-      .limit(1);
-    const accountId = acc[0].id;
-
-    console.log("> getLatestTriageForMessage(smoke-msg-1)");
-    const latest = await getLatestTriageForMessage({
-      accountId,
-      gmailMessageId: "smoke-msg-1",
-    });
-    console.log("  latest:", latest);
-    if (!latest) throw new Error("expected latest triage");
-
-    console.log("> applySuggestions accept ALL");
-    const applied = await applySuggestions({
-      triageId: latest.triageId,
-      accountEmail: TEST_ACCOUNT,
-      gmailMessageId: "smoke-msg-1",
-      acceptExistingLabelIds: latest.existingLabelSuggestions.map((s) => s.labelId),
-      acceptNewSuggestionIds: latest.newLabelSuggestions.map((s) => s.suggestionId),
-      gog: fakeGog,
-    });
-    console.log("  applySuggestions result:", applied);
 
     console.log("> generateReply (stub claude)");
     const draft = await generateReply({
@@ -214,22 +177,11 @@ async function main() {
     console.log("  trash:", tr);
 
     console.log("> verify post-state counts");
+    const { db } = getDb();
     const tCnt = await db.execute(
       dsql`SELECT count(*)::int AS c FROM triages WHERE gmail_message_id LIKE 'smoke-%'`,
     );
-    const slCnt = await db.execute(
-      dsql`SELECT status, count(*)::int AS c FROM suggested_labels WHERE name='SmokeNew' GROUP BY status`,
-    );
-    const tlsCnt = await db.execute(
-      dsql`SELECT status, count(*)::int AS c FROM triage_label_suggestions tls JOIN triages t ON tls.triage_id=t.id WHERE t.gmail_message_id LIKE 'smoke-%' GROUP BY status`,
-    );
-    const lblCnt = await db.execute(
-      dsql`SELECT count(*)::int AS c FROM labels WHERE name='SmokeNew'`,
-    );
     console.log("  triages =", tCnt);
-    console.log("  suggested_labels by status =", slCnt);
-    console.log("  triage_label_suggestions by status =", tlsCnt);
-    console.log("  labels(SmokeNew) =", lblCnt);
 
     console.log("> cleanup");
     await clean();

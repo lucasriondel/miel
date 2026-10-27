@@ -83,7 +83,7 @@ describe("normalizeModelSettings on rows written before #105", () => {
 
   test("falls back to the local CLI when nothing is stored", () => {
     expect(DEFAULTS.triageProvider).toBe("claude-code");
-    expect(DEFAULTS.filterProvider).toBe("claude-code");
+    expect(DEFAULTS["promo-extractProvider"]).toBe("claude-code");
     expect(DEFAULTS.triageModel).toBe("claude-haiku-4-5");
   });
 });
@@ -134,13 +134,13 @@ describe("modelSettingWrites", () => {
   test("re-selecting the provider already in force does not reset the model", () => {
     const current: ModelSettings = {
       ...DEFAULTS,
-      filterProvider: "openai",
-      filterModel: "o4-mini",
+      "promo-extractProvider": "openai",
+      "promo-extractModel": "o4-mini",
     };
 
-    const writes = writesFor({ filterProvider: "openai" }, current);
+    const writes = writesFor({ "promo-extractProvider": "openai" }, current);
 
-    expect(writes).toEqual([{ key: SETTING_KEYS.filterProvider, value: "openai" }]);
+    expect(writes).toEqual([{ key: SETTING_KEYS["promo-extractProvider"], value: "openai" }]);
   });
 
   test("changing only the model leaves the provider where it was", () => {

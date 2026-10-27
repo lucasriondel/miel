@@ -40,8 +40,8 @@ export const AiSetupStep = ({ titleId, descriptionId, settings }: Props) => (
       Set up AI triage
     </h1>
     <p id={descriptionId} className="mt-2 text-sm font-medium leading-relaxed text-gousse-muted">
-      miel classifies every message it syncs and suggests labels for it, and that runs through an AI
-      provider of your choosing. Give a provider its credential, then point triage at it.
+      miel classifies every message it syncs, and that runs through an AI provider of your choosing.
+      Give a provider its credential, then point triage at it.
     </p>
     <div className="mt-5 flex flex-col gap-4">
       <CredentialsCard />
@@ -49,14 +49,14 @@ export const AiSetupStep = ({ titleId, descriptionId, settings }: Props) => (
         <ModelRow
           task="triage"
           title="Triage"
-          description="Classifies priority and suggests labels in each sync batch."
+          description="Classifies priority in each sync batch."
           value={settings.triageModel}
           provider={settings.triageProvider}
         />
       </SettingsCard>
     </div>
     <p className="mt-4 text-xs leading-relaxed text-gousse-muted">
-      Replies and filter suggestions keep their defaults — all three are yours to change in
+      Replies and promo-code extraction keep their defaults — all three are yours to change in
       Settings.
     </p>
   </>

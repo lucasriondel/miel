@@ -66,7 +66,7 @@ export const HOME: Home = {
   title: `${SITE_NAME} — self-hosted Gmail triage`,
   tagline: "Self-hosted Gmail triage, powered by AI.",
   intro: [
-    `${SITE_NAME} fetches your Gmail, asks an AI to sort each message by priority and suggest labels, and shows you the result in a local web app where you review, apply, or reply in one pass.`,
+    `${SITE_NAME} fetches your Gmail, asks an AI to sort each message by priority, and shows you the result in a local web app where you review, label, or reply in one pass.`,
     `It is open source and self-hosted: you run it on your own machine or your own server, against your own Google account. There is no signup, no hosted product, and no account with me — because there is nothing to sign up for.`,
   ],
   callToAction: {
@@ -79,8 +79,8 @@ export const HOME: Home = {
       heading: `What ${SITE_NAME} does`,
       body: [
         "It syncs messages from your Gmail account and stores them locally in Postgres.",
-        "It sends each message's sender, subject and preview to the AI for triage, which returns a priority and suggested labels along with its reasoning.",
-        "It surfaces the triaged inbox in a web UI where you can apply label suggestions, archive or trash threads, draft replies, and manage Gmail filters.",
+        "It sends each message's sender, subject and preview to the AI for triage, which returns a priority along with its reasoning.",
+        "It surfaces the triaged inbox in a web UI where you can label, archive or trash threads, draft replies, and manage Gmail filters.",
       ],
     },
     {
@@ -158,9 +158,9 @@ export const FEATURES = {
       body: "Every message is read and ranked high, medium or low, with the reasoning attached, so the inbox opens already sorted by what is worth your attention.",
     },
     {
-      name: "Filter and label suggestions",
+      name: "Gmail filters, tidied",
       icon: "tags",
-      body: "Miel proposes labels for a message, new labels worth creating, and Gmail filters to stop the noise at the door. Nothing reaches Gmail until you apply it.",
+      body: "Every Gmail filter on an account in one searchable list, where you can delete the stale ones and merge several into one. Nothing reaches Gmail until you apply it.",
     },
     {
       name: "Promo codes, kept",
@@ -218,9 +218,9 @@ export const CLAUDE_DISCLOSURE = {
   id: "claude",
   heading: "What Miel sends to the AI provider",
   body: [
-    `Miel does not classify your mail itself. It sends it to the AI provider your deployment is configured against, which returns a priority, suggested labels and its reasoning. Your message content therefore leaves your machine and is processed by that provider under their terms. This is the one part of ${SITE_NAME} that is not purely local, and if it is not acceptable to you, do not connect an account.`,
+    `Miel does not classify your mail itself. It sends it to the AI provider your deployment is configured against, which returns a priority and its reasoning. Your message content therefore leaves your machine and is processed by that provider under their terms. This is the one part of ${SITE_NAME} that is not purely local, and if it is not acceptable to you, do not connect an account.`,
     `For triage, each request carries the sender, subject, the short preview snippet Gmail provides and the labels already on the message — up to ${count(DEFAULT_TRIAGE_BATCH_SIZE)} messages per request by default, and at most ${count(MAX_TRIAGE_BATCH_SIZE)} if you raise the batch size in settings. Through the local CLI, the provider may ask Miel for a full message body when the preview is not enough to decide; a provider called over its API cannot, and is never sent one.`,
-    `Miel makes ${amount(BODY_BEARING_TASKS.length)} kinds of request that carry a whole message body, each truncated to the first ${count(REPLY_BODY_TRUNCATION)} characters — anything past that is never sent. ${bodyBearingSentences()} Filter suggestions send the sender, subject and snippet only.`,
+    `Miel makes ${amount(BODY_BEARING_TASKS.length)} kinds of request that carry a whole message body, each truncated to the first ${count(REPLY_BODY_TRUNCATION)} characters — anything past that is never sent. ${bodyBearingSentences()}`,
     `You supply your own AI provider credentials, so the account these requests are billed to and governed by is yours, not mine. Read that provider's terms before you connect an account — you choose which one runs each task in settings, and the setup guide names the one Miel uses by default.`,
   ],
 } as const;

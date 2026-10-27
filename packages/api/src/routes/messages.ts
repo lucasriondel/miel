@@ -3,10 +3,8 @@ import {
   AttachmentNotFoundError,
   apiSchemas,
   applyLabels,
-  applySuggestions,
   archiveMessage,
   batchModifyMessages,
-  dismissSuggestions,
   downloadAttachment,
   extractPromosForMessage,
   generateReply,
@@ -16,7 +14,6 @@ import {
   sendToWorp,
   setMessageRead,
   setMessagePriority,
-  suggestFilterForMessage,
   trashMessage,
 } from "@miel/core";
 
@@ -86,32 +83,6 @@ messagesRoutes.post("/:accountId/:gmailMessageId/labels", async (c) => {
   return c.json(result);
 });
 
-messagesRoutes.post("/:accountId/:gmailMessageId/apply-suggestions", async (c) => {
-  const accountId = c.req.param("accountId");
-  const gmailMessageId = c.req.param("gmailMessageId");
-  const body = apiSchemas.ApplySuggestionsRequest.parse(await c.req.json());
-  const result = await applySuggestions({
-    accountId,
-    gmailMessageId,
-    triageId: body.triageId,
-    acceptExistingLabelIds: body.acceptExistingLabelIds,
-    acceptNewSuggestionIds: body.acceptNewSuggestionIds,
-  });
-  return c.json(result);
-});
-
-messagesRoutes.post("/:accountId/:gmailMessageId/dismiss-suggestions", async (c) => {
-  const accountId = c.req.param("accountId");
-  const gmailMessageId = c.req.param("gmailMessageId");
-  const body = apiSchemas.DismissSuggestionsRequest.parse(await c.req.json());
-  const result = await dismissSuggestions({
-    accountId,
-    gmailMessageId,
-    triageId: body.triageId,
-  });
-  return c.json(result);
-});
-
 messagesRoutes.post("/:accountId/:gmailMessageId/archive", async (c) => {
   const accountId = c.req.param("accountId");
   const gmailMessageId = c.req.param("gmailMessageId");
@@ -165,23 +136,11 @@ messagesRoutes.post("/:accountId/:gmailMessageId/send-reply", async (c) => {
   return c.json(result);
 });
 
-messagesRoutes.post("/:accountId/:gmailMessageId/filter-suggest", async (c) => {
-  const accountId = c.req.param("accountId");
-  const gmailMessageId = c.req.param("gmailMessageId");
-  const body = apiSchemas.SuggestFilterRequest.parse(await c.req.json().catch(() => ({})));
-  const result = await suggestFilterForMessage({
-    accountId,
-    gmailMessageId,
-    prompt: body.prompt,
-  });
-  return c.json(result);
-});
-
 /**
  * Extracting promo codes from one message, because someone asked (#165).
  *
- * A sibling of `filter-suggest` above rather than a `/promo-codes` route, and
- * the path is where that choice is stated: this acts on a *message*, which is
+ * A message route rather than a `/promo-codes` route, and the path is where
+ * that choice is stated: this acts on a *message*, which is
  * what it is given and what it reads. `/promo-codes/:id` names a promo, and
  * before this runs there may well be no promo to name.
  *

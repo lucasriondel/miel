@@ -180,41 +180,6 @@ describe("what the page shows before the server answers", () => {
     await waitFor(() => expect(maybeButton("Remove label Invoices")).not.toBeNull());
   });
 
-  test("accepting a suggestion turns the pill into the label it proposed", async () => {
-    renderPage(
-      messageDetail({
-        latestTriageId: "tr-1",
-        triageHistory: [
-          triageRun({
-            id: "tr-1",
-            existingLabelSuggestions: [
-              {
-                labelId: "lab-1",
-                name: "Invoices",
-                colorBg: null,
-                colorFg: null,
-                status: "pending",
-              },
-            ],
-          }),
-        ],
-      }),
-    );
-
-    fireEvent.click(button("Invoices"));
-
-    await waitFor(() => expect(maybeButton("Remove label Invoices")).not.toBeNull());
-    expect(maybeButton("Invoices")).toBeNull();
-    expect(sent()).toEqual(["POST /messages/acc-1/msg-1/apply-suggestions"]);
-
-    await refuse();
-
-    // The pill comes back and the label goes: a suggestion the server refused
-    // was never accepted.
-    await waitFor(() => expect(maybeButton("Invoices")).not.toBeNull());
-    expect(maybeButton("Remove label Invoices")).toBeNull();
-  });
-
   test("changing the priority re-reads the triage chip", async () => {
     renderPage(
       messageDetail({

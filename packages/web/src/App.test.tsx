@@ -53,8 +53,6 @@ const ACCOUNT: Account = {
 const SETTINGS: ModelSettings = {
   triageProvider: "claude-code",
   triageModel: "claude-haiku-4-5",
-  filterProvider: "claude-code",
-  filterModel: "claude-haiku-4-5",
   replyProvider: "claude-code",
   replyModel: "claude-haiku-4-5",
   "promo-extractProvider": "claude-code",

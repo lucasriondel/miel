@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import {
   addMessageLabelMutationOptions,
-  applyLabelSuggestionMutationOptions,
   archiveMessageMutationOptions,
   batchMessageActionMutationOptions,
   generateReplyMutationOptions,
@@ -10,7 +9,6 @@ import {
   sendReplyMutationOptions,
   setMessagePriorityMutationOptions,
   setMessageReadMutationOptions,
-  suggestSimilarFilterMutationOptions,
 } from "./mutations";
 import { listedMessage } from "./listedMessage.fixture";
 import { messageDetail, triageRun } from "./messageDetail.fixture";
@@ -77,8 +75,7 @@ function seed(items: ListedMessage[]): QueryClient {
 
 // #145. What the detail page shows is written before the answer arrives too, so
 // each mutation the user can fire while staying on it declares that shape as
-// well. It is a shape of its own: a priority lives on the newest triage run, and
-// a suggestion is a status on that run rather than a `pendingSuggestions` entry.
+// well. It is a shape of its own: a priority lives on the newest triage run.
 const detailKey = ["message", "acc-1", "msg-1"];
 
 function seedOpen(message: MessageDetail): QueryClient {
@@ -89,10 +86,6 @@ function seedOpen(message: MessageDetail): QueryClient {
 
 const open = (qc: QueryClient) => qc.getQueryData<MessageDetail>(detailKey)!;
 const openLabelNames = (qc: QueryClient) => open(qc).labels.map((l) => l.name);
-const openSuggestionStatuses = (qc: QueryClient) => [
-  ...open(qc).triageHistory.flatMap((run) => run.existingLabelSuggestions.map((s) => s.status)),
-  ...open(qc).triageHistory.flatMap((run) => run.newLabelSuggestions.map((s) => s.status)),
-];
 
 const cached = (qc: QueryClient) => qc.getQueryData<ListMessagesResponse>(listKey)?.items ?? [];
 const ids = (qc: QueryClient) => cached(qc).map((m) => m.gmailMessageId);
@@ -383,198 +376,6 @@ describe("acting on a selection of messages", () => {
   });
 });
 
-describe("accepting a label suggestion", () => {
-  const EXISTING = {
-    ...INPUT,
-    triageId: "tr-1",
-    kind: "existing" as const,
-    labelId: "lab-1",
-    name: "Invoices",
-    colorBg: null,
-    colorFg: null,
-  };
-  const NEW = { ...INPUT, triageId: "tr-1", kind: "new" as const, suggestionId: "sug-1" };
-
-  test("accepts an existing label by id", async () => {
-    const calls = stubFetch({ ok: true });
-
-    await applyLabelSuggestionMutationOptions(new QueryClient()).mutationFn(EXISTING);
-
-    expect(calls[0]?.url).toBe(`${API}/messages/acc-1/msg-1/apply-suggestions`);
-    expect(calls[0]?.body).toEqual({
-      triageId: "tr-1",
-      acceptExistingLabelIds: ["lab-1"],
-    });
-  });
-
-  test("accepts a new label by suggestion id", async () => {
-    const calls = stubFetch({ ok: true });
-
-    await applyLabelSuggestionMutationOptions(new QueryClient()).mutationFn(NEW);
-
-    expect(calls[0]?.body).toEqual({ triageId: "tr-1", acceptNewSuggestionIds: ["sug-1"] });
-  });
-
-  test("attaches the label and clears the suggestion it came from", async () => {
-    const qc = seed([
-      listedMessage({
-        pendingSuggestions: {
-          existing: [{ labelId: "lab-1", name: "Invoices", colorBg: null, colorFg: null }],
-          new: [],
-        },
-      }),
-    ]);
-
-    await applyLabelSuggestionMutationOptions(qc).onMutate(EXISTING);
-
-    expect(labelNames(qc)).toEqual(["Invoices"]);
-    expect(cached(qc)[0]?.pendingSuggestions.existing).toEqual([]);
-  });
-
-  test("does not attach a label the message already carries", async () => {
-    const qc = seed([
-      listedMessage({
-        labels: [
-          { id: "lab-1", name: "Invoices", gmailLabelId: "lab-1", colorBg: null, colorFg: null },
-        ],
-      }),
-    ]);
-
-    await applyLabelSuggestionMutationOptions(qc).onMutate(EXISTING);
-
-    expect(labelNames(qc)).toEqual(["Invoices"]);
-  });
-
-  // A new label is created server-side, so nothing can be attached optimistically
-  // — only the suggestion that produced it goes away.
-  test("clears a new-label suggestion without inventing the label", async () => {
-    const qc = seed([
-      listedMessage({
-        pendingSuggestions: { existing: [], new: [{ suggestionId: "sug-1", name: "Receipts" }] },
-      }),
-    ]);
-
-    await applyLabelSuggestionMutationOptions(qc).onMutate(NEW);
-
-    expect(cached(qc)[0]?.pendingSuggestions.new).toEqual([]);
-    expect(labelNames(qc)).toEqual([]);
-  });
-
-  test("attaches the label to the open message and settles the pill it came from", async () => {
-    const qc = seedOpen(
-      messageDetail({
-        triageHistory: [
-          triageRun({
-            id: "tr-1",
-            existingLabelSuggestions: [
-              {
-                labelId: "lab-1",
-                name: "Invoices",
-                colorBg: null,
-                colorFg: null,
-                status: "pending",
-              },
-            ],
-          }),
-        ],
-      }),
-    );
-
-    await applyLabelSuggestionMutationOptions(qc).onMutate(EXISTING);
-
-    expect(openLabelNames(qc)).toEqual(["Invoices"]);
-    expect(openSuggestionStatuses(qc)).toEqual(["applied"]);
-  });
-
-  test("settles a new-label pill on the open message without inventing the label", async () => {
-    const qc = seedOpen(
-      messageDetail({
-        triageHistory: [
-          triageRun({
-            id: "tr-1",
-            newLabelSuggestions: [
-              { suggestionId: "sug-1", name: "Receipts", reasoning: null, status: "pending" },
-            ],
-          }),
-        ],
-      }),
-    );
-
-    await applyLabelSuggestionMutationOptions(qc).onMutate(NEW);
-
-    expect(openSuggestionStatuses(qc)).toEqual(["applied"]);
-    expect(openLabelNames(qc)).toEqual([]);
-  });
-
-  // The suggestion accepted belongs to one run; an older run that proposed the
-  // same label was never acted on and still reads as pending.
-  test("settles only the run the suggestion was accepted from", async () => {
-    const suggestion = {
-      labelId: "lab-1",
-      name: "Invoices",
-      colorBg: null,
-      colorFg: null,
-      status: "pending" as const,
-    };
-    const qc = seedOpen(
-      messageDetail({
-        triageHistory: [
-          triageRun({ id: "tr-1", existingLabelSuggestions: [suggestion] }),
-          triageRun({ id: "tr-0", existingLabelSuggestions: [suggestion] }),
-        ],
-      }),
-    );
-
-    await applyLabelSuggestionMutationOptions(qc).onMutate(EXISTING);
-
-    expect(openSuggestionStatuses(qc)).toEqual(["applied", "pending"]);
-  });
-
-  test("puts the open message back when the request failed", async () => {
-    const qc = seedOpen(
-      messageDetail({
-        triageHistory: [
-          triageRun({
-            id: "tr-1",
-            existingLabelSuggestions: [
-              {
-                labelId: "lab-1",
-                name: "Invoices",
-                colorBg: null,
-                colorFg: null,
-                status: "pending",
-              },
-            ],
-          }),
-        ],
-      }),
-    );
-    const options = applyLabelSuggestionMutationOptions(qc);
-
-    options.onError(new Error("boom"), EXISTING, await options.onMutate(EXISTING));
-
-    expect(openLabelNames(qc)).toEqual([]);
-    expect(openSuggestionStatuses(qc)).toEqual(["pending"]);
-  });
-
-  // Accepting a new suggestion creates a Gmail label, so the account's label
-  // list is stale as well as the message.
-  test("re-reads the account's labels afterwards", () => {
-    const qc = seed([listedMessage({})]);
-    qc.setQueryData(["accounts", "acc-1", "labels"], []);
-
-    applyLabelSuggestionMutationOptions(qc).onSuccess(
-      { ok: true, appliedExistingLabelIds: [], createdLabels: [], attached: [] },
-      NEW,
-    );
-
-    expect(qc.getQueryState(["accounts", "acc-1", "labels"])?.isInvalidated).toBe(true);
-  });
-});
-
-// #167. The other half of the same route: the web app sent only `remove`, so a
-// message with no triage run — or one whose suggestions are all settled — had no
-// way to be labelled at all short of selecting it in the list.
 describe("adding a label to a message", () => {
   const INVOICES_LABEL: MessageLabel = {
     id: "lab-1",
@@ -789,40 +590,5 @@ describe("replying", () => {
     expect(calls[0]?.body).toEqual({ subject: "Re: hi", body: "sure" });
     expect(qc.getQueryState(listKey)?.isInvalidated).toBe(true);
     expect(qc.getQueryState(["message", "acc-1", "msg-1"])?.isInvalidated).toBe(true);
-  });
-});
-
-describe("suggesting a filter from a message", () => {
-  test("posts an empty body when the user gave no prompt", async () => {
-    const calls = stubFetch({ suggestions: [] });
-
-    await suggestSimilarFilterMutationOptions(new QueryClient()).mutationFn(INPUT);
-
-    expect(calls[0]?.url).toBe(`${API}/messages/acc-1/msg-1/filter-suggest`);
-    expect(calls[0]?.body).toEqual({});
-  });
-
-  test("passes the prompt along when there is one", async () => {
-    const calls = stubFetch({ suggestions: [] });
-
-    await suggestSimilarFilterMutationOptions(new QueryClient()).mutationFn({
-      ...INPUT,
-      prompt: "everything from this sender",
-    });
-
-    expect(calls[0]?.body).toEqual({ prompt: "everything from this sender" });
-  });
-
-  // The suggestion lands in the filters list and nowhere else: the message it
-  // was derived from is unchanged, so neither the lists nor the detail are
-  // re-read.
-  test("re-reads the filters and leaves the message lists alone", () => {
-    const qc = seed([listedMessage({})]);
-    qc.setQueryData(["filters", "acc-1"], { filters: [] });
-
-    suggestSimilarFilterMutationOptions(qc).onSuccess();
-
-    expect(qc.getQueryState(["filters", "acc-1"])?.isInvalidated).toBe(true);
-    expect(qc.getQueryState(listKey)?.isInvalidated).toBe(false);
   });
 });

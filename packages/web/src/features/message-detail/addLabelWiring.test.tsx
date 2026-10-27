@@ -59,7 +59,7 @@ mock.module("../../api/client", () => ({
 const { MessageDetailPage } = await import("../../pages/MessageDetailPage");
 const { MielToaster } = await import("../../components/MielToaster");
 const { queryKeys } = await import("../../api/queries");
-const { messageDetail, triageRun } = await import("../../api/messageDetail.fixture");
+const { messageDetail } = await import("../../api/messageDetail.fixture");
 
 const settle = async (answer: (call: InFlight) => void) => {
   const call = inFlight.shift();
@@ -166,35 +166,16 @@ afterEach(() => {
 
 describe("the add-label trigger", () => {
   // The header draws its badge row only when there is a badge in it, so the
-  // message that most wants labelling — no labels, no suggestions — had no label
-  // area whatsoever. The trigger has to survive that.
-  test("is on a message with no labels and no suggestions", () => {
+  // message that most wants labelling — no labels at all — had no label area
+  // whatsoever. The trigger has to survive that.
+  test("is on a message with no labels", () => {
     renderPage(messageDetail({ labels: [], triageHistory: [] }));
 
     expect(trigger()).toBeDefined();
   });
 
-  test("is there just the same beside labels and suggestions", () => {
-    renderPage(
-      messageDetail({
-        labels: [asMessageLabel(INVOICES)],
-        latestTriageId: "tr-1",
-        triageHistory: [
-          triageRun({
-            id: "tr-1",
-            existingLabelSuggestions: [
-              {
-                labelId: WORK.id,
-                name: WORK.name,
-                colorBg: null,
-                colorFg: null,
-                status: "pending",
-              },
-            ],
-          }),
-        ],
-      }),
-    );
+  test("is there just the same beside labels", () => {
+    renderPage(messageDetail({ labels: [asMessageLabel(INVOICES)] }));
 
     expect(trigger()).toBeDefined();
     expect(screen.getByRole("button", { name: "Remove label Invoices" })).toBeDefined();

@@ -14,12 +14,10 @@
  * triage is marginally weaker on ambiguous messages, which both prompts already
  * tolerate ("a body is never required for a result").
  *
- * The filter-suggest prompt still branches on whether the user supplied an
- * instruction, and the reply prompt is unchanged.
+ * The reply prompt is unchanged.
  */
 import { REPLY_BODY_TRUNCATION } from "../claudeUsage";
 import { getEnv } from "../env";
-import type { FilterSuggestInputT } from "../schemas/filterSuggest";
 import type { PromoExtractInputT } from "../schemas/promo";
 import type { ReplyGenInputT } from "../schemas/reply";
 import type { TriageInputT } from "../schemas/triage";
@@ -30,13 +28,10 @@ function triagePreamble(input: TriageInputT): string[] {
     "You are an email triage assistant. Classify each message and return strict JSON matching the provided schema.",
     "",
     `Account: ${input.account}`,
-    `Existing labels (verbatim names): ${JSON.stringify(input.existingLabels)}`,
     "",
     "Rules:",
     "- For each input message, produce exactly one results entry with the same id.",
     "- priority: 'high' for time-sensitive personal correspondence, money/legal matters, or anything requiring action soon; 'medium' for newsletters worth reading, account notices, normal work threads; 'low' for marketing, automated noise.",
-    "- applyExistingLabels: zero or more names drawn EXACTLY from the existing labels list above (case-sensitive).",
-    "- suggestNewLabels: propose new labels only when no existing label fits and the theme is recurring. Keep names short (<=40 chars). Reasoning is one sentence.",
     "- reasoning: one or two sentences explaining the priority choice.",
     "",
     "Each message gives you only sender (from), subject, snippet, and current labels.",
@@ -55,7 +50,7 @@ export function buildTriagePrompt(input: TriageInputT): string {
   return [
     ...triagePreamble(input),
     "This is enough for almost every message. ONLY when you genuinely cannot decide",
-    "priority/labels from these (ambiguous sender, empty subject, newsletter-vs-real,",
+    "priority from these (ambiguous sender, empty subject, newsletter-vs-real,",
     "etc.) may you fetch the full message body via the local API:",
     "",
     `  curl -s -H "Authorization: Bearer ${API_SECRET}" \\`,
@@ -79,44 +74,6 @@ export function buildHostedTriagePrompt(input: TriageInputT): string {
     "Classify from sender + subject + snippet even when they are ambiguous — pick the",
     "most likely priority and say so in one sentence; a body is never required for a result.",
     ...triageMessages(input),
-  ].join("\n");
-}
-
-export function buildFilterSuggestPrompt(input: FilterSuggestInputT): string {
-  const hasInstruction = Boolean(input.userInstruction?.trim());
-
-  const intro = hasInstruction
-    ? "You design a Gmail filter from a single message the user picked. Propose a filter that would auto-apply a label to similar future messages. Return strict JSON matching the schema."
-    : "You design Gmail filters. Given a batch of recently fetched messages, propose Gmail filters that would auto-apply an existing label to similar future messages. Return strict JSON matching the schema.";
-
-  // Without an instruction (batch path) labels must come from the existing list.
-  // With an instruction, follow it — the user may ask for a brand-new label.
-  const labelRule = hasInstruction
-    ? "- addLabelName: prefer an EXACT name from the existing labels list (case-sensitive). Only propose a different name if the user instruction clearly asks for a label that does not exist yet."
-    : "- addLabelName MUST be drawn EXACTLY from the existing labels list (case-sensitive). Never invent a new label here.";
-
-  const matchRule = hasInstruction
-    ? "- Base the filter on the single message below: pick the strongest recurring signal (sender domain/address or distinctive subject pattern) that future similar messages would also share."
-    : "- Only suggest a filter when at least two messages share a recurring sender domain, sender address, or distinctive subject pattern that is well-handled by exactly one existing label.";
-
-  return [
-    intro,
-    "",
-    `Account: ${input.account}`,
-    `Existing labels (verbatim names): ${JSON.stringify(input.existingLabels)}`,
-    `Existing filters (do NOT duplicate): ${JSON.stringify(input.existingFilters)}`,
-    ...(hasInstruction ? ["", "User instruction (follow it):", input.userInstruction!.trim()] : []),
-    "",
-    "Rules:",
-    matchRule,
-    labelRule,
-    "- Prefer the narrowest precise criterion. If sender is the strong signal, use criteriaFrom (an address or @domain.tld). Use criteriaSubject only for subject patterns. Use criteriaQuery only when sender/subject alone do not capture the pattern.",
-    "- Never duplicate one of the existing filters above.",
-    "- reasoning: one short sentence citing the pattern you saw.",
-    "- If nothing meets the bar, return an empty suggestions array.",
-    "",
-    "Messages JSON:",
-    JSON.stringify(input.messages),
   ].join("\n");
 }
 

@@ -106,9 +106,12 @@ describe("the message-detail surface", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("still allows a route that isn't an inbox — Filters, from the toast", () => {
-    // Guards the check above from being vacuous: it must be discriminating,
-    // not merely finding no route literals at all.
-    expect(routeLiterals(messageActions)).toContain("/account/:param/filters");
+  test("tells an inbox route from one that isn't", () => {
+    // Guards the check above from being vacuous: the surface currently builds
+    // no route at all, so the check must be shown to discriminate on a sample
+    // rather than merely finding nothing to object to.
+    const sample = "navigate(`/account/${id}/filters`); navigate(`/account/${id}`);";
+    expect(routeLiterals(sample)).toEqual(["/account/:param/filters", "/account/:param"]);
+    expect(routeLiterals(sample).filter(isInboxShaped)).toEqual(["/account/:param"]);
   });
 });

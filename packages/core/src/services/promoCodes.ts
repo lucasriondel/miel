@@ -25,8 +25,8 @@
  * **Two classes of failure, and only one of them is ours.** A malformed answer
  * on one marketing mail is logged and skipped so a sync that triaged fine is
  * not lost to it; a provider that cannot run propagates, through the same
- * {@link recoverUnlessProviderUnavailable} triage and filter-suggest use. A
- * third AI call site inventing its own catch is the exact drift #126 fixed.
+ * {@link recoverUnlessProviderUnavailable} triage uses. A
+ * second AI call site inventing its own catch is the exact drift #126 fixed.
  */
 import { Effect } from "effect";
 import { Claude, ClaudeLive } from "../claude/Claude";

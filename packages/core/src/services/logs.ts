@@ -31,7 +31,6 @@ export interface TriageLogEntry extends LogEntryBase {
   type: "triage";
   candidates: number;
   triaged: number;
-  suggestedNewLabels: number;
   failedBatches: number;
   syncWindowId: string | null;
 }
@@ -81,7 +80,6 @@ export const listRunsEffect = (args: { limit?: number } = {}): Effect.Effect<Log
           error: triageRuns.error,
           candidates: triageRuns.candidates,
           triaged: triageRuns.triaged,
-          suggestedNewLabels: triageRuns.suggestedNewLabels,
           failedBatches: triageRuns.failedBatches,
           syncWindowId: triageRuns.syncWindowId,
         })

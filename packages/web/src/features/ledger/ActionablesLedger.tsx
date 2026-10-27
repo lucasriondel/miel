@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Sparkles } from "lucide-react";
-import { useFilters, useLabels, usePromoSuggestions } from "../../api/queries";
+import { usePromoSuggestions } from "../../api/queries";
 import type { ListedMessage } from "../../api/types";
 import { collectVerificationCodes } from "../codes/collectVerificationCodes";
 import { messageDetailPath } from "../inbox/inboxLocation";
 import { buildLedger } from "./buildLedger";
 import { CodeLedgerRow } from "./CodeLedgerRow";
-import { FilterLedgerRow } from "./FilterLedgerRow";
 import { PromoLedgerRow } from "./PromoLedgerRow";
 import { ledgerSummary } from "./ledgerSummary";
 
@@ -23,14 +22,14 @@ interface Props {
 /**
  * Everything the sync found that can be cleared in a click, as one list.
  *
- * This replaces three stacked sections — the filter proposals card, the
- * verification-code strip and the promo suggestion cards — that between them
- * cost the inbox three containers, three headers and three shapes of action
- * before the first message. They were never three features to the user: each is
+ * This replaces the stacked sections — the verification-code strip and the
+ * promo suggestion cards (and, until it was removed, the AI filter proposals
+ * card) — that each cost the inbox a container, a header and a shape of action
+ * before the first message. They were never separate features to the user: each is
  * the sync saying "here is something I found, deal with it", and the answer is
  * always one click.
  *
- * The three sources keep their own rules and their own endpoints — nothing is
+ * The sources keep their own rules and their own endpoints — nothing is
  * merged on the server, and the queries, keys and invalidation are exactly what
  * they were. Only the presentation is one thing now.
  *
@@ -46,8 +45,6 @@ export const ActionablesLedger = ({
 }: Props) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const filters = useFilters(accountId);
-  const labels = useLabels(accountId);
   const promos = usePromoSuggestions({ accountId, internalDateFrom, internalDateTo });
 
   /**
@@ -60,25 +57,13 @@ export const ActionablesLedger = ({
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
   const dismiss = (id: string) => setDismissed((prev) => new Set(prev).add(id));
 
-  const suggestions = useMemo(
-    () => (filters.data?.suggestions ?? []).filter((s) => s.accountId === accountId),
-    [filters.data, accountId],
-  );
-
-  const labelsByName = useMemo(
-    () => new Map((labels.data ?? []).map((l) => [l.name.toLowerCase(), l])),
-    [labels.data],
-  );
-
   const items = useMemo(
     () =>
       buildLedger({
-        suggestions,
-        labelsByName,
         codes: collectVerificationCodes(messages),
         promos: promos.data?.items ?? [],
       }),
-    [suggestions, labelsByName, messages, promos.data],
+    [messages, promos.data],
   );
 
   const visible = items.filter((item) => !dismissed.has(item.id));
@@ -104,7 +89,6 @@ export const ActionablesLedger = ({
 
       <ul>
         {visible.map((item) => {
-          if (item.kind === "filter") return <FilterLedgerRow key={item.id} item={item} />;
           if (item.kind === "promo") {
             return (
               <PromoLedgerRow

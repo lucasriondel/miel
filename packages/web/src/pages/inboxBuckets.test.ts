@@ -19,7 +19,6 @@ const makeMessage = (priority: Priority | null, idx: number): ListedMessage => (
   triageId: null,
   labels: [],
   attachments: [],
-  pendingSuggestions: { existing: [], new: [] },
 });
 
 describe("bucketMessages", () => {

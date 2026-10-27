@@ -1,11 +1,8 @@
-import type { ReactNode } from "react";
 import type { MessageLabel } from "../api/types";
 import { isSystemLabel } from "./SystemLabelBadge";
 
 interface Props {
   labels: MessageLabel[];
-  /** The row's suggestion trigger, which leads the group when there is one. */
-  suggestion?: ReactNode;
 }
 
 const MAX_BADGES = 3;
@@ -19,21 +16,9 @@ const MAX_BADGES = 3;
 const HIDDEN = new Set(["UNREAD"]);
 
 /**
- * The user's own labels, in front of the subject (req. 5), led by the
- * suggestion trigger where Claude had an opinion.
- *
- * The trigger is a *member* of this group, not a column reserved beside it. It
- * used to sit in a fixed 10rem-wide slot at the row's end, kept empty on rows
- * with nothing suggested so that whether Claude had an opinion could not move
- * the date. A constant-width trigger buys the same promise more cheaply: the
- * disc is 20px including its edge whatever the model said, so nothing downstream
- * of it moves, and a row with no suggestion renders no button and keeps no gap —
- * its subject sits exactly where a label-less row's always did.
- *
- * It leads the group rather than trailing it because trailing would park it at a
- * different x on every row — one label, three labels, none — which is the same
- * complaint that moved it off the row's end. In front, every row that has a
- * suggestion shows it at the same x, with its labels starting together behind it.
+ * The user's own labels, in front of the subject (req. 5). A row with none
+ * renders nothing and keeps no gap, so its subject sits exactly where a
+ * label-less row's always did.
  *
  * System labels are all filtered out here, which is the row's half of req. 3:
  * `CATEGORY_PERSONAL` and `STARRED` are no longer badges on a row at all.
@@ -56,16 +41,15 @@ const HIDDEN = new Set(["UNREAD"]);
  * strip (`RowAddLabelButton`) rather than in this group, so these badges stay
  * what they are — a read-only identifier the eye skims past.
  */
-export const MessageRowLabels = ({ labels, suggestion }: Props) => {
+export const MessageRowLabels = ({ labels }: Props) => {
   const userLabels = labels.filter((l) => !isSystemLabel(l.name) && !HIDDEN.has(l.name));
-  if (userLabels.length === 0 && !suggestion) return null;
+  if (userLabels.length === 0) return null;
 
   const shown = userLabels.slice(0, MAX_BADGES);
   const overflow = userLabels.length - shown.length;
 
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {suggestion}
       {shown.map((l) => (
         <RowLabel key={l.id} name={l.name} colorBg={l.colorBg} colorFg={l.colorFg} />
       ))}

@@ -186,40 +186,6 @@ describe("the badge row", () => {
     expect(rest).not.toContain("quote.pdf");
   });
 
-  test("renders pending suggestions beside them", () => {
-    const html = render({
-      latestTriageId: "tr-1",
-      triageHistory: [
-        {
-          id: "tr-1",
-          priority: "high",
-          reasoning: "quote needs an answer",
-          model: null,
-          createdAt: "2026-06-03T16:06:00.000Z",
-          existingLabelSuggestions: [
-            {
-              labelId: "l2",
-              name: "Vendors",
-              colorBg: null,
-              colorFg: null,
-              status: "pending",
-            },
-          ],
-          newLabelSuggestions: [
-            {
-              suggestionId: "s1",
-              name: "Refrigeration",
-              reasoning: null,
-              status: "pending",
-            },
-          ],
-        },
-      ],
-    });
-    expect(html).toContain("Vendors");
-    expect(html).toContain("Refrigeration");
-  });
-
   test("keeps them on one wrapping row", () => {
     const rest = atRest(render());
     const row = rest.match(/<div class="([^"]*)"><div class="flex flex-wrap/)?.[1];

@@ -1,5 +1,5 @@
 /**
- * The task table — everything triage, reply and filter-suggest each need, in
+ * The task table — everything triage, reply and promo-extract each need, in
  * one place, keyed by task (#128).
  *
  * The `Claude` service used to carry one method per task, and each of them
@@ -30,7 +30,7 @@
  *   escape hatch to reach for.
  *
  * `satisfies Record<ModelTask, …>` is what makes "adding a task means adding a
- * row" true rather than aspirational: a fourth `ModelTask` does not compile
+ * row" true rather than aspirational: a new `ModelTask` does not compile
  * until it has one.
  */
 import { Effect } from "effect";
@@ -40,12 +40,10 @@ import type { ObjectCodec } from "claude-code-effect";
 import { taskSpec, type TaskInput, type TaskOutput, type TaskSpec } from "ai-task-runner-effect";
 import { ClaudeSchemaError } from "../errors";
 import type { ModelTask } from "../providerModels";
-import { FilterSuggestOutput } from "../schemas/filterSuggest";
 import { PromoExtractOutput } from "../schemas/promo";
 import { ReplyGenOutput } from "../schemas/reply";
 import { TriageOutput } from "../schemas/triage";
 import {
-  buildFilterSuggestPrompt,
   buildHostedTriagePrompt,
   buildPromoExtractPrompt,
   buildReplyPrompt,
@@ -96,14 +94,7 @@ export const CLAUDE_TASKS = {
     hostedInstruction: "Generate the reply as JSON.",
     allowedTools: [],
   },
-  filter: {
-    output: zodCodec(FilterSuggestOutput),
-    cliPrompt: buildFilterSuggestPrompt,
-    hostedPrompt: buildFilterSuggestPrompt,
-    hostedInstruction: "Suggest filters as JSON.",
-    allowedTools: [],
-  },
-  // The fourth task (#156), and the row that shows what the table is for: it
+  // The third task (#156), and the row that shows what the table is for: it
   // cost this entry and no copy of the transport branch.
   "promo-extract": {
     output: zodCodec(PromoExtractOutput),

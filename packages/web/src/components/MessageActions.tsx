@@ -1,19 +1,13 @@
 import type { ComponentType, SVGProps } from "react";
-import { forwardRef, useRef } from "react";
-import { Archive, ExternalLink, Filter, Mail, MailOpen, Trash2, Zap } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { forwardRef } from "react";
+import { Archive, ExternalLink, Mail, MailOpen, Trash2, Zap } from "lucide-react";
 import {
   useArchiveMessage,
   useSetMessageRead,
   useSetMessagePriority,
-  useSuggestSimilarFilter,
   useTrashMessage,
 } from "../api/mutations";
-import { ApiError } from "../api/client";
-import { apiErrorMessage } from "../api/apiErrorMessage";
-import type { Priority, SuggestedFilter } from "../api/types";
-import { usePopover } from "../hooks/usePopover";
+import type { Priority } from "../api/types";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
@@ -28,7 +22,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FilterSimilarPopover } from "./FilterSimilarPopover";
 import { RowAddLabelButton } from "../features/labels/RowAddLabelButton";
 import { buildGmailMessageUrl } from "../features/message-detail/gmailUrl";
 import { useReturnToInbox } from "../features/inbox/useReturnToInbox";
@@ -59,16 +52,11 @@ interface Props {
   forceVisible?: boolean;
 }
 
-function describeSuggestion(s: SuggestedFilter): string {
-  const criteria = s.criteriaFrom ?? s.criteriaSubject ?? s.criteriaQuery ?? "message";
-  return `${criteria} → ${s.addLabelName}`;
-}
-
 /**
  * Shared set of message-level actions used by both the row (hover-revealed)
  * and the detail view (always visible). A single source of truth keeps the
- * row and detail in lockstep — same icons, same labels, same Filter-similar
- * popover and Change-priority menu.
+ * row and detail in lockstep — same icons, same labels, same Change-priority
+ * menu.
  *
  * Variant controls presentation and post-action navigation: `row` overlays
  * the actions on hover and stays put after trash; `detail` shows them inline
@@ -87,15 +75,11 @@ export const MessageActions = ({
   appliedLabelIds,
   forceVisible,
 }: Props) => {
-  const navigate = useNavigate();
   const returnToInbox = useReturnToInbox();
   const setRead = useSetMessageRead();
   const archive = useArchiveMessage();
   const trash = useTrashMessage();
   const setPriority = useSetMessagePriority();
-  const suggestFilter = useSuggestSimilarFilter();
-  const filterMenu = usePopover<HTMLDivElement>();
-  const filterTriggerRef = useRef<HTMLButtonElement>(null);
 
   const input = { accountId, gmailMessageId };
   const busy = setRead.isPending || archive.isPending || trash.isPending;
@@ -114,38 +98,6 @@ export const MessageActions = ({
 
   const handlePrioritySelect = (newPriority: Priority) => {
     setPriority.mutate({ ...input, priority: newPriority });
-  };
-
-  const handleFilterSubmit = (prompt: string) => {
-    if (suggestFilter.isPending) return;
-    suggestFilter.mutate(
-      { ...input, prompt: prompt || undefined },
-      {
-        onSuccess: ({ suggestion, created }) => {
-          filterMenu.close();
-          if (!suggestion) {
-            toast.info("The AI could not propose a filter for this message.");
-            return;
-          }
-          const goToFilters = () => navigate(`/account/${accountId}/filters`);
-          toast.success(created ? "Filter suggested" : "Filter already suggested", {
-            description: describeSuggestion(suggestion),
-            action: { label: "View on Filters", onClick: goToFilters },
-          });
-        },
-        onError: (err) => {
-          filterMenu.close();
-          if (
-            err instanceof ApiError &&
-            (err.body as { error?: string } | undefined)?.error === "claude_not_logged_in"
-          ) {
-            toast.error("The AI provider is not logged in.");
-            return;
-          }
-          toast.error(`Could not suggest a filter: ${apiErrorMessage(err)}`);
-        },
-      },
-    );
   };
 
   const onToggleRead = () => {
@@ -200,22 +152,6 @@ export const MessageActions = ({
           appliedLabelIds={appliedLabelIds ?? []}
         />
       ) : null}
-      <div ref={filterMenu.ref} className="relative">
-        <ActionButton
-          ref={filterTriggerRef}
-          Icon={Filter}
-          label="Filter similar"
-          onClick={filterMenu.toggle}
-          variant={variant}
-        />
-        <FilterSimilarPopover
-          open={filterMenu.open}
-          anchorRef={filterTriggerRef}
-          panelRef={filterMenu.panelRef}
-          isPending={suggestFilter.isPending}
-          onSubmit={handleFilterSubmit}
-        />
-      </div>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={

@@ -109,61 +109,6 @@ describe("getMessageDetailEffect", () => {
     });
     expect(detail?.latestTriageId).toBe("t-second");
   });
-
-  // Unlike the list, the detail shows what became of every suggestion — that is
-  // what makes it a history rather than a second inbox.
-  test("groups every suggestion under its own triage, whatever its status", async () => {
-    stores.mailbox.add.triage({
-      id: "t-first",
-      accountId: ACCOUNT,
-      gmailMessageId: "m1",
-      priority: "low",
-      createdAt: "2026-03-01T10:00:00.000Z",
-    });
-    stores.mailbox.add.triage({
-      id: "t-second",
-      accountId: ACCOUNT,
-      gmailMessageId: "m1",
-      priority: "high",
-      createdAt: "2026-03-01T11:00:00.000Z",
-    });
-    stores.mailbox.add.existingSuggestion({
-      triageId: "t-first",
-      labelId: "label-1",
-      status: "applied",
-    });
-    stores.mailbox.add.existingSuggestion({ triageId: "t-second", labelId: "label-1" });
-    stores.mailbox.add.newSuggestion({
-      suggestionId: "s1",
-      triageId: "t-first",
-      name: "Receipts",
-      reasoning: "recurring vendor",
-      status: "dismissed",
-    });
-
-    const detail = await stores.run(getMessageDetailEffect(REF));
-    const [second, first] = detail!.triageHistory;
-
-    expect(second.existingLabelSuggestions).toEqual([
-      {
-        labelId: "label-1",
-        name: "Invoices",
-        colorBg: null,
-        colorFg: null,
-        status: "pending",
-      },
-    ]);
-    expect(second.newLabelSuggestions).toEqual([]);
-    expect(first.existingLabelSuggestions[0].status).toBe("applied");
-    expect(first.newLabelSuggestions).toEqual([
-      {
-        suggestionId: "s1",
-        name: "Receipts",
-        reasoning: "recurring vendor",
-        status: "dismissed",
-      },
-    ]);
-  });
 });
 
 describe("the connected accounts", () => {

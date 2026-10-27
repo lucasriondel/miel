@@ -43,7 +43,8 @@ const COPY: Record<string, Copy> = {
   "https://www.googleapis.com/auth/gmail.settings.basic": {
     permission: "Gmail basic settings",
     consentWording: "See, edit, create, or change your email settings and filters in Gmail",
-    feature: "List your Gmail filters, and create the ones you accept from Miel's suggestions.",
+    feature:
+      "List your Gmail filters, delete the ones you no longer want, and merge several into one.",
   },
   "https://www.googleapis.com/auth/userinfo.profile": {
     permission: "User info: profile",

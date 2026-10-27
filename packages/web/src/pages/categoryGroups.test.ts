@@ -42,7 +42,6 @@ const message = ({
   triageId: null,
   labels: labels.map(label),
   attachments: [],
-  pendingSuggestions: { existing: [], new: [] },
 });
 
 describe("categoryOf", () => {

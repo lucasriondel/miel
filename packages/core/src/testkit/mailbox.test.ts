@@ -141,11 +141,6 @@ describe("the in-memory triage store", () => {
 
     expect(history.map((t) => t.reasoning)).toEqual(["second", "first"]);
   });
-
-  test("reads no suggestions for no triages", async () => {
-    expect(await stores.run(TriageStore.existingSuggestionsFor([]))).toEqual([]);
-    expect(await stores.run(TriageStore.newSuggestionsFor([]))).toEqual([]);
-  });
 });
 
 describe("the in-memory label store", () => {

@@ -21,7 +21,6 @@ const message = (over: Partial<ListedMessage> = {}): ListedMessage => ({
   triageId: null,
   labels: [],
   attachments: [],
-  pendingSuggestions: { existing: [], new: [] },
   ...over,
 });
 

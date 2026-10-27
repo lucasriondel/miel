@@ -50,8 +50,6 @@ const runBatches = (err: unknown, events: SyncServerEventT[]) =>
       accountEmail: "user@example.com",
       batches: [[makeMessage("m1")], [makeMessage("m2")]],
       labelsByGmailId: new Map(),
-      labelsByName: new Map(),
-      existingLabelNames: [],
       batchConcurrency: 2,
       log: () => {},
       emit: (e) => events.push(e),

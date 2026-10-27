@@ -87,10 +87,10 @@ const renderSection = (filters = [NEWSLETTER, DIGEST, INVOICES]) => {
     defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
   });
   // A cached list for the mutation's invalidation to land on.
-  qc.setQueryData(queryKeys.filters(ACCOUNT.id), { filters, suggestions: [] });
+  qc.setQueryData(queryKeys.filters(ACCOUNT.id), { filters });
   const view = render(
     <QueryClientProvider client={qc}>
-      <AccountFiltersSection account={ACCOUNT} filters={filters} suggestions={[]} labels={LABELS} />
+      <AccountFiltersSection account={ACCOUNT} filters={filters} labels={LABELS} />
     </QueryClientProvider>,
   );
   return { ...view, qc };

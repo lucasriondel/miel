@@ -23,9 +23,7 @@ const failedRun = (account: string, error: string): SyncRunResult => ({
   account,
   fetched: 0,
   triaged: 0,
-  suggestedNewLabels: 0,
   filtersSynced: 0,
-  suggestedFilters: 0,
   errors: [error],
 });
 

@@ -9,22 +9,6 @@ interface Props {
 }
 
 export const MessageDetailHeader = ({ message }: Props) => {
-  const latest = message.triageHistory[0];
-  const existingSuggestions =
-    latest?.existingLabelSuggestions
-      .filter((s) => s.status === "pending")
-      .filter((s) => !message.labels.some((l) => l.id === s.labelId))
-      .map((s) => ({
-        labelId: s.labelId,
-        name: s.name,
-        colorBg: s.colorBg,
-        colorFg: s.colorFg,
-      })) ?? [];
-  const newSuggestions =
-    latest?.newLabelSuggestions
-      .filter((s) => s.status === "pending")
-      .map((s) => ({ suggestionId: s.suggestionId, name: s.name })) ?? [];
-
   return (
     <header className="flex flex-col gap-3 border-b border-gousse-line/50 pb-6">
       <h1 className="text-2xl font-bold text-gousse-ink text-balance leading-tight">
@@ -41,11 +25,7 @@ export const MessageDetailHeader = ({ message }: Props) => {
         <MessageLabels
           accountId={message.accountId}
           gmailMessageId={message.gmailMessageId}
-          triageId={latest?.id ?? null}
           labels={message.labels}
-          existingSuggestions={existingSuggestions}
-          newSuggestions={newSuggestions}
-          variant="full"
         />
         <AddLabelButton message={message} />
       </div>

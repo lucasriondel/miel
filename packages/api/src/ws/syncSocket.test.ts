@@ -35,7 +35,6 @@ mock.module("@miel/core", () => ({
       account: "user@example.com",
       candidates: 0,
       triaged: 0,
-      suggestedNewLabels: 0,
       errors: [],
     };
   },

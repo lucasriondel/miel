@@ -60,9 +60,9 @@ export const PRIVACY: LegalPage = {
         "Labels: every Gmail label on your account, and which labels are on which message, plus whether Miel has archived or trashed the message.",
         "Threads: the thread each message belongs to, so a conversation can be shown and acted on as one.",
         "Attachments: filename, media type and size. The attachment's contents are not stored — the bytes are fetched from Gmail only at the moment you open or download one.",
-        "Filters: the Gmail filters on your account, with their criteria and actions, and any filter Miel has suggested to you.",
+        "Filters: the Gmail filters on your account, with their criteria and actions.",
         "Account profile: the connected account's email address, display name and avatar URL, the permissions you granted, and when you connected it.",
-        "The AI's output: for each message, the priority it assigned, the reasoning it gave, the labels it suggested, and which model produced them — plus a log of each sync and triage run with counts, timings and any error.",
+        "The AI's output: for each message, the priority it assigned, the reasoning it gave, and which model produced them — plus a log of each sync and triage run with counts, timings and any error.",
         "Discount codes: when a synced message looks promotional, the code, the discount, its terms, its expiry date and the merchant, as the AI read them out of that message and keyed back to it.",
       ],
     },
@@ -70,9 +70,9 @@ export const PRIVACY: LegalPage = {
       id: "what-goes-to-the-ai-provider",
       heading: "What leaves your machine: your AI provider",
       body: [
-        `Miel does not classify mail itself. It sends it to the AI provider you pick in settings — Anthropic's Claude through the local Claude Code CLI or Anthropic's API, or Google's or OpenAI's API — which returns a priority, suggested labels and its reasoning, and which drafts replies when you ask for one. That provider is the only place your message content leaves your machine, and it is the part of ${SITE_NAME} you should decide about before you connect an account.`,
+        `Miel does not classify mail itself. It sends it to the AI provider you pick in settings — Anthropic's Claude through the local Claude Code CLI or Anthropic's API, or Google's or OpenAI's API — which returns a priority and its reasoning, and which drafts replies when you ask for one. That provider is the only place your message content leaves your machine, and it is the part of ${SITE_NAME} you should decide about before you connect an account.`,
         `Triage sends the sender, subject, Gmail's preview snippet and the labels already on the message — batched, at up to ${count(DEFAULT_TRIAGE_BATCH_SIZE)} messages per request by default and at most ${count(MAX_TRIAGE_BATCH_SIZE)} if you raise the batch size in settings. Full bodies are not part of that request. Through the Claude Code CLI, and only there, the model can ask Miel for one message's body through the local API when the preview is not enough to decide; a provider called over its API has no way to and is never sent one.`,
-        `Only ${amount(BODY_BEARING_TASKS.length)} kinds of request carry a whole message body, and each is truncated to the first ${count(REPLY_BODY_TRUNCATION)} characters — anything beyond that is never sent. ${bodyBearingSentences()} Filter suggestions send the sender, subject and snippet only.`,
+        `Only ${amount(BODY_BEARING_TASKS.length)} kinds of request carry a whole message body, and each is truncated to the first ${count(REPLY_BODY_TRUNCATION)} characters — anything beyond that is never sent. ${bodyBearingSentences()}`,
         "You supply your own credential for whichever provider you pick, so these requests are made on your account and are governed by whatever agreement you have with that vendor — not by anything between you and me.",
       ],
     },
@@ -116,7 +116,7 @@ export const PRIVACY: LegalPage = {
       heading: "Deleting your data",
       body: [
         `There is no in-app disconnect button and no "delete my data" flow. Neither has been built, and this page is not going to imply otherwise. For the one instance I run, deletion is by email request: write to ${CONTACT_EMAIL} and I will delete the account and everything attached to it.`,
-        "For your own instance there is nobody to ask — you delete the account row and the database removes the messages, labels, triages, suggestions, filters and run logs that depend on it.",
+        "For your own instance there is nobody to ask — you delete the account row and the database removes the messages, labels, triages, filters, promo codes and run logs that depend on it.",
       ],
     },
     {

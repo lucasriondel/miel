@@ -56,10 +56,6 @@ function formatElapsed(ms: number): string {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-function filtersToastId(account: string): string {
-  return `sync:filters:${account}`;
-}
-
 function dispatchEvent(
   event: ReceivedSyncServerEventT,
   qc: QueryClient,
@@ -123,11 +119,6 @@ function dispatchEvent(
       });
       return;
     }
-    case "filters.started":
-      toast.loading("AI is finding potential new filters…", {
-        id: filtersToastId(event.account),
-      });
-      return;
     case "triage.finished": {
       toast.dismiss(triageToastId(event.account));
       const elapsed = formatElapsed(event.elapsedMs);
@@ -138,28 +129,17 @@ function dispatchEvent(
         });
       } else {
         toast.success(`AI finished triaging ${event.account}`, {
-          description:
-            event.suggestedNewLabels > 0
-              ? `${event.triaged} triaged in ${elapsed}, ${event.suggestedNewLabels} new label suggestion${event.suggestedNewLabels === 1 ? "" : "s"}`
-              : `${event.triaged} triaged in ${elapsed}`,
+          description: `${event.triaged} triaged in ${elapsed}`,
         });
       }
       qc.invalidateQueries({ queryKey: ["messages"] });
       qc.invalidateQueries({ queryKey: queryKeys.accounts });
       return;
     }
-    case "filters.finished": {
-      toast.dismiss(filtersToastId(event.account));
-      if (event.suggestedFilters > 0) {
-        toast.success(
-          `Filters: ${event.suggestedFilters} suggestion${event.suggestedFilters === 1 ? "" : "s"}`,
-        );
-      }
-      qc.invalidateQueries({ queryKey: ["filters"] });
-      return;
-    }
     case "sync.finished": {
       qc.invalidateQueries({ queryKey: queryKeys.accounts });
+      // The fetch phase re-reads each account's Gmail filters.
+      qc.invalidateQueries({ queryKey: ["filters"] });
       return;
     }
     case "sync.error":
@@ -199,12 +179,11 @@ function dispatchEvent(
     case "sync.provider_unavailable": {
       // The chosen provider cannot run — no credential, or one it rejected — and
       // the credential and the provider pick are global, so every account would
-      // fail the same way. Dismiss any hung triage/filter loaders and point at
+      // fail the same way. Dismiss any hung triage loaders and point at
       // Settings.
       const accounts = Array.from(batchCounts.keys());
       for (const a of accounts) {
         toast.dismiss(triageToastId(a));
-        toast.dismiss(filtersToastId(a));
       }
       toast.error("AI is not configured", {
         description: "Add the provider's credential in Settings to enable triage.",

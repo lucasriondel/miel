@@ -111,7 +111,7 @@ editing the message list is the normal way to change what the picture shows.
 
 Read `packages/cli/scripts/seed-demo.ts` when the user wants different mail in
 the shot — the messages, the labels (the user's four and the Gmail system ones),
-the priorities, the promo codes and the one suggested filter are all literals at
+the priorities and the promo codes are all literals at
 the top of that file. Three of those literals are load-bearing for a surface
 that is otherwise empty in the frame, so a message list edited without them
 quietly drops a feature out of the picture:
@@ -123,8 +123,7 @@ quietly drops a feature out of the picture:
   promo rows in the actionables ledger above the inbox — capped at six, deduped
   by code, and hidden once expired — and `saved: true` ones are the Promo Codes
   page's rows. The seed carries **one** unsaved promo on purpose: promos sort
-  last in that ledger (below the filter proposal and every fresh verification
-  code), so each extra one pushes the ledger further down the frame. Adding more
+  last in that ledger (below every fresh verification code), so each extra one pushes the ledger further down the frame. Adding more
   means re-checking that the capture still frames them — it refuses to shoot a
   frame with no promo row visible.
 - **`isTrashed`** goes with `saved: true`, because saving a promo trashes its

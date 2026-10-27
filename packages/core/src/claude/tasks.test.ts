@@ -20,7 +20,6 @@ const { CLAUDE_TASKS, claudeTaskSpec } = await import("./tasks");
 // suite is the half that keeps it honest against the prompts themselves.
 import { BODY_BEARING_TASKS } from "../claudeUsage";
 import { MODEL_TASKS, type ModelTask } from "../providerModels";
-import type { FilterSuggestInputT } from "../schemas/filterSuggest";
 import type { PromoExtractInputT } from "../schemas/promo";
 import type { ReplyGenInputT } from "../schemas/reply";
 import type { TriageInputT } from "../schemas/triage";
@@ -28,7 +27,6 @@ import type { TriageInputT } from "../schemas/triage";
 const TRIAGE: TriageInputT = {
   account: "user@example.com",
   accountId: "acc-1",
-  existingLabels: ["Receipts"],
   messages: [
     {
       id: "m1",
@@ -48,13 +46,6 @@ const REPLY: ReplyGenInputT = {
   userInstruction: "Say thanks.",
 };
 
-const FILTER: FilterSuggestInputT = {
-  account: "user@example.com",
-  existingLabels: ["Receipts"],
-  existingFilters: [],
-  messages: TRIAGE.messages,
-};
-
 const PROMO: PromoExtractInputT = {
   from: "Zara <newsletter@email.marketing-cloud.example.com>",
   subject: "Your 20% weekend",
@@ -66,7 +57,6 @@ const PROMO: PromoExtractInputT = {
 const INPUTS: { [K in ModelTask]: Parameters<(typeof CLAUDE_TASKS)[K]["cliPrompt"]>[0] } = {
   triage: TRIAGE,
   reply: REPLY,
-  filter: FILTER,
   "promo-extract": PROMO,
 };
 
@@ -116,7 +106,7 @@ describe("the task table", () => {
   // asserted together. It is the guard that keeps triage's body-fetch
   // paragraph — the one carrying API_SECRET — out of a task that has no tool
   // to act on it and no business posting it anywhere (#156).
-  test.each(["reply", "filter", "promo-extract"] as const)(
+  test.each(["reply", "promo-extract"] as const)(
     "%s hands both transports the same prompt, and it names no local API",
     (task) => {
       const { cli, hosted } = promptsFor(task);
@@ -133,7 +123,6 @@ describe("the task table", () => {
   test("only triage may use a tool, and only Bash", () => {
     expect(claudeTaskSpec("triage").allowedTools).toEqual(["Bash"]);
     expect(claudeTaskSpec("reply").allowedTools).toEqual([]);
-    expect(claudeTaskSpec("filter").allowedTools).toEqual([]);
     expect(claudeTaskSpec("promo-extract").allowedTools).toEqual([]);
   });
 

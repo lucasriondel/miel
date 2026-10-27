@@ -33,7 +33,7 @@ describe("the local CLI is always runnable at save time", () => {
   });
 
   test("so a fresh install, which has no credential at all, passes every task", () => {
-    for (const task of ["triage", "reply", "filter"] as const) {
+    for (const task of ["triage", "reply", "promo-extract"] as const) {
       expect(taskProviderProblem(task, DEFAULTS, NOTHING_CONFIGURED)).toBeNull();
     }
   });
@@ -67,13 +67,13 @@ describe("a hosted provider needs a stored credential", () => {
 
   test("checks the vendor being selected, not some other one that has a key", () => {
     const rejection = rejectModelPatch(
-      { filterProvider: "google", filterModel: "gemini-2.5-pro" },
+      { "promo-extractProvider": "google", "promo-extractModel": "gemini-2.5-pro" },
       DEFAULTS,
       configuredSet("anthropic"),
     );
 
     expect(rejection?.provider).toBe("google");
-    expect(rejection?.task).toBe("filter");
+    expect(rejection?.task).toBe("promo-extract");
   });
 
   test("names the first task in the request that cannot run", () => {
@@ -114,11 +114,11 @@ describe("a hosted provider needs a stored credential", () => {
 
   test("leaves a task the patch does not touch alone", () => {
     // A vendor whose key went away out of band must not make every unrelated
-    // save fail; the user is editing triage, not filter.
+    // save fail; the user is editing triage, not promo extraction.
     const current: ModelSettings = {
       ...DEFAULTS,
-      filterProvider: "openai",
-      filterModel: "o4-mini",
+      "promo-extractProvider": "openai",
+      "promo-extractModel": "o4-mini",
     };
 
     expect(
@@ -164,7 +164,7 @@ describe("the model has to be one the provider serves", () => {
   });
 
   test("leaves a model id stored before the catalogue existed where it is", () => {
-    const current: ModelSettings = { ...DEFAULTS, filterModel: "some-old-custom-id" };
+    const current: ModelSettings = { ...DEFAULTS, "promo-extractModel": "some-old-custom-id" };
 
     expect(
       rejectModelPatch({ triageModel: "claude-sonnet-4-6" }, current, NOTHING_CONFIGURED),

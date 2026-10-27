@@ -3,21 +3,16 @@
 //
 // The database is reached only through the store seam (#136): `MessageStore`
 // and `TriageStore` hold the queries, and what is left here is the assembly —
-// how a page's cursor is encoded, which suggestions still count as pending,
-// and what a message looks like once its labels, attachments and triage history
+// how a page's cursor is encoded and what a message looks like once its labels, attachments and triage history
 // are hung off it.
 import { Effect } from "effect";
 import {
   MessageStore,
   TriageStore,
-  type ListedMessageRow,
   type MessageLabelRow,
   type MessageRef,
-  type StoredExistingSuggestion,
-  type StoredNewSuggestion,
 } from "../stores/contracts";
 import { runWithStores } from "../stores/postgres";
-import { getLatestTriageForMessage } from "./apply";
 
 export interface ListedAttachment {
   attachmentId: string;
@@ -49,15 +44,6 @@ export interface ListedMessage {
     colorFg: string | null;
   }[];
   attachments: ListedAttachment[];
-  pendingSuggestions: {
-    existing: {
-      labelId: string;
-      name: string;
-      colorBg: string | null;
-      colorFg: string | null;
-    }[];
-    new: { suggestionId: string; name: string }[];
-  };
 }
 
 export interface ListMessagesArgs {
@@ -127,7 +113,7 @@ const listedLabel = (row: MessageLabelRow) => ({
 
 export const listMessagesEffect = (
   args: ListMessagesArgs,
-): Effect.Effect<ListMessagesResult, never, MessageStore | TriageStore> =>
+): Effect.Effect<ListMessagesResult, never, MessageStore> =>
   Effect.gen(function* () {
     const decoded = args.cursor ? decodeCursor(args.cursor) : null;
 
@@ -182,8 +168,6 @@ export const listMessagesEffect = (
       size: a.size,
     }));
 
-    const { existing, new: proposed } = yield* pendingSuggestionsFor(slice, labelsByMsg);
-
     const items: ListedMessage[] = slice.map((r) => {
       const key = keyOf(r);
       return {
@@ -203,79 +187,10 @@ export const listMessagesEffect = (
         triageId: r.triageId,
         labels: labelsByMsg.get(key) ?? [],
         attachments: attachmentsByMsg.get(key) ?? [],
-        pendingSuggestions: {
-          existing: existing.get(key) ?? [],
-          new: proposed.get(key) ?? [],
-        },
       };
     });
 
     return { items, nextCursor };
-  });
-
-/**
- * What is still worth showing on a listed message: the pending suggestions of
- * its newest triage, minus the ones whose label is already attached.
- *
- * That last subtraction is the rule the list exists for — a suggestion accepted
- * out of band (a filter, Gmail itself) would otherwise be offered again beside
- * the label it produced.
- */
-const pendingSuggestionsFor = (
-  rows: readonly ListedMessageRow[],
-  labelsByMsg: Map<string, ListedMessage["labels"]>,
-): Effect.Effect<
-  {
-    existing: Map<string, ListedMessage["pendingSuggestions"]["existing"]>;
-    new: Map<string, ListedMessage["pendingSuggestions"]["new"]>;
-  },
-  never,
-  TriageStore
-> =>
-  Effect.gen(function* () {
-    const existing = new Map<string, ListedMessage["pendingSuggestions"]["existing"]>();
-    const proposed = new Map<string, ListedMessage["pendingSuggestions"]["new"]>();
-
-    const triageToMsg = new Map<string, MessageRef>();
-    for (const r of rows) {
-      if (r.triageId) triageToMsg.set(r.triageId, r);
-    }
-    const triageIds = [...triageToMsg.keys()];
-    if (triageIds.length === 0) return { existing, new: proposed };
-
-    const [existingRows, newRows] = yield* Effect.all([
-      TriageStore.existingSuggestionsFor(triageIds),
-      TriageStore.newSuggestionsFor(triageIds),
-    ]);
-
-    for (const s of existingRows) {
-      if (s.status !== "pending") continue;
-      const msg = triageToMsg.get(s.triageId);
-      if (!msg) continue;
-      const key = keyOf(msg);
-      const alreadyApplied = (labelsByMsg.get(key) ?? []).some((l) => l.id === s.labelId);
-      if (alreadyApplied) continue;
-      const list = existing.get(key) ?? [];
-      list.push({
-        labelId: s.labelId,
-        name: s.name,
-        colorBg: s.colorBg,
-        colorFg: s.colorFg,
-      });
-      existing.set(key, list);
-    }
-
-    for (const s of newRows) {
-      if (s.status !== "pending") continue;
-      const msg = triageToMsg.get(s.triageId);
-      if (!msg) continue;
-      const key = keyOf(msg);
-      const list = proposed.get(key) ?? [];
-      list.push({ suggestionId: s.suggestionId, name: s.name });
-      proposed.set(key, list);
-    }
-
-    return { existing, new: proposed };
   });
 
 export interface MessageDetail {
@@ -308,51 +223,9 @@ export interface MessageDetail {
     reasoning: string;
     model: string | null;
     createdAt: string;
-    existingLabelSuggestions: {
-      labelId: string;
-      name: string;
-      colorBg: string | null;
-      colorFg: string | null;
-      status: "pending" | "applied" | "dismissed";
-    }[];
-    newLabelSuggestions: {
-      suggestionId: string;
-      name: string;
-      reasoning: string | null;
-      status: "pending" | "applied" | "dismissed";
-    }[];
   }[];
   latestTriageId: string | null;
 }
-
-/** Group suggestion rows by the triage they belong to. */
-function byTriage<Row extends { triageId: string }, Out>(
-  rows: readonly Row[],
-  shape: (row: Row) => Out,
-): Map<string, Out[]> {
-  const grouped = new Map<string, Out[]>();
-  for (const row of rows) {
-    const list = grouped.get(row.triageId) ?? [];
-    list.push(shape(row));
-    grouped.set(row.triageId, list);
-  }
-  return grouped;
-}
-
-const detailExistingSuggestion = (s: StoredExistingSuggestion) => ({
-  labelId: s.labelId,
-  name: s.name,
-  colorBg: s.colorBg,
-  colorFg: s.colorFg,
-  status: s.status,
-});
-
-const detailNewSuggestion = (s: StoredNewSuggestion) => ({
-  suggestionId: s.suggestionId,
-  name: s.name,
-  reasoning: s.reasoning,
-  status: s.status,
-});
 
 export const getMessageDetailEffect = (
   args: MessageRef,
@@ -368,24 +241,12 @@ export const getMessageDetailEffect = (
       TriageStore.historyFor(args),
     ]);
 
-    // The whole history, not just the pending part: the detail page shows what
-    // was suggested and what became of it.
-    const triageIds = triageRows.map((t) => t.id);
-    const [existingSugs, newSugs] = yield* Effect.all([
-      TriageStore.existingSuggestionsFor(triageIds),
-      TriageStore.newSuggestionsFor(triageIds),
-    ]);
-    const existingByTriage = byTriage(existingSugs, detailExistingSuggestion);
-    const newByTriage = byTriage(newSugs, detailNewSuggestion);
-
     const triageHistory = triageRows.map((t) => ({
       id: t.id,
       priority: t.priority,
       reasoning: t.reasoning,
       model: t.model,
       createdAt: t.createdAt.toISOString(),
-      existingLabelSuggestions: existingByTriage.get(t.id) ?? [],
-      newLabelSuggestions: newByTriage.get(t.id) ?? [],
     }));
 
     return {
@@ -490,5 +351,3 @@ export async function setMessagePriority(args: {
 }): Promise<{ ok: true }> {
   return runWithStores(setMessagePriorityEffect(args));
 }
-
-export { getLatestTriageForMessage };

@@ -109,8 +109,8 @@ describe("checkedUpdateModelSettingsEffect", () => {
 
     const refusal = refusalOf(
       doors.checkedUpdateModelSettingsEffect({
-        filterProvider: "google",
-        filterModel: "gpt-4.1",
+        "promo-extractProvider": "google",
+        "promo-extractModel": "gpt-4.1",
       }),
     );
 
@@ -162,12 +162,12 @@ describe("resolveTaskProviderEffect", () => {
   test("fails with the same rejection when the vendor's key has gone away", () => {
     const current: ModelSettings = {
       ...DEFAULTS,
-      filterProvider: "openai",
-      filterModel: "o4-mini",
+      "promo-extractProvider": "openai",
+      "promo-extractModel": "o4-mini",
     };
     const { doors } = recordingDoors(current, []);
 
-    const refusal = refusalOf(doors.resolveTaskProviderEffect("filter"));
+    const refusal = refusalOf(doors.resolveTaskProviderEffect("promo-extract"));
 
     expect(refusal.reason).toBe("missing_provider_credential");
     expect(refusal.provider).toBe("openai");

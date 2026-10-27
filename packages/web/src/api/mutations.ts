@@ -8,13 +8,11 @@ import type {
   EditedPromo,
   ExtractPromosResult,
   ListedMessage,
-  MessageDetail,
   MessageLabel,
   ModelSettings,
   PromoFieldsPatch,
   PromoSuggestion,
   SavePromoResult,
-  SuggestFilterForMessageResult,
   TriageBatchSettings,
 } from "./types";
 import {
@@ -588,209 +586,6 @@ export function useBatchMessageAction() {
   return useMutation(batchMessageActionMutationOptions(qc));
 }
 
-export type ApplyLabelSuggestionInput = MessageActionInput & {
-  triageId: string;
-} & (
-    | {
-        kind: "existing";
-        labelId: string;
-        name: string;
-        colorBg: string | null;
-        colorFg: string | null;
-      }
-    | { kind: "new"; suggestionId: string }
-  );
-
-export interface ApplyLabelSuggestionResult {
-  ok: true;
-  appliedExistingLabelIds: string[];
-  createdLabels: { suggestionId: string; labelId: string; name: string }[];
-  attached: { gmailLabelId: string; name: string }[];
-}
-
-type TriageRun = MessageDetail["triageHistory"][number];
-
-/**
- * Mark the accepted suggestion settled on the run it was accepted from.
- *
- * The detail's pills are the run's suggestions filtered by `status`, so this is
- * what makes one disappear — and it is scoped to `triageId` because an older run
- * that proposed the same label was not acted on and still reads as pending.
- */
-function withSuggestionApplied(run: TriageRun, input: ApplyLabelSuggestionInput): TriageRun {
-  if (run.id !== input.triageId) return run;
-  return input.kind === "existing"
-    ? {
-        ...run,
-        existingLabelSuggestions: run.existingLabelSuggestions.map((s) =>
-          s.labelId === input.labelId ? { ...s, status: "applied" } : s,
-        ),
-      }
-    : {
-        ...run,
-        newLabelSuggestions: run.newLabelSuggestions.map((s) =>
-          s.suggestionId === input.suggestionId ? { ...s, status: "applied" } : s,
-        ),
-      };
-}
-
-/**
- * Accepting one label suggestion.
- *
- * An existing label can be attached optimistically because it is already
- * known; a new one is created server-side, so only the suggestion that produced
- * it can be cleared. Either way the account's label list is stale too.
- */
-export function applyLabelSuggestionMutationOptions(qc: QueryClient) {
-  return messageMutationOptions<ApplyLabelSuggestionInput, ApplyLabelSuggestionResult>(qc, {
-    request: (input) => ({
-      path: `/messages/${input.accountId}/${input.gmailMessageId}/apply-suggestions`,
-      method: "POST",
-      body: {
-        triageId: input.triageId,
-        acceptExistingLabelIds: input.kind === "existing" ? [input.labelId] : undefined,
-        acceptNewSuggestionIds: input.kind === "new" ? [input.suggestionId] : undefined,
-      },
-    }),
-    optimistic: (input) => (m) => {
-      if (!sameMessage(m, input)) return m;
-      if (input.kind === "new") {
-        return {
-          ...m,
-          pendingSuggestions: {
-            ...m.pendingSuggestions,
-            new: m.pendingSuggestions.new.filter((s) => s.suggestionId !== input.suggestionId),
-          },
-        };
-      }
-      return {
-        ...withLabel(m, {
-          id: input.labelId,
-          name: input.name,
-          gmailLabelId: input.labelId,
-          colorBg: input.colorBg,
-          colorFg: input.colorFg,
-        }),
-        pendingSuggestions: {
-          ...m.pendingSuggestions,
-          existing: m.pendingSuggestions.existing.filter((s) => s.labelId !== input.labelId),
-        },
-      };
-    },
-    optimisticDetail: (input) => (d) => {
-      const settled = {
-        ...d,
-        triageHistory: d.triageHistory.map((run) => withSuggestionApplied(run, input)),
-      };
-      return input.kind === "new"
-        ? settled
-        : withLabel(settled, {
-            id: input.labelId,
-            name: input.name,
-            gmailLabelId: input.labelId,
-            colorBg: input.colorBg,
-            colorFg: input.colorFg,
-          });
-    },
-    alsoInvalidate: (input) => [queryKeys.labels(input.accountId)],
-  });
-}
-
-export function useApplyLabelSuggestion() {
-  const qc = useQueryClient();
-  return useMutation(applyLabelSuggestionMutationOptions(qc));
-}
-
-export interface SuggestionBatchInput extends MessageActionInput {
-  triageId: string;
-  /** Every pending existing suggestion of the triage, so apply-all is one call. */
-  existingLabelIds: string[];
-  /** Every pending new suggestion of the triage. */
-  newSuggestionIds: string[];
-}
-
-/** Both batch verbs empty the row's pill, so the list plan is the same one. */
-const withSuggestionsCleared =
-  (input: SuggestionBatchInput) =>
-  (m: ListedMessage): ListedMessage =>
-    sameMessage(m, input) ? { ...m, pendingSuggestions: { existing: [], new: [] } } : m;
-
-/** The detail spells a suggestion as a `status` on its run, so settling one is a
- *  rewrite of that field rather than a removal (#145). */
-const withRunSettled =
-  (input: SuggestionBatchInput, status: "applied" | "dismissed") =>
-  (d: MessageDetail): MessageDetail => ({
-    ...d,
-    triageHistory: d.triageHistory.map((run) =>
-      run.id === input.triageId
-        ? {
-            ...run,
-            existingLabelSuggestions: run.existingLabelSuggestions.map((s) =>
-              s.status === "pending" ? { ...s, status } : s,
-            ),
-            newLabelSuggestions: run.newLabelSuggestions.map((s) =>
-              s.status === "pending" ? { ...s, status } : s,
-            ),
-          }
-        : run,
-    ),
-  });
-
-/**
- * Accepting a triage's whole suggestion set in one press.
- *
- * The route already takes both id arrays, so this is one request rather than a
- * loop of the single-suggestion mutation — which matters for the optimistic
- * write as much as the network: the pill empties once instead of flickering down
- * a count. The labels a new suggestion creates are named server-side, so the
- * account's label list is invalidated the way the single apply does it.
- */
-export function applyAllSuggestionsMutationOptions(qc: QueryClient) {
-  return messageMutationOptions<SuggestionBatchInput, ApplyLabelSuggestionResult>(qc, {
-    request: (input) => ({
-      path: `/messages/${input.accountId}/${input.gmailMessageId}/apply-suggestions`,
-      method: "POST",
-      body: {
-        triageId: input.triageId,
-        acceptExistingLabelIds: input.existingLabelIds,
-        acceptNewSuggestionIds: input.newSuggestionIds,
-      },
-    }),
-    optimistic: withSuggestionsCleared,
-    optimisticDetail: (input) => withRunSettled(input, "applied"),
-    alsoInvalidate: (input) => [queryKeys.labels(input.accountId)],
-  });
-}
-
-export function useApplyAllSuggestions() {
-  const qc = useQueryClient();
-  return useMutation(applyAllSuggestionsMutationOptions(qc));
-}
-
-/**
- * Turning a triage's whole suggestion set down.
- *
- * Declining changes what miel offers, never what Gmail holds, so unlike its
- * apply counterpart it attaches no label and leaves the account's label list
- * alone — the only thing that moves is the pill going away.
- */
-export function dismissAllSuggestionsMutationOptions(qc: QueryClient) {
-  return messageMutationOptions<SuggestionBatchInput, { ok: true; triageId: string }>(qc, {
-    request: (input) => ({
-      path: `/messages/${input.accountId}/${input.gmailMessageId}/dismiss-suggestions`,
-      method: "POST",
-      body: { triageId: input.triageId },
-    }),
-    optimistic: withSuggestionsCleared,
-    optimisticDetail: (input) => withRunSettled(input, "dismissed"),
-  });
-}
-
-export function useDismissAllSuggestions() {
-  const qc = useQueryClient();
-  return useMutation(dismissAllSuggestionsMutationOptions(qc));
-}
-
 /** What the one label route answers, whichever half of it was asked for. */
 export interface ModifyMessageLabelsResult {
   ok: true;
@@ -894,32 +689,6 @@ export function setMessagePriorityMutationOptions(qc: QueryClient) {
 export function useSetMessagePriority() {
   const qc = useQueryClient();
   return useMutation(setMessagePriorityMutationOptions(qc));
-}
-
-export interface SuggestSimilarFilterInput extends MessageActionInput {
-  prompt?: string;
-}
-
-// The suggestion lands in the filters list, not on the message: nothing about
-// the message changed, so neither the lists nor the detail are re-read. Another
-// request with no choreography to own.
-export function suggestSimilarFilterMutationOptions(qc: QueryClient) {
-  return {
-    mutationFn: async (input: SuggestSimilarFilterInput) =>
-      apiFetch<SuggestFilterForMessageResult>({
-        path: `/messages/${input.accountId}/${input.gmailMessageId}/filter-suggest`,
-        method: "POST" as const,
-        body: input.prompt ? { prompt: input.prompt } : {},
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["filters"] });
-    },
-  };
-}
-
-export function useSuggestSimilarFilter() {
-  const qc = useQueryClient();
-  return useMutation(suggestSimilarFilterMutationOptions(qc));
 }
 
 // A patch of the picker: either half of a task's pair, for any of the three

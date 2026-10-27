@@ -144,7 +144,7 @@ beforeEach(() => {
     if (url.includes(`/accounts/${OTHER}/labels`)) return json({ labels: [] });
     if (url.includes("/labels")) return json({ labels: CATALOGUE });
     if (url.includes("/promo-codes")) return json({ items: [] });
-    if (url.includes("/filters")) return json({ filters: [], suggestions: [] });
+    if (url.includes("/filters")) return json({ filters: [] });
     if (url.includes("/messages")) return json({ items: mailbox, nextCursor: null });
     throw new Error(`unexpected request: ${url}`);
   }) as typeof fetch;

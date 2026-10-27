@@ -1,9 +1,9 @@
-// The three sources arriving as one list, rendered as a user meets it.
+// The sources arriving as one list, rendered as a user meets it.
 //
 // This is the claim the merge is for and the one no source-reading test can
-// make: a filter proposal, a verification code and an extracted promo — three
-// endpoints, three shapes, three lifetimes — reach the screen as rows of a
-// single ledger, in one container, in a fixed order. `fetch` is the seam, so
+// make: a verification code and an extracted promo — two sources, two shapes,
+// two lifetimes — reach the screen as rows of a single ledger, in one
+// container, in a fixed order. `fetch` is the seam, so
 // each source really is read from its own endpoint.
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -11,7 +11,7 @@ import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { LayoutContext } from "../../App";
 import { listedMessage } from "../../api/listedMessage.fixture";
-import type { ListedMessage, PromoSuggestion, SuggestedFilter } from "../../api/types";
+import type { ListedMessage, PromoSuggestion } from "../../api/types";
 import { TriageActivityProvider } from "../../contexts/TriageActivityContext";
 
 // The real client, put back before the subjects load: a bun module mock is
@@ -48,20 +48,6 @@ const MAILBOX: ListedMessage[] = [
   }),
 ];
 
-const SUGGESTION: SuggestedFilter = {
-  id: "f1",
-  accountId: ACCOUNT,
-  accountEmail: "me@example.com",
-  criteriaFrom: "@northwind-labs.com",
-  criteriaSubject: null,
-  criteriaQuery: null,
-  addLabelId: null,
-  addLabelName: "Work",
-  reasoning: "12 messages manually labeled Work this month",
-  status: "pending",
-  createdAt: new Date().toISOString(),
-};
-
 const PROMO: PromoSuggestion = {
   id: "p1",
   accountId: ACCOUNT,
@@ -78,7 +64,6 @@ const originalFetch = globalThis.fetch;
 let MAILBOX_OVERRIDE: ListedMessage[] | null = null;
 const mailbox = () => MAILBOX_OVERRIDE ?? MAILBOX;
 let urls: string[] = [];
-let suggestions: SuggestedFilter[] = [];
 let promos: PromoSuggestion[] = [];
 
 const json = (body: unknown) =>
@@ -89,7 +74,6 @@ const json = (body: unknown) =>
 
 beforeEach(() => {
   urls = [];
-  suggestions = [];
   promos = [];
   MAILBOX_OVERRIDE = null;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -103,12 +87,7 @@ beforeEach(() => {
       }
       return json({ items: promos });
     }
-    if (url.includes("/filters/suggestions/")) {
-      const id = new URL(url).pathname.split("/").at(-2);
-      suggestions = suggestions.filter((s) => s.id !== id);
-      return json({ ok: true });
-    }
-    if (url.includes("/filters")) return json({ filters: [], suggestions });
+    if (url.includes("/filters")) return json({ filters: [] });
     if (url.includes("/labels")) return json({ labels: [] });
     if (url.includes("/messages")) return json({ items: mailbox(), nextCursor: null });
     throw new Error(`unexpected request: ${url}`);
@@ -165,7 +144,7 @@ const mountInbox = () => {
 const ledger = () => screen.queryByRole("region", { name: "Found in your mail" });
 /**
  * A row is labelled by the kind that names it, so this is how a test asks for
- * "the filter row" without matching the word wherever else it appears.
+ * "the promo row" without matching the word wherever else it appears.
  */
 const rowsOfKind = (kind: string) =>
   screen.queryAllByRole("listitem", { name: new RegExp(`^${kind} — `) });
@@ -174,52 +153,43 @@ const shownLedger = async () => {
   return ledger()!;
 };
 
-describe("the three sources as one list", () => {
-  test("a filter, a code and a promo are rows of the same ledger", async () => {
-    suggestions = [SUGGESTION];
+describe("the sources as one list", () => {
+  test("a code and a promo are rows of the same ledger", async () => {
     promos = [PROMO];
     mountInbox();
 
     const found = await shownLedger();
-    // The three sources answer independently, so the last of them to land is
-    // what the assertions below wait on.
-    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(3));
+    // The sources answer independently, so the last of them to land is what
+    // the assertions below wait on.
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(2));
 
     // One row of each kind, in one list.
-    expect(rowsOfKind("Filter")).toHaveLength(1);
     expect(rowsOfKind("Code")).toHaveLength(1);
     expect(rowsOfKind("Promo")).toHaveLength(1);
 
     // And the value each row was opened for.
     expect(within(found).queryByText("482913") !== null).toBe(true);
     expect(within(found).queryByText("AUTUMN30") !== null).toBe(true);
-    // Twice, and deliberately: the pattern names the row in the issuer column
-    // and is one half of the rule the value column spells out.
-    expect(within(found).queryAllByText("@northwind-labs.com").length).toBeGreaterThan(0);
   });
 
   test("the header counts what is in it, by kind", async () => {
-    suggestions = [SUGGESTION];
     promos = [PROMO];
     mountInbox();
 
     const found = await shownLedger();
     await waitFor(() =>
-      expect(within(found).queryByText("3 items · 1 filter · 1 code · 1 promo") !== null).toBe(
-        true,
-      ),
+      expect(within(found).queryByText("2 items · 1 code · 1 promo") !== null).toBe(true),
     );
   });
 
   // Each source stands alone: the ledger is not a container for the promos
-  // that the other two happen to join.
+  // that the codes happen to join.
   test("a code alone is enough to draw the ledger", async () => {
     mountInbox();
 
     await shownLedger();
     expect(rowsOfKind("Code")).toHaveLength(1);
     expect(rowsOfKind("Promo")).toHaveLength(0);
-    expect(rowsOfKind("Filter")).toHaveLength(0);
   });
 
   // Nothing to act on is the common case on a quiet inbox, and an
@@ -227,7 +197,7 @@ describe("the three sources as one list", () => {
   // the inbox — so there is no empty state and no heading left behind.
   test("renders nothing at all when every source is empty", async () => {
     // The coded mail is the one the detector fires on, so a mailbox without it
-    // leaves all three sources with nothing to say.
+    // leaves every source with nothing to say.
     MAILBOX_OVERRIDE = [MAILBOX[1]!];
     mountInbox();
 
@@ -237,7 +207,6 @@ describe("the three sources as one list", () => {
   });
 
   test("is hidden in select mode, whatever it holds", async () => {
-    suggestions = [SUGGESTION];
     promos = [PROMO];
     mountInbox();
     await shownLedger();
@@ -249,26 +218,6 @@ describe("the three sources as one list", () => {
 });
 
 describe("acting on a row", () => {
-  test("creating a filter asks the server and takes the row away", async () => {
-    suggestions = [SUGGESTION];
-    mountInbox();
-
-    const found = await shownLedger();
-    await waitFor(() => expect(rowsOfKind("Filter")).toHaveLength(1));
-
-    fireEvent.click(within(found).getByRole("button", { name: "Create filter" }));
-
-    await waitFor(() => expect(urls.some((u) => u.includes("/accept"))).toBe(true));
-    expect(new URL(urls.find((u) => u.includes("/accept"))!).pathname).toEndWith(
-      "/filters/suggestions/f1/accept",
-    );
-    // The filter row goes and the rest of the ledger stays: the code found in
-    // the mailbox is a different source and nothing about accepting a filter
-    // has anything to say about it.
-    await waitFor(() => expect(rowsOfKind("Filter")).toHaveLength(0));
-    expect(rowsOfKind("Code")).toHaveLength(1);
-  });
-
   // Dismissing is the page's own act, not a write: there is no dismissed state
   // on a code, and inventing one would mean a request for "not now".
   test("dismissing a code drops the row without a request", async () => {

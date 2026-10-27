@@ -59,11 +59,7 @@ describe("personal identifiers", () => {
 });
 
 describe("the smoke and seed scripts", () => {
-  const SCRIPTS = [
-    "packages/api/scripts/smoke-api.ts",
-    "packages/cli/scripts/smoke-cli.ts",
-    "packages/cli/scripts/seed-apply.ts",
-  ];
+  const SCRIPTS = ["packages/api/scripts/smoke-api.ts", "packages/cli/scripts/smoke-cli.ts"];
 
   /** The one name the scripts, the docs and this test agree on. */
   const VARIABLE = "MIEL_TEST_ACCOUNT";

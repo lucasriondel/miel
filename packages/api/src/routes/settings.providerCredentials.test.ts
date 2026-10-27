@@ -33,8 +33,6 @@ const MODEL_SETTINGS = {
   triageProvider: "anthropic",
   replyModel: "claude-sonnet-4-6",
   replyProvider: "claude-code",
-  filterModel: "claude-haiku-4-5",
-  filterProvider: "claude-code",
 };
 // Which vendor each task runs on decides whether its key may be deleted
 // (#117), so this is per-test rather than frozen.

@@ -49,7 +49,7 @@ const renderSection = (filters = [NEWSLETTER, DIGEST]) =>
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
-      <AccountFiltersSection account={ACCOUNT} filters={filters} suggestions={[]} labels={LABELS} />
+      <AccountFiltersSection account={ACCOUNT} filters={filters} labels={LABELS} />
     </QueryClientProvider>,
   );
 
@@ -211,7 +211,6 @@ describe("account scoping", () => {
     for (const account of [ACCOUNT, OTHER]) {
       qc.setQueryData(queryKeys.filters(account.id), {
         filters: [gmailFilter({ accountId: account.id, ...SHARED })],
-        suggestions: [],
       });
       qc.setQueryData(queryKeys.labels(account.id), LABELS);
     }

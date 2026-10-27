@@ -26,8 +26,6 @@ import {
   messageLabels,
   messages,
   promoCodes,
-  suggestedLabels,
-  triageLabelSuggestions,
   triages,
 } from "../db/schema";
 import { runPromiseRethrow } from "../util/effect";
@@ -130,13 +128,6 @@ const messageRefsIn = (
 ) =>
   sql`(${accountIdCol}, ${messageIdCol}) IN (${sql.join(
     refs.map((r) => sql`(${r.accountId}::uuid, ${r.gmailMessageId})`),
-    sql`, `,
-  )})`;
-
-/** `triage_id IN (…)`, with the uuid casts Postgres needs on the literals. */
-const triageIdsIn = (column: AnyPgColumn, ids: readonly string[]) =>
-  sql`${column} IN (${sql.join(
-    ids.map((id) => sql`${id}::uuid`),
     sql`, `,
   )})`;
 
@@ -480,97 +471,6 @@ const triagesImpl: TriageStoreImpl = {
           reasoning: row.reasoning,
           model: row.model ?? null,
         }),
-      );
-    }),
-
-  existingSuggestionsFor: (triageIds) =>
-    Effect.gen(function* () {
-      if (triageIds.length === 0) return [];
-      const { db } = getDb();
-      return yield* Effect.promise(() =>
-        db
-          .select({
-            triageId: triageLabelSuggestions.triageId,
-            labelId: triageLabelSuggestions.labelId,
-            status: triageLabelSuggestions.status,
-            name: labels.name,
-            colorBg: labels.colorBg,
-            colorFg: labels.colorFg,
-          })
-          .from(triageLabelSuggestions)
-          .innerJoin(labels, eq(triageLabelSuggestions.labelId, labels.id))
-          .where(triageIdsIn(triageLabelSuggestions.triageId, triageIds)),
-      );
-    }),
-
-  newSuggestionsFor: (triageIds) =>
-    Effect.gen(function* () {
-      if (triageIds.length === 0) return [];
-      const { db } = getDb();
-      return yield* Effect.promise(() =>
-        db
-          .select({
-            suggestionId: suggestedLabels.id,
-            triageId: suggestedLabels.triageId,
-            name: suggestedLabels.name,
-            reasoning: suggestedLabels.reasoning,
-            status: suggestedLabels.status,
-            createdLabelId: suggestedLabels.createdLabelId,
-          })
-          .from(suggestedLabels)
-          .where(triageIdsIn(suggestedLabels.triageId, triageIds)),
-      );
-    }),
-
-  markExistingApplied: ({ triageId, labelIds }) =>
-    Effect.gen(function* () {
-      if (labelIds.length === 0) return;
-      const { db } = getDb();
-      yield* Effect.promise(() =>
-        db
-          .update(triageLabelSuggestions)
-          .set({ status: "applied" })
-          .where(
-            and(
-              eq(triageLabelSuggestions.triageId, triageId),
-              inArray(triageLabelSuggestions.labelId, [...labelIds]),
-            ),
-          ),
-      );
-    }),
-
-  markNewApplied: ({ suggestionId, createdLabelId }) =>
-    Effect.gen(function* () {
-      const { db } = getDb();
-      yield* Effect.promise(() =>
-        db
-          .update(suggestedLabels)
-          .set({ status: "applied", createdLabelId })
-          .where(eq(suggestedLabels.id, suggestionId)),
-      );
-    }),
-
-  dismissPending: ({ triageId }) =>
-    Effect.gen(function* () {
-      const { db } = getDb();
-      yield* Effect.promise(() =>
-        db
-          .update(triageLabelSuggestions)
-          .set({ status: "dismissed" })
-          .where(
-            and(
-              eq(triageLabelSuggestions.triageId, triageId),
-              eq(triageLabelSuggestions.status, "pending"),
-            ),
-          ),
-      );
-      yield* Effect.promise(() =>
-        db
-          .update(suggestedLabels)
-          .set({ status: "dismissed" })
-          .where(
-            and(eq(suggestedLabels.triageId, triageId), eq(suggestedLabels.status, "pending")),
-          ),
       );
     }),
 };

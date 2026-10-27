@@ -181,11 +181,6 @@ export const MergeFiltersRequest = z.object({
 });
 export type MergeFiltersRequestT = z.infer<typeof MergeFiltersRequest>;
 
-export const SuggestFilterRequest = z.object({
-  prompt: z.string().max(2000).optional(),
-});
-export type SuggestFilterRequestT = z.infer<typeof SuggestFilterRequest>;
-
 // Acting on a selection. The four flag actions are the action alone; the fifth
 // says which label to add, by our own label row id (#147) — so the union is
 // discriminated rather than an enum with an optional field beside it, and
@@ -223,14 +218,12 @@ export type SendToWorpRequestT = z.infer<typeof SendToWorpRequest>;
 // `promo-extract` at a vendor was stripped by the parse and answered with a 200
 // and the settings unchanged — an edit its sender is told landed. Zod needs the
 // pairs spelled out to infer the field types, so the guard is a type rather
-// than a loop: a fifth task stops compiling here until the door names it.
+// than a loop: a new task stops compiling here until the door names it.
 export const UpdateSettingsRequest = z.object({
   triageModel: z.string().min(1).optional(),
   triageProvider: z.enum(PROVIDERS).optional(),
   replyModel: z.string().min(1).optional(),
   replyProvider: z.enum(PROVIDERS).optional(),
-  filterModel: z.string().min(1).optional(),
-  filterProvider: z.enum(PROVIDERS).optional(),
   // Quoted for the reason the settings field is: the task is `promo-extract`,
   // and `${task}Model` has to survive the hyphen (#156).
   "promo-extractModel": z.string().min(1).optional(),

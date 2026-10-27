@@ -1,17 +1,15 @@
-import type { Label, PromoSuggestion, SuggestedFilter } from "../../api/types";
+import type { PromoSuggestion } from "../../api/types";
 import type { VerificationEntry } from "../codes/collectVerificationCodes";
 import { promoExpiryDate } from "../promos/promoExpiryLabel";
 import { type LedgerItem } from "./ledgerItem";
 
 export interface BuildLedgerInput {
-  suggestions: SuggestedFilter[];
-  labelsByName: Map<string, Label>;
   codes: VerificationEntry[];
   promos: PromoSuggestion[];
 }
 
 /**
- * The order the ledger is read in: filters, then codes and links, then promos.
+ * The order the ledger is read in: codes and links, then promos.
  *
  * Fixed by kind rather than sorted by urgency, which is the trade the design
  * makes on purpose. A promo expiring tomorrow does sit below three codes from
@@ -19,46 +17,27 @@ export interface BuildLedgerInput {
  * that reorders itself between two renders because a code aged out is a list
  * nobody can point at. Within a kind, urgency decides.
  */
-const KIND_ORDER = { filter: 0, code: 1, link: 1, promo: 2 } as const;
+const KIND_ORDER = { code: 0, link: 0, promo: 1 } as const;
 
-/** A filter proposal never lapses, so it sorts last within its own group. */
+/** A promo with no stated end, or a code with no readable date, sorts last. */
 const NO_DEADLINE = Number.POSITIVE_INFINITY;
 
 /**
- * Fold the three sources into one list of rows.
+ * Fold the sources into one list of rows.
  *
  * Pure, and given `now` rather than reading the clock, so "2 min" and which
  * promo is next to expire are both assertable. Each source keeps its own rules
  * upstream — the codes are already collected, capped and deduped by
- * `collectVerificationCodes`, the promos are the server's answer, the filter
- * suggestions are the account's pending ones — and this only decides the shape
- * of a row and where it sits.
+ * `collectVerificationCodes`, the promos are the server's answer — and this
+ * only decides the shape of a row and where it sits.
  */
 export function buildLedger(input: BuildLedgerInput, now: number = Date.now()): LedgerItem[] {
   const items: LedgerItem[] = [
-    ...input.suggestions.map((s) => filterItem(s, input.labelsByName)),
     ...input.codes.map((entry) => codeItem(entry, now)),
     ...input.promos.map((promo) => promoItem(promo, now)),
   ];
 
   return items.toSorted((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.urgency - b.urgency);
-}
-
-function filterItem(suggestion: SuggestedFilter, labelsByName: Map<string, Label>): LedgerItem {
-  return {
-    id: `filter:${suggestion.id}`,
-    kind: "filter",
-    // The pattern is what the rule is about, so it names the row. Falling back
-    // through subject to query means a rule with no `from` still says something
-    // rather than showing an empty column.
-    issuer:
-      suggestion.criteriaFrom ?? suggestion.criteriaSubject ?? suggestion.criteriaQuery ?? "—",
-    context: suggestion.reasoning,
-    when: "proposed",
-    urgency: NO_DEADLINE,
-    suggestion,
-    matchedLabel: labelsByName.get(suggestion.addLabelName.toLowerCase()) ?? null,
-  };
 }
 
 function codeItem(entry: VerificationEntry, now: number): LedgerItem {

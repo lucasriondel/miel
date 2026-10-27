@@ -498,31 +498,12 @@ function promoExpiry(days: number): Date {
   return at;
 }
 
-/**
- * The one AI-proposed filter, and it is deliberately the most obvious rule in
- * the mailbox: Stripe's receipts address to Finance. A screenshot is read in a
- * second, so the pair has to be gradable at a glance by someone who has never
- * seen this inbox — a known sender, an address whose local part already says
- * what the mail is, and a label whose name is the same word. A made-up domain
- * mapped to a generic label needs the reasoning line read before it means
- * anything, which is exactly the wrong shape for a hero shot.
- *
- * It is grounded in the seed: the Stripe invoice above carries `Finance`, so
- * the rule is one the mailbox visibly already follows by hand.
- */
-const FILTER_SUGGESTION = {
-  criteriaFrom: "receipts@stripe.com",
-  addLabelName: "Finance",
-  reasoning:
-    "Every Stripe receipt this month was manually labeled Finance — a filter would save doing it again next month.",
-};
-
 async function main() {
   const { db } = getDb();
   const mode = process.argv[2];
 
-  // Cascading delete of any prior demo account (labels/messages/triages/
-  // suggestions all reference accountId with onDelete: "cascade").
+  // Cascading delete of any prior demo account (labels/messages/triages all
+  // reference accountId with onDelete: "cascade").
   await db.execute(sql`DELETE FROM accounts WHERE email = ${DEMO_EMAIL}`);
 
   if (mode === "clean") {
@@ -655,21 +636,12 @@ async function main() {
     }
   }
 
-  await db.insert(schema.suggestedFilters).values({
-    accountId,
-    criteriaFrom: FILTER_SUGGESTION.criteriaFrom,
-    addLabelId: labelIdByName.get(FILTER_SUGGESTION.addLabelName) ?? null,
-    addLabelName: FILTER_SUGGESTION.addLabelName,
-    reasoning: FILTER_SUGGESTION.reasoning,
-    status: "pending",
-  });
-
   await setClaudeCodeToken(DEMO_CLAUDE_CODE_TOKEN);
 
   console.log("seeded demo account:", DEMO_EMAIL);
   console.log("account id:", accountId);
   console.log(
-    `messages: ${MESSAGES.length}, labels: ${LABELS.length} + ${SYSTEM_LABEL_NAMES.length} system, filter suggestions: 1`,
+    `messages: ${MESSAGES.length}, labels: ${LABELS.length} + ${SYSTEM_LABEL_NAMES.length} system`,
   );
   console.log(`promo codes: ${promoRows} (${savedPromoRows} saved)`);
   await closeDb();

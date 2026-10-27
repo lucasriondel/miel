@@ -42,7 +42,6 @@ export const stepFinishTriageRun = (args: {
   triageRunId: string;
   status: TriageRunStatus;
   triaged: number;
-  suggestedNewLabels: number;
   failedBatches: number;
   errors: string[];
 }): Effect.Effect<void> =>
@@ -54,7 +53,6 @@ export const stepFinishTriageRun = (args: {
         .set({
           status: args.status,
           triaged: args.triaged,
-          suggestedNewLabels: args.suggestedNewLabels,
           failedBatches: args.failedBatches,
           error: args.errors.length > 0 ? args.errors.join("\n") : null,
           finishedAt: new Date(),

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Account, GmailFilter, Label, SuggestedFilter } from "../../api/types";
+import type { Account, GmailFilter, Label } from "../../api/types";
 import { apiErrorMessage } from "../../api/apiErrorMessage";
 import { useMergeFilters } from "../../api/filters.hooks";
 import { useSelection } from "../select/useSelection";
@@ -8,7 +8,6 @@ import { ActiveFiltersSearch } from "./ActiveFiltersSearch";
 import { FilterRow } from "./FilterRow";
 import { FilterSelectionBar } from "./FilterSelectionBar";
 import { MergeConfirmCard } from "./MergeConfirmCard";
-import { ProposedFiltersCard } from "./ProposedFiltersCard";
 import { searchFilters } from "./filterSearch";
 import { selectableFilterIds, selectedFilterIds, selectedFilters } from "./filterSelection";
 import { buildMergePreview, describeSurvivingSources } from "./mergePreview";
@@ -16,11 +15,10 @@ import { buildMergePreview, describeSurvivingSources } from "./mergePreview";
 interface Props {
   account: Account;
   filters: GmailFilter[];
-  suggestions: SuggestedFilter[];
   labels: Label[];
 }
 
-export const AccountFiltersSection = ({ account, filters, suggestions, labels }: Props) => {
+export const AccountFiltersSection = ({ account, filters, labels }: Props) => {
   // Which row is armed for deletion. Held here rather than per row so arming one
   // disarms any other — only one inline confirm is open at a time.
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -37,10 +35,8 @@ export const AccountFiltersSection = ({ account, filters, suggestions, labels }:
   const mergeFilters = useMergeFilters();
 
   const labelsByGmailId = new Map(labels.map((l) => [l.gmailLabelId, l]));
-  const labelsByName = new Map(labels.map((l) => [l.name.toLowerCase(), l]));
 
-  // Client-side only — the account's filters are all in hand. The proposals
-  // card above deliberately ignores the query.
+  // Client-side only — the account's filters are all in hand.
   const visibleFilters = searchFilters(filters, query, labelsByGmailId);
 
   // Select-all reaches the visible rows only; the count reports every selected
@@ -97,8 +93,6 @@ export const AccountFiltersSection = ({ account, filters, suggestions, labels }:
 
   return (
     <section className="flex flex-col gap-6">
-      <ProposedFiltersCard suggestions={suggestions} labelsByName={labelsByName} />
-
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-gousse-muted">

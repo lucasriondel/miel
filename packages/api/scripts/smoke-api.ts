@@ -100,8 +100,6 @@ const fakeClaude: ClaudeAdapter = {
           id: m.id,
           priority: i === 0 ? "high" : "low",
           reasoning: `Stub reasoning for ${m.id}`,
-          applyExistingLabels: i === 0 ? ["Newsletters"] : [],
-          suggestNewLabels: i === 0 ? [{ name: "SmokeApiNew", reasoning: "stub new label" }] : [],
         })),
       },
       runId: "smoke-api-run-1",
@@ -119,12 +117,6 @@ const fakeClaude: ClaudeAdapter = {
 
 async function clean() {
   const { db } = getDb();
-  await db.execute(
-    dsql`DELETE FROM suggested_labels WHERE name LIKE 'SmokeApi%' OR name LIKE 'smoke-api-%'`,
-  );
-  await db.execute(
-    dsql`DELETE FROM triage_label_suggestions WHERE triage_id IN (SELECT id FROM triages WHERE gmail_message_id LIKE 'smoke-api-%')`,
-  );
   await db.execute(dsql`DELETE FROM triages WHERE gmail_message_id LIKE 'smoke-api-%'`);
   await db.execute(dsql`DELETE FROM message_labels WHERE gmail_message_id LIKE 'smoke-api-%'`);
   await db.execute(dsql`DELETE FROM messages WHERE gmail_message_id LIKE 'smoke-api-%'`);
@@ -220,26 +212,6 @@ async function main() {
       "triageHistory =",
       detail.body?.triageHistory?.length,
     );
-    const triageId = detail.body.latestTriageId;
-    const existingIds: string[] = detail.body.triageHistory[0].existingLabelSuggestions.map(
-      (s: any) => s.labelId,
-    );
-    const newIds: string[] = detail.body.triageHistory[0].newLabelSuggestions.map(
-      (s: any) => s.suggestionId,
-    );
-
-    console.log("> POST /messages/.../apply-suggestions");
-    const applied = await req(
-      "POST",
-      `/messages/${accountId}/${msg.gmailMessageId}/apply-suggestions`,
-      {
-        triageId,
-        acceptExistingLabelIds: existingIds,
-        acceptNewSuggestionIds: newIds,
-      },
-    );
-    console.log("  applied =", applied.body);
-
     console.log("> GET /settings");
     const settings = await req("GET", "/settings");
     console.log("  settings =", settings.body);

@@ -76,7 +76,7 @@ export class SecretStore extends Effect.Tag("SecretStore")<SecretStore, SecretSt
  *
  * The same seam, extended to the two services the web app exercises daily:
  * `services/messages.ts` (listing, filtering, reading a detail) and
- * `services/apply.ts` (accepting suggestions, archiving, trashing, batch
+ * `services/apply.ts` (attaching labels, archiving, trashing, batch
  * actions). Neither had a single test, because testing either meant faking
  * `db/client` and hand-rolling the drizzle chain each query happened to make.
  *
@@ -88,8 +88,7 @@ export class SecretStore extends Effect.Tag("SecretStore")<SecretStore, SecretSt
  * shape is what the seam promises, not the join that produces it.
  *
  * What deliberately stays in the services: the cursor's encoding, which
- * suggestions count as pending, what "already applied" means, and every call
- * to Gmail. Those are the rules the behaviour tests are about.
+ * labels a message carries, and every call to Gmail. Those are the rules the behaviour tests are about.
  * ------------------------------------------------------------------------- */
 
 /** A message, identified the way `messages` is keyed. */
@@ -231,8 +230,6 @@ export interface MessageStoreImpl {
 
 export class MessageStore extends Effect.Tag("MessageStore")<MessageStore, MessageStoreImpl>() {}
 
-export type SuggestionStatus = "pending" | "applied" | "dismissed";
-
 export interface StoredTriage {
   id: string;
   accountId: string;
@@ -243,33 +240,7 @@ export interface StoredTriage {
   createdAt: Date;
 }
 
-/** A suggestion of a label that already exists, with that label joined on. */
-export interface StoredExistingSuggestion {
-  triageId: string;
-  labelId: string;
-  status: SuggestionStatus;
-  name: string;
-  colorBg: string | null;
-  colorFg: string | null;
-}
-
-/** A suggestion of a label that does not exist yet. */
-export interface StoredNewSuggestion {
-  suggestionId: string;
-  triageId: string;
-  name: string;
-  reasoning: string | null;
-  status: SuggestionStatus;
-  createdLabelId: string | null;
-}
-
-/**
- * `triages` and the two suggestion tables hanging off them.
- *
- * Statuses come back as stored: which of them counts as "pending", and what a
- * pending suggestion for an already-attached label means, is the messages
- * service's rule and stays there.
- */
+/** `triages`: what Claude said about each message, one row per run. */
 export interface TriageStoreImpl {
   /** Every triage of a message, newest first. */
   readonly historyFor: (ref: MessageRef) => Effect.Effect<StoredTriage[]>;
@@ -281,27 +252,6 @@ export interface TriageStoreImpl {
     reasoning: string;
     model?: string | null;
   }) => Effect.Effect<void>;
-  readonly existingSuggestionsFor: (
-    triageIds: readonly string[],
-  ) => Effect.Effect<StoredExistingSuggestion[]>;
-  readonly newSuggestionsFor: (
-    triageIds: readonly string[],
-  ) => Effect.Effect<StoredNewSuggestion[]>;
-  readonly markExistingApplied: (args: {
-    triageId: string;
-    labelIds: readonly string[];
-  }) => Effect.Effect<void>;
-  readonly markNewApplied: (args: {
-    suggestionId: string;
-    createdLabelId: string;
-  }) => Effect.Effect<void>;
-  /**
-   * Marks every still-pending suggestion of a triage dismissed — both tables,
-   * since "dismiss all" is one gesture over the pair the row's pill counts
-   * together. Only `pending` rows move: an already-applied suggestion is a label
-   * the message now carries, and dismissing it would claim otherwise.
-   */
-  readonly dismissPending: (args: { triageId: string }) => Effect.Effect<void>;
 }
 
 export class TriageStore extends Effect.Tag("TriageStore")<TriageStore, TriageStoreImpl>() {}
