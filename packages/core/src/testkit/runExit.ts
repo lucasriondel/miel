@@ -17,7 +17,7 @@ export const runExit = <A, E>(eff: Effect.Effect<A, E>): Promise<Exit.Exit<A, E>
 export function expectFailureTag(exit: Exit.Exit<unknown, unknown>, tag: string): void {
   expect(Exit.isFailure(exit)).toBe(true);
   if (!Exit.isFailure(exit)) return;
-  const opt = Cause.failureOption(exit.cause);
+  const opt = Cause.findErrorOption(exit.cause);
   expect(Option.isSome(opt)).toBe(true);
   if (Option.isNone(opt)) return;
   const value = opt.value as { _tag?: string };

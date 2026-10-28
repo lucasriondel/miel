@@ -1,40 +1,33 @@
 /**
  * `Claude` — one `run(task, input)` over the task table (`./tasks`), reaching
- * the model either through the `claude` CLI in print mode
- * (`claude -p --output-format=json`), with a long-lived Claude Code token
- * injected into the subprocess env so it never needs an interactive login, or
- * through a hosted vendor over HTTP. That token comes from one place only — the
- * row the operator pasted in Settings (`services/claudeCodeToken`, #109); the
- * environment is not consulted.
+ * the model either through the `claude` CLI in print mode, with a long-lived
+ * Claude Code token injected into the subprocess env so it never needs an
+ * interactive login, or through a hosted vendor over HTTP. That token comes
+ * from one place only — the row the operator pasted in Settings
+ * (`services/claudeCodeToken`, #109); the environment is not consulted.
  *
- * The transports live in `ai-task-runner-effect` now: its `makeTaskRunner`
- * holds the one hosted-vs-CLI branch (#105, #128), composes `claude-code-effect`
- * for the CLI and the Vercel ai-sdk for the vendors, and takes miel's two
- * answers as a contract — `resolve` is `resolveTaskProviderEffect` (#125), so a
- * task pointed at a hosted vendor with no stored key fails as
- * `ProviderNotRunnableError` before a socket is opened, and `credential` reads
- * the vendor's key out of `encrypted_secrets` (#104), `Redacted` end to end.
- * The runner is a factory, not a tag, which is what keeps this module the
- * single injection seam (#133): miel's `Claude` tag wraps it, and nothing else
- * can acquire a second one.
+ * The one hosted-vs-CLI branch lives here (#105, #128). The CLI transport is
+ * `effect-ai-claude-code` — an `effect/ai` `LanguageModel` over `claude -p`,
+ * faked in tests at the process spawner — and the hosted one is `./hosted`,
+ * the Vercel ai-sdk behind one substitutable function. Both are reached from
+ * `runTask` below, after `resolveTaskProviderEffect` (#125) has said which
+ * provider and model the task runs on — so a task pointed at a hosted vendor
+ * with no stored key fails as `ProviderNotRunnableError` before a socket is
+ * opened, and the vendor's key is read through the one decryptor and handed
+ * over `Redacted`, unwrapped only at the call that spends it.
  *
- * What stays here is everything that is a miel decision: the token's source,
- * the auth heuristic below, and the mapping of both transports' failures onto
- * miel's own error taxonomy (`errors.ts`), whose tags the API's error
- * middleware and the sync socket both key on.
+ * What is a miel decision stays visible here: the token's source, the auth
+ * heuristic below, and the mapping of both transports' failures onto miel's
+ * own error taxonomy (`errors.ts`), whose tags the API's error middleware and
+ * the sync socket both key on.
  */
-import { Duration, Effect, Layer, Option, Redacted } from "effect";
-import type { CommandExecutor } from "@effect/platform";
-import { BunContext } from "@effect/platform-bun";
-import {
-  ClaudeCodeLive,
-  ClaudeConfig,
-  // The SDK's own missing-token tag — what the config's token effect must fail
-  // with, so the SDK refuses before spawning. It is caught below and re-raised
-  // as miel's identically-named error, which is the one the boundaries know.
-  ClaudeTokenMissingError as SdkTokenMissing,
-} from "claude-code-effect";
-import { makeTaskRunner, type HostedGenerate, type TaskRunnerDeps } from "ai-task-runner-effect";
+import { BunServices } from "@effect/platform-bun";
+import { Context, Duration, Effect, Layer, Redacted } from "effect";
+import type { AiError } from "effect/ai";
+import { LanguageModel } from "effect/ai";
+import type { ChildProcessSpawner } from "effect/process";
+import { ClaudeCodeClient, ClaudeCodeLanguageModel } from "effect-ai-claude-code";
+import { isCredentialProvider } from "../credentialProviders";
 import { getEnv } from "../env";
 import {
   ClaudeAuthError,
@@ -43,19 +36,19 @@ import {
   ClaudeSpawnError,
   ClaudeTimeoutError,
   ClaudeTokenMissingError,
-  HostedApiError,
   ProviderNotRunnableError,
   type ClaudeError,
 } from "../errors";
 import type { UnknownSettingError } from "../services/settings";
 import { createDebug } from "../util/debug";
-import { CLAUDE_TASKS, type ClaudeTaskInput, type ClaudeTaskOutput } from "./tasks";
+import { claudeTaskSpec, type ClaudeTaskInput, type ClaudeTaskOutput } from "./tasks";
+import { generateHostedLive, runHosted, type HostedGenerate } from "./hosted";
 // Imported from the service modules, not the barrel: the plaintext readers are
 // not part of core's public surface (#109, ADR-0001).
 import { readClaudeCodeTokenEffect } from "../services/claudeCodeToken";
 import { readProviderCredentialEffect } from "../services/encryptedSecrets";
 import type { ModelTask } from "../providerModels";
-import type { SecretStore, SettingsStore, Stores } from "../stores/contracts";
+import type { Stores } from "../stores/contracts";
 import { resolveTaskProviderEffect } from "../services/taskProviders";
 
 const debug = createDebug("claude");
@@ -67,34 +60,29 @@ export interface ClaudeRunResult<T> {
 }
 
 /**
- * Which `CommandExecutor` the SDK spawns through.
+ * Which process spawner the CLI transport launches `claude` through.
  *
  * Production is Bun's, and there is no other caller in the shipped code. It is
- * a function rather than a constant so a suite can substitute the SDK's
- * `ClaudeCodeTest.handler` — the deep fake that answers with a canned capture,
- * leaving the real arg assembly, envelope parse and error mapping to run. That
- * seam used to be `mock.module("../adapters/shell")`, which is process-global
- * in Bun and no longer intercepts anything, since this transport does not go
- * through miel's shell adapter any more.
+ * a function rather than a constant so a suite can substitute
+ * `ClaudeCodeTest.make` — the deep fake that answers with a canned capture,
+ * leaving the real arg assembly, envelope parse and error mapping to run.
  */
-let commandExecutorLayer: () => Layer.Layer<CommandExecutor.CommandExecutor> = () =>
-  BunContext.layer;
+let spawnerLayer: () => Layer.Layer<ChildProcessSpawner.ChildProcessSpawner> = () =>
+  BunServices.layer;
 
 /**
- * Substitute the executor layer, returning a restore function. Test-only —
- * named like the repo's other `_reset*ForTests` hooks and exempted from the
- * underscore lint rule for the same reason.
+ * Substitute the spawner layer; `null` restores Bun's. Test-only — named like
+ * the repo's other `_*ForTests` hooks and exempted from the underscore lint
+ * rule for the same reason.
  */
-export function _setCommandExecutorLayerForTests(
-  layer: Layer.Layer<CommandExecutor.CommandExecutor> | null,
+export function _setSpawnerLayerForTests(
+  layer: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner> | null,
 ): void {
-  commandExecutorLayer = layer === null ? () => BunContext.layer : () => layer;
+  spawnerLayer = layer === null ? () => BunServices.layer : () => layer;
 }
 
 /**
- * The hosted transport's one HTTP call, substitutable the same way: the
- * runner's `generateHosted` internal is the seam `ai-task-runner-effect`
- * exposes for tests, and this hook is how a miel suite reaches it — so the
+ * The hosted transport's one HTTP call, substitutable the same way — so the
  * hosted path is exercised with the real credential read and error mapping,
  * and no vendor is ever called.
  */
@@ -107,14 +95,14 @@ export function _setHostedGenerateForTests(fn: HostedGenerate | null): void {
 /**
  * Heuristic: does the CLI output look like an auth/token problem?
  *
- * This stays miel's rather than the SDK's on purpose. The distinction it draws
- * is miel's alone: `ClaudeAuthError` is a member of `ProviderUnavailableError`
- * (#126), so a token the CLI rejected stops the whole sync run with one toast,
- * while any other non-zero exit is this batch's problem and the run continues.
- * The SDK reports the same condition structurally — a non-zero exit with no
- * envelope — because it cannot know which of those two a consumer considers it.
- * Keeping the guess here also keeps it visible: it is a regex over CLI wording,
- * and CLI wording changes.
+ * This stays miel's rather than the provider's on purpose. The distinction it
+ * draws is miel's alone: `ClaudeAuthError` is a member of
+ * `ProviderUnavailableError` (#126), so a token the CLI rejected stops the
+ * whole sync run with one toast, while any other non-zero exit is this batch's
+ * problem and the run continues. The provider reports the same condition
+ * structurally — a non-zero exit with no envelope — because it cannot know
+ * which of those two a consumer considers it. Keeping the guess here also
+ * keeps it visible: it is a regex over CLI wording, and CLI wording changes.
  */
 function looksLikeAuthProblem(s: string): boolean {
   return /not logged in|please run \/login|unauthorized|invalid api key|invalid token|authentication/i.test(
@@ -122,27 +110,58 @@ function looksLikeAuthProblem(s: string): boolean {
   );
 }
 
+/** The provider's own detail for a failure, where it recorded one. */
+const cliDetail = (reason: AiError.AiErrorReason): Record<string, unknown> =>
+  (("metadata" in reason && (reason.metadata as Record<string, unknown>)["claude-code"]) ||
+    {}) as Record<string, unknown>;
+
 /**
- * miel's answers to the runner's two questions (#124, #125): which provider and
- * model a task runs on — the same resolver the settings doors use, so both
- * halves of the rule are one check — and which key a hosted vendor holds, read
- * through the one decryptor and wrapped `Redacted` so it is unwrapped only at
- * the call that spends it. A missing key answers `null`; the runner raises its
- * race-guard refusal, mapped back onto the resolver's own tag below.
+ * The provider's taxonomy is structural; miel's says what a failure *means*
+ * here, which is what every boundary above keys on. Every `AiError` carries a
+ * `reason`, and that reason is what is mapped.
  */
-const runnerDeps: TaskRunnerDeps<
-  ProviderNotRunnableError | UnknownSettingError,
-  never,
-  SettingsStore | SecretStore
-> = {
-  resolve: (task) => resolveTaskProviderEffect(task as ModelTask),
-  credential: (vendor) =>
-    readProviderCredentialEffect(vendor).pipe(
-      // The provider is validated before it reaches here, so the service's
-      // unknown-provider failure is unreachable; treat it as "no key" anyway.
-      Effect.catchAll(() => Effect.succeed(null)),
-      Effect.map((key) => (key ? Redacted.make(key) : null)),
-    ),
+const fromAiError = (error: AiError.AiError): ClaudeError => {
+  const reason = error.reason;
+  const detail = cliDetail(reason);
+  const description = "description" in reason ? (reason.description ?? "") : "";
+  const stderr = typeof detail.stderr === "string" ? detail.stderr : "";
+  const text = `${description}\n${stderr}`;
+  switch (reason._tag) {
+    // The CLI said so itself: a 401/403 from the API, or "Not logged in" on the
+    // assistant line.
+    case "AuthenticationError":
+      return new ClaudeAuthError({ detail: text.trim().slice(0, 500) });
+    // A valid envelope whose `structured_output` the Schema refused, or none at
+    // all — the model broke its output contract.
+    case "StructuredOutputError":
+      return new ClaudeSchemaError({
+        issue: reason.description,
+        raw: reason.responseText.slice(0, 2000),
+      });
+    // A stdout line that is not an envelope.
+    case "InvalidOutputError":
+      return new ClaudeParseError({
+        stage: "envelope",
+        raw: typeof detail.line === "string" ? detail.line : reason.description,
+      });
+    case "InternalProviderError":
+      // The provider reports both timeouts as this retryable reason, with
+      // which one it was in the detail.
+      if (typeof detail.timeoutMs === "number") {
+        return new ClaudeTimeoutError({ timeoutMs: detail.timeoutMs });
+      }
+      break;
+    default:
+      break;
+  }
+  // Everything else — the child never launched, exit ≠ 0 with no envelope, an
+  // API error the CLI relayed, a rate limit — is one run's problem, unless the
+  // wording says the install's token is what is wrong.
+  return looksLikeAuthProblem(text)
+    ? new ClaudeAuthError({ detail: text.trim().slice(0, 500) })
+    : new ClaudeSpawnError({
+        cause: { reason: reason._tag, description, ...detail },
+      });
 };
 
 // ── Service ──────────────────────────────────────────────────────────────────
@@ -171,102 +190,104 @@ export interface ClaudeImpl {
   ) => Effect.Effect<ClaudeRunResult<ClaudeTaskOutput<K>>, ClaudeError | UnknownSettingError>;
 }
 
-export class Claude extends Effect.Tag("Claude")<Claude, ClaudeImpl>() {}
+export class Claude extends Context.Service<Claude, ClaudeImpl>()("Claude") {}
+
+/**
+ * The CLI transport: `claude -p` through `effect-ai-claude-code`, constrained
+ * with the task's Schema (`--json-schema`) and allowed the task's tools.
+ */
+const runCli = <K extends ModelTask>(
+  task: K,
+  input: ClaudeTaskInput<K>,
+  model: string,
+  token: string,
+): Effect.Effect<ClaudeRunResult<ClaudeTaskOutput<K>>, ClaudeError> => {
+  const spec = claudeTaskSpec(task);
+  const { CLAUDE_BIN } = getEnv();
+  const client = ClaudeCodeClient.layer({
+    auth: { oauthToken: Redacted.make(token) },
+    binPath: CLAUDE_BIN,
+    // The whole-call budget the subprocess always had. The idle bound is set
+    // to the same value on purpose: the provider's default of two minutes
+    // between envelopes would cut a triage run short while the model is quiet
+    // inside a Bash tool call, which the old transport never did.
+    totalTimeout: Duration.minutes(10),
+    idleTimeout: Duration.minutes(10),
+  });
+  const languageModel = ClaudeCodeLanguageModel.layer({
+    model,
+    config: {
+      // The flag is emitted only when the row lists a tool; an empty list is
+      // "nothing to reach for", not an empty `--allowedTools`.
+      allowedTools: spec.allowedTools.length > 0 ? spec.allowedTools : undefined,
+    },
+  });
+  return LanguageModel.generateObject({
+    prompt: spec.cliPrompt(input),
+    schema: spec.output,
+  }).pipe(
+    Effect.provide(languageModel),
+    Effect.provide(client),
+    Effect.provide(spawnerLayer()),
+    Effect.mapError(fromAiError),
+    Effect.map((response) => {
+      // The CLI's real session id and the model it resolved the alias to, off
+      // the response's metadata part.
+      const metadata = response.content.find((part) => part.type === "response-metadata");
+      return {
+        output: response.value,
+        runId: metadata?.id ?? "",
+        model: metadata?.modelId ?? model,
+      };
+    }),
+  );
+};
 
 const runTask = <K extends ModelTask>(
   task: K,
   input: ClaudeTaskInput<K>,
 ): Effect.Effect<ClaudeRunResult<ClaudeTaskOutput<K>>, ClaudeError | UnknownSettingError, Stores> =>
   Effect.gen(function* () {
-    const { CLAUDE_BIN } = getEnv();
     debug("run", { task });
+    const spec = claudeTaskSpec(task);
+    const { provider, model } = yield* resolveTaskProviderEffect(task);
 
-    // The stored token, and nothing else (#109) — read per call through the
-    // SDK config's effect-form token, so a token pasted in Settings takes
-    // effect on the next run with no restart, and a missing row still fails
-    // before any subprocess exists.
-    const stores = yield* Effect.context<SecretStore>();
-    const config = Layer.succeed(ClaudeConfig, {
-      token: readClaudeCodeTokenEffect().pipe(
-        Effect.provide(stores),
-        Effect.flatMap((token) =>
-          token ? Effect.succeed(Redacted.make(token)) : Effect.fail(new SdkTokenMissing()),
-        ),
-      ),
-      binPath: CLAUDE_BIN,
-      defaultModel: Option.none(),
-      timeout: Duration.minutes(10),
-    });
+    if (isCredentialProvider(provider)) {
+      // The resolver checked that a key exists; reading it is the race guard
+      // for a key deleted (or unreadable) between the check and now, and the
+      // same refusal so a boundary cannot tell the two apart (#125).
+      const apiKey = yield* readProviderCredentialEffect(provider).pipe(
+        Effect.catch(() => Effect.succeed(null)),
+      );
+      if (!apiKey) {
+        return yield* new ProviderNotRunnableError({
+          task,
+          provider,
+          reason: "missing_provider_credential",
+          phase: "run",
+        });
+      }
+      const result = yield* runHosted({
+        vendor: provider,
+        modelId: model,
+        // The task's hosted prompt, never its CLI one: no tools over there, and
+        // the CLI column is the one allowed to carry secrets.
+        system: spec.hostedPrompt(input),
+        instruction: spec.hostedInstruction,
+        output: spec.output,
+        apiKey: Redacted.make(apiKey),
+        generate: hostedGenerateForTests ?? generateHostedLive,
+      });
+      debug("run done", { task, model: result.model, runId: result.runId });
+      return result;
+    }
 
-    const runner = makeTaskRunner(
-      CLAUDE_TASKS,
-      runnerDeps,
-      hostedGenerateForTests === null ? {} : { generateHosted: hostedGenerateForTests },
-    );
-
-    const result = yield* runner.run(task, input).pipe(
-      Effect.provide(Layer.provide(ClaudeCodeLive, Layer.merge(config, commandExecutorLayer()))),
-      // The runner's and the SDK's taxonomies are structural; miel's says what
-      // a failure *means* here, which is what every boundary above keys on.
-      Effect.catchTags({
-        // The runner's race guard — the key gone between resolve and read. It
-        // is the same condition the resolver refuses, so it becomes the
-        // resolver's own tag and a boundary cannot tell the two apart (#125).
-        TaskNotRunnableError: (err) =>
-          new ProviderNotRunnableError({
-            task,
-            provider: err.provider,
-            reason: "missing_provider_credential",
-            phase: "run",
-          }),
-        // The vendor answered and failed — one batch's problem, never the
-        // install's. The runner already scrubbed the key from `detail`.
-        HostedApiError: (err) => new HostedApiError({ detail: err.detail }),
-        // A hosted payload the codec refused. The codec is miel's own
-        // (`zodCodec` in ./tasks), so the issue rides inside; hosted schema
-        // violations surface as vendor-call failures, exactly as before.
-        TaskSchemaError: (err) =>
-          new HostedApiError({
-            detail: err.issues instanceof ClaudeSchemaError ? err.issues.issue : String(err.issues),
-          }),
-        // No token stored — the tag miel has always raised, and the reason the
-        // config's effect form is used at all.
-        ClaudeTokenMissingError: () => new ClaudeTokenMissingError(),
-        // A CLI schema violation already carries miel's own tag out of the codec.
-        ClaudeSchemaError: (err) =>
-          err.issues instanceof ClaudeSchemaError
-            ? err.issues
-            : new ClaudeSchemaError({
-                issue: String(err.issues),
-                raw: JSON.stringify(err.raw).slice(0, 2000),
-              }),
-        // Exit ≠ 0 with no envelope: the auth heuristic decides whether this
-        // stops the install or just this batch.
-        ClaudeInvocationError: (err) =>
-          looksLikeAuthProblem(err.stderr)
-            ? new ClaudeAuthError({ detail: err.stderr.slice(0, 500) })
-            : new ClaudeSpawnError({
-                cause: { exitCode: err.exitCode, stderr: err.stderr },
-              }),
-        // A valid envelope reporting failure — same question, different source.
-        ClaudeApiError: (err) =>
-          looksLikeAuthProblem(err.message)
-            ? new ClaudeAuthError({ detail: err.message.slice(0, 500) })
-            : new ClaudeSpawnError({
-                cause: {
-                  reason: "envelope is_error",
-                  result: err.message,
-                  apiErrorStatus: err.apiErrorStatus,
-                },
-              }),
-        // The child never launched at all (ENOENT / EACCES).
-        ClaudeSpawnError: (err) =>
-          new ClaudeSpawnError({ cause: { command: err.command, cause: err.cause } }),
-        ClaudeParseError: (err) => new ClaudeParseError({ stage: "envelope", raw: err.stdout }),
-        ClaudeTimeoutError: (err) => new ClaudeTimeoutError({ timeoutMs: err.timeoutMs }),
-      }),
-    );
-
+    // The stored token, and nothing else (#109) — read per call, so a token
+    // pasted in Settings takes effect on the next run with no restart, and a
+    // missing row fails before any subprocess exists.
+    const token = yield* readClaudeCodeTokenEffect();
+    if (!token) return yield* new ClaudeTokenMissingError();
+    const result = yield* runCli(task, input, model, token);
     debug("run done", { task, model: result.model, runId: result.runId });
     return result;
   });
@@ -280,6 +301,6 @@ const runTask = <K extends ModelTask>(
 export const ClaudeLive = Layer.effect(
   Claude,
   Effect.map(Effect.context<Stores>(), (stores): ClaudeImpl => ({
-    run: (task, input) => Effect.provide(runTask(task, input), stores),
+    run: (task, input) => Effect.provideContext(runTask(task, input), stores),
   })),
 );

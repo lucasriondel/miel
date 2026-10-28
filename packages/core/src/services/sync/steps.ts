@@ -1,4 +1,4 @@
-import { Effect, Either, Ref } from "effect";
+import { Effect, Result, Ref } from "effect";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { syncWindows } from "../../db/schema";
@@ -91,7 +91,7 @@ export const stepSyncLabels = (args: {
       accountEmail: args.accountEmail,
       gmail,
     }).pipe(
-      Effect.catchAll((err): Effect.Effect<never, LabelSyncError | GrantError> =>
+      Effect.catch((err): Effect.Effect<never, LabelSyncError | GrantError> =>
         // A missing/revoked Google grant must surface unwrapped so syncAll can
         // drive the reconnect flow.
         isGrantError(err)
@@ -128,14 +128,14 @@ export const stepSyncFilters = (args: {
       accountId: args.accountId,
       accountEmail: args.accountEmail,
       gmail,
-    }).pipe(Effect.either);
+    }).pipe(Effect.result);
 
-    if (Either.isRight(syncFiltersResult)) {
-      const syncedFilters = syncFiltersResult.right;
+    if (Result.isSuccess(syncFiltersResult)) {
+      const syncedFilters = syncFiltersResult.success;
       args.log(`[${args.accountEmail}] ${syncedFilters.length} filter(s)`);
       return syncedFilters.length;
     } else {
-      const m = (syncFiltersResult.left as Error).message;
+      const m = (syncFiltersResult.failure as Error).message;
       yield* Ref.update(args.errorsRef, (e) => [...e, `syncFilters: ${m}`]);
       args.log(`[${args.accountEmail}] WARN syncFilters failed: ${m}`);
       return 0;
@@ -170,7 +170,7 @@ export const stepSearchMessages = (args: {
         max: args.max,
       }),
     ).pipe(
-      Effect.catchAll((err): Effect.Effect<never, MessageSearchError | GrantError> =>
+      Effect.catch((err): Effect.Effect<never, MessageSearchError | GrantError> =>
         // Reauth must surface unwrapped so syncAll can drive the reauth flow.
         isGrantError(err)
           ? Effect.fail(err as GrantError)
@@ -249,7 +249,7 @@ export const stepFetchMessages = (args: {
           }),
         ).pipe(
           Effect.map((raw) => normalizeMessage(args.accountId, raw)),
-          Effect.either,
+          Effect.result,
         ),
       ),
       { concurrency: "unbounded" },
@@ -259,8 +259,8 @@ export const stepFetchMessages = (args: {
     let trashedSkipped = 0;
     for (let i = 0; i < fetchResults.length; i++) {
       const result = fetchResults[i];
-      if (Either.isLeft(result)) {
-        const m = (result.left as Error).message;
+      if (Result.isFailure(result)) {
+        const m = (result.failure as Error).message;
         yield* Ref.update(args.errorsRef, (e) => [
           ...e,
           `getMessage(${newHits[i].messageId}): ${m}`,
@@ -271,7 +271,7 @@ export const stepFetchMessages = (args: {
           messageId: newHits[i].messageId,
           error: m,
         });
-      } else if (result.right.labelIds.includes("TRASH")) {
+      } else if (result.success.labelIds.includes("TRASH")) {
         // Gmail search runs with `-in:trash`, but a message can be trashed in
         // the window between search and getMessage. Drop trashed mail here so
         // it never reaches upsert / triage.
@@ -281,7 +281,7 @@ export const stepFetchMessages = (args: {
           messageId: newHits[i].messageId,
         });
       } else {
-        normalized.push(result.right);
+        normalized.push(result.success);
       }
     }
 

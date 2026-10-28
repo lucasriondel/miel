@@ -1,6 +1,8 @@
+import { Schema } from "effect";
 import { z } from "zod";
 
-export const Priority = z.enum(["high", "medium", "low"]);
+export const PRIORITIES = ["high", "medium", "low"] as const;
+export const Priority = z.enum(PRIORITIES);
 export type PriorityT = z.infer<typeof Priority>;
 
 export const TriageInputItem = z.object({
@@ -24,14 +26,20 @@ export const TriageInput = z.object({
 });
 export type TriageInputT = z.infer<typeof TriageInput>;
 
-export const TriageOutputItem = z.object({
-  id: z.string(),
-  priority: Priority,
-  reasoning: z.string(),
+/**
+ * What the model answers, as an `effect` Schema: the output contract both
+ * transports constrain the model with (`claude/tasks.ts`). The inputs above
+ * stay Zod because the API validates them; this is the one shape that has to
+ * be a Schema, since `effect/ai`'s `generateObject` takes nothing else.
+ */
+export const TriageOutputItem = Schema.Struct({
+  id: Schema.String,
+  priority: Schema.Literals(PRIORITIES),
+  reasoning: Schema.String,
 });
-export type TriageOutputItemT = z.infer<typeof TriageOutputItem>;
+export type TriageOutputItemT = typeof TriageOutputItem.Type;
 
-export const TriageOutput = z.object({
-  results: z.array(TriageOutputItem),
+export const TriageOutput = Schema.Struct({
+  results: Schema.mutable(Schema.Array(TriageOutputItem)),
 });
-export type TriageOutputT = z.infer<typeof TriageOutput>;
+export type TriageOutputT = typeof TriageOutput.Type;

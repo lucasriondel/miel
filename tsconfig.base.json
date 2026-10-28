@@ -18,6 +18,12 @@
     "isolatedModules": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    // `effect-ai-claude-code` ships TypeScript source whose relative imports
+    // carry a `.ts` suffix, and every package whose program reaches core's
+    // `claude/Claude.ts` typechecks that source. This is what lets tsc accept
+    // the suffix in an emitting program (TS 5.7+); it rewrites nothing of ours,
+    // since no local import names an extension.
+    "rewriteRelativeImportExtensions": true
   }
 }

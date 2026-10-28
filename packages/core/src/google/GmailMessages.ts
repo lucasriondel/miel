@@ -28,7 +28,7 @@ const impl: GmailMessagesImpl = {
   search: (ref, query, max = 50) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const res = yield* Effect.tryPromise({
         try: () => gmail.users.messages.list({ userId: "me", q: query, maxResults: max }),
@@ -47,7 +47,7 @@ const impl: GmailMessagesImpl = {
   get: (ref, messageId) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const res = yield* Effect.tryPromise({
         try: () =>
@@ -71,7 +71,7 @@ const impl: GmailMessagesImpl = {
   send: (ref, msg) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const raw = buildRawMessage({
         to: msg.to,
@@ -96,7 +96,7 @@ const impl: GmailMessagesImpl = {
   getAttachment: (ref, messageId, attachmentId) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const res = yield* Effect.tryPromise({
         try: () =>

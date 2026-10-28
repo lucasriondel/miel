@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Context, Layer } from "effect";
 import { createGmailAdapter, type GmailDataAdapter } from "../../google/gmailAdapter";
 import { Claude, ClaudeLive, type ClaudeImpl } from "../../claude/Claude";
 import type { Stores } from "../../stores/contracts";
@@ -8,12 +8,15 @@ import type { Stores } from "../../stores/contracts";
  * services (via the promise-facade `GmailDataAdapter`); tests provide a fake
  * adapter through `makeGmailLayer`.
  */
-export class GmailService extends Effect.Service<GmailService>()("GmailService", {
-  effect: Effect.sync(() => createGmailAdapter()),
-}) {}
+export class GmailService extends Context.Service<GmailService, GmailDataAdapter>()(
+  "GmailService",
+) {
+  /** The live adapter, built when the layer is, not at import. */
+  static readonly layer: Layer.Layer<GmailService> = Layer.sync(this, () => createGmailAdapter());
+}
 
 export const makeGmailLayer = (gmail?: GmailDataAdapter): Layer.Layer<GmailService> =>
-  gmail ? Layer.succeed(GmailService, GmailService.make(gmail)) : GmailService.Default;
+  gmail ? Layer.succeed(GmailService, gmail) : GmailService.layer;
 
 /**
  * The Claude dependency, as a layer. Sync owns no service wrapping it any more

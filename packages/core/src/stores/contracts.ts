@@ -15,7 +15,7 @@
  * implementations are what makes the seam real — a service that reaches past
  * them for a query no interface describes stops compiling.
  *
- * Both are `Effect.Tag` services, so the requirement rides in the `R` channel:
+ * Both are `Context.Service` services, so the requirement rides in the `R` channel:
  * production provides {@link StoresLive} at the Promise boundary, tests provide
  * the testkit layer, and an effect with neither cannot be run at all. That is
  * the point — a test that forgets to inject gets a type error rather than a
@@ -31,7 +31,7 @@
  * provides the Postgres adapter itself. A store is a seam within core, not part
  * of its surface.
  */
-import { Effect } from "effect";
+import { Context, Effect } from "effect";
 import type { PriorityT } from "../schemas/triage";
 
 /**
@@ -46,10 +46,9 @@ export interface SettingsStoreImpl {
   readonly write: (key: string, value: string) => Effect.Effect<void>;
 }
 
-export class SettingsStore extends Effect.Tag("SettingsStore")<
-  SettingsStore,
-  SettingsStoreImpl
->() {}
+export class SettingsStore extends Context.Service<SettingsStore, SettingsStoreImpl>()(
+  "SettingsStore",
+) {}
 
 /**
  * `encrypted_secrets`, as the secrets service needs it: one ciphertext per
@@ -69,7 +68,7 @@ export interface SecretStoreImpl {
   readonly remove: (name: string) => Effect.Effect<number>;
 }
 
-export class SecretStore extends Effect.Tag("SecretStore")<SecretStore, SecretStoreImpl>() {}
+export class SecretStore extends Context.Service<SecretStore, SecretStoreImpl>()("SecretStore") {}
 
 /* ------------------------------------------------------------------------- *
  * The mailbox aggregates (#136)
@@ -228,7 +227,9 @@ export interface MessageStoreImpl {
   readonly accountByEmail: (email: string) => Effect.Effect<StoredAccount | null>;
 }
 
-export class MessageStore extends Effect.Tag("MessageStore")<MessageStore, MessageStoreImpl>() {}
+export class MessageStore extends Context.Service<MessageStore, MessageStoreImpl>()(
+  "MessageStore",
+) {}
 
 export interface StoredTriage {
   id: string;
@@ -254,7 +255,7 @@ export interface TriageStoreImpl {
   }) => Effect.Effect<void>;
 }
 
-export class TriageStore extends Effect.Tag("TriageStore")<TriageStore, TriageStoreImpl>() {}
+export class TriageStore extends Context.Service<TriageStore, TriageStoreImpl>()("TriageStore") {}
 
 export interface StoredLabel {
   id: string;
@@ -298,7 +299,7 @@ export interface LabelStoreImpl {
   readonly upsert: (rows: readonly NewLabelRow[]) => Effect.Effect<StoredLabel[]>;
 }
 
-export class LabelStore extends Effect.Tag("LabelStore")<LabelStore, LabelStoreImpl>() {}
+export class LabelStore extends Context.Service<LabelStore, LabelStoreImpl>()("LabelStore") {}
 
 /* ------------------------------------------------------------------------- *
  * The promo aggregate (#157)
@@ -453,7 +454,7 @@ export interface PromoStoreImpl {
   }) => Effect.Effect<number>;
 }
 
-export class PromoStore extends Effect.Tag("PromoStore")<PromoStore, PromoStoreImpl>() {}
+export class PromoStore extends Context.Service<PromoStore, PromoStoreImpl>()("PromoStore") {}
 
 /** The `R` of anything that reaches storage through the seam. */
 export type Stores =

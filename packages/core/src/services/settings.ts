@@ -149,7 +149,7 @@ export const getSettingEffect = (
   key: string,
 ): Effect.Effect<string, UnknownSettingError, SettingsStore> =>
   Effect.gen(function* () {
-    const stored = yield* SettingsStore.read(key);
+    const stored = yield* SettingsStore.use((svc) => svc.read(key));
     if (stored !== null) {
       debug("getSetting hit", { key, value: stored });
       return stored;
@@ -168,7 +168,7 @@ export const setSettingEffect = (
 ): Effect.Effect<void, never, SettingsStore> =>
   Effect.gen(function* () {
     debug("setSetting", { key, value });
-    yield* SettingsStore.write(key, value);
+    yield* SettingsStore.use((svc) => svc.write(key, value));
   });
 
 /**

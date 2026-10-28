@@ -119,23 +119,25 @@ export const listMessagesEffect = (
 
     // One row more than asked for: whether it came back is what says there is
     // a next page, and the cursor points at the last row we actually return.
-    const rows = yield* MessageStore.list({
-      accountId: args.accountId,
-      labelId: args.labelId,
-      priority: args.priority,
-      includeArchived: args.includeArchived,
-      includeTrashed: args.includeTrashed,
-      includeRemoved: args.includeRemoved,
-      internalDateFrom: args.internalDateFrom ? new Date(args.internalDateFrom) : undefined,
-      internalDateTo: args.internalDateTo ? new Date(args.internalDateTo) : undefined,
-      olderThan: decoded
-        ? {
-            internalDate: new Date(decoded.internalDate),
-            gmailMessageId: decoded.gmailMessageId,
-          }
-        : undefined,
-      limit: args.limit + 1,
-    });
+    const rows = yield* MessageStore.use((svc) =>
+      svc.list({
+        accountId: args.accountId,
+        labelId: args.labelId,
+        priority: args.priority,
+        includeArchived: args.includeArchived,
+        includeTrashed: args.includeTrashed,
+        includeRemoved: args.includeRemoved,
+        internalDateFrom: args.internalDateFrom ? new Date(args.internalDateFrom) : undefined,
+        internalDateTo: args.internalDateTo ? new Date(args.internalDateTo) : undefined,
+        olderThan: decoded
+          ? {
+              internalDate: new Date(decoded.internalDate),
+              gmailMessageId: decoded.gmailMessageId,
+            }
+          : undefined,
+        limit: args.limit + 1,
+      }),
+    );
 
     const slice = rows.slice(0, args.limit);
     const last = slice[slice.length - 1];
@@ -157,8 +159,8 @@ export const listMessagesEffect = (
     }));
 
     const [labelRows, attachmentRows] = yield* Effect.all([
-      MessageStore.labelsFor(refs),
-      MessageStore.attachmentsFor(refs),
+      MessageStore.use((svc) => svc.labelsFor(refs)),
+      MessageStore.use((svc) => svc.attachmentsFor(refs)),
     ]);
     const labelsByMsg = byMessage(labelRows, listedLabel);
     const attachmentsByMsg = byMessage(attachmentRows, (a) => ({
@@ -231,14 +233,14 @@ export const getMessageDetailEffect = (
   args: MessageRef,
 ): Effect.Effect<MessageDetail | null, never, MessageStore | TriageStore> =>
   Effect.gen(function* () {
-    const m = yield* MessageStore.detail(args);
+    const m = yield* MessageStore.use((svc) => svc.detail(args));
     if (!m) return null;
 
     const refs = [args];
     const [labelRows, attachmentRows, triageRows] = yield* Effect.all([
-      MessageStore.labelsFor(refs),
-      MessageStore.attachmentsFor(refs),
-      TriageStore.historyFor(args),
+      MessageStore.use((svc) => svc.labelsFor(refs)),
+      MessageStore.use((svc) => svc.attachmentsFor(refs)),
+      TriageStore.use((svc) => svc.historyFor(args)),
     ]);
 
     const triageHistory = triageRows.map((t) => ({
@@ -303,12 +305,18 @@ const accountSummary = (r: {
 });
 
 export const listAccountsEffect = (): Effect.Effect<AccountSummary[], never, MessageStore> =>
-  Effect.map(MessageStore.accounts(), (rows) => rows.map(accountSummary));
+  Effect.map(
+    MessageStore.use((svc) => svc.accounts()),
+    (rows) => rows.map(accountSummary),
+  );
 
 export const getAccountByIdEffect = (
   id: string,
 ): Effect.Effect<AccountSummary | null, never, MessageStore> =>
-  Effect.map(MessageStore.accountById(id), (row) => (row ? accountSummary(row) : null));
+  Effect.map(
+    MessageStore.use((svc) => svc.accountById(id)),
+    (row) => (row ? accountSummary(row) : null),
+  );
 
 export const setMessagePriorityEffect = (args: {
   accountId: string;
@@ -318,12 +326,14 @@ export const setMessagePriorityEffect = (args: {
   Effect.gen(function* () {
     // A manual priority is a triage like any other, and the newest one wins —
     // so this is an insert, not an update of what Claude said.
-    yield* TriageStore.insert({
-      accountId: args.accountId,
-      gmailMessageId: args.gmailMessageId,
-      priority: args.priority,
-      reasoning: "Manually set",
-    });
+    yield* TriageStore.use((svc) =>
+      svc.insert({
+        accountId: args.accountId,
+        gmailMessageId: args.gmailMessageId,
+        priority: args.priority,
+        reasoning: "Manually set",
+      }),
+    );
     return { ok: true };
   });
 

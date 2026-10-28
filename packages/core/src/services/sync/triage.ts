@@ -167,7 +167,7 @@ export const runTriageBatches = (
       }).pipe(
         // A provider that cannot run stops the whole sync (syncAll turns it into
         // one sync.provider_unavailable); every other batch failure is non-fatal.
-        Effect.catchAll(
+        Effect.catch(
           recoverUnlessProviderUnavailable((m) =>
             Effect.gen(function* () {
               yield* Ref.update(errorsRef, (e) => [...e, `triage batch ${batchIndex + 1}: ${m}`]);

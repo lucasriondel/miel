@@ -60,34 +60,34 @@ export function settingsStoreContract(
     });
 
     test("answers null — not undefined — for a key with no row", async () => {
-      expect(await run(SettingsStore.read(freshKey("missing")))).toBeNull();
+      expect(await run(SettingsStore.use((svc) => svc.read(freshKey("missing"))))).toBeNull();
     });
 
     test("reads back the value it was given", async () => {
       const key = freshKey("readback");
-      await run(SettingsStore.write(key, "7d"));
-      expect(await run(SettingsStore.read(key))).toBe("7d");
+      await run(SettingsStore.use((svc) => svc.write(key, "7d")));
+      expect(await run(SettingsStore.use((svc) => svc.read(key)))).toBe("7d");
     });
 
     test("a second write to a key replaces the first, rather than adding a row", async () => {
       const key = freshKey("upsert");
-      await run(SettingsStore.write(key, "a"));
-      await run(SettingsStore.write(key, "b"));
-      expect(await run(SettingsStore.read(key))).toBe("b");
+      await run(SettingsStore.use((svc) => svc.write(key, "a")));
+      await run(SettingsStore.use((svc) => svc.write(key, "b")));
+      expect(await run(SettingsStore.use((svc) => svc.read(key)))).toBe("b");
     });
 
     test("keys do not see each other", async () => {
       const [one, two] = [freshKey("one"), freshKey("two")];
-      await run(SettingsStore.write(one, "1"));
-      expect(await run(SettingsStore.read(two))).toBeNull();
-      await run(SettingsStore.write(two, "2"));
-      expect(await run(SettingsStore.read(one))).toBe("1");
+      await run(SettingsStore.use((svc) => svc.write(one, "1")));
+      expect(await run(SettingsStore.use((svc) => svc.read(two)))).toBeNull();
+      await run(SettingsStore.use((svc) => svc.write(two, "2")));
+      expect(await run(SettingsStore.use((svc) => svc.read(one)))).toBe("1");
     });
 
     test.each(VERBATIM)("stores %j verbatim", async (value) => {
       const key = freshKey("verbatim");
-      await run(SettingsStore.write(key, value));
-      expect(await run(SettingsStore.read(key))).toBe(value);
+      await run(SettingsStore.use((svc) => svc.write(key, value)));
+      expect(await run(SettingsStore.use((svc) => svc.read(key)))).toBe(value);
     });
   });
 }
@@ -108,53 +108,53 @@ export function secretStoreContract(label: string, layerFor: () => Layer.Layer<S
     });
 
     test("answers null — not undefined — for a name with no row", async () => {
-      expect(await run(SecretStore.read(freshKey("missing")))).toBeNull();
+      expect(await run(SecretStore.use((svc) => svc.read(freshKey("missing"))))).toBeNull();
     });
 
     test("reads back the ciphertext it was given", async () => {
       const name = freshKey("readback");
-      await run(SecretStore.write(name, "iv:tag:cipher"));
-      expect(await run(SecretStore.read(name))).toBe("iv:tag:cipher");
+      await run(SecretStore.use((svc) => svc.write(name, "iv:tag:cipher")));
+      expect(await run(SecretStore.use((svc) => svc.read(name)))).toBe("iv:tag:cipher");
     });
 
     test("a second write to a name replaces the ciphertext", async () => {
       const name = freshKey("upsert");
-      await run(SecretStore.write(name, "iv:tag:first"));
-      await run(SecretStore.write(name, "iv:tag:second"));
-      expect(await run(SecretStore.read(name))).toBe("iv:tag:second");
+      await run(SecretStore.use((svc) => svc.write(name, "iv:tag:first")));
+      await run(SecretStore.use((svc) => svc.write(name, "iv:tag:second")));
+      expect(await run(SecretStore.use((svc) => svc.read(name)))).toBe("iv:tag:second");
     });
 
     test("names do not see each other", async () => {
       const [one, two] = [freshKey("one"), freshKey("two")];
-      await run(SecretStore.write(one, "iv:tag:one"));
-      expect(await run(SecretStore.read(two))).toBeNull();
-      await run(SecretStore.write(two, "iv:tag:two"));
-      expect(await run(SecretStore.read(one))).toBe("iv:tag:one");
+      await run(SecretStore.use((svc) => svc.write(one, "iv:tag:one")));
+      expect(await run(SecretStore.use((svc) => svc.read(two)))).toBeNull();
+      await run(SecretStore.use((svc) => svc.write(two, "iv:tag:two")));
+      expect(await run(SecretStore.use((svc) => svc.read(one)))).toBe("iv:tag:one");
     });
 
     test("a removal reports the row it took, and the name reads null after", async () => {
       const name = freshKey("remove");
-      await run(SecretStore.write(name, "iv:tag:cipher"));
-      expect(await run(SecretStore.remove(name))).toBe(1);
-      expect(await run(SecretStore.read(name))).toBeNull();
+      await run(SecretStore.use((svc) => svc.write(name, "iv:tag:cipher")));
+      expect(await run(SecretStore.use((svc) => svc.remove(name)))).toBe(1);
+      expect(await run(SecretStore.use((svc) => svc.read(name)))).toBeNull();
     });
 
     test("removing a name with no row is 0, not a failure", async () => {
-      expect(await run(SecretStore.remove(freshKey("never-stored")))).toBe(0);
+      expect(await run(SecretStore.use((svc) => svc.remove(freshKey("never-stored"))))).toBe(0);
     });
 
     test("a removal takes one name only", async () => {
       const [gone, kept] = [freshKey("gone"), freshKey("kept")];
-      await run(SecretStore.write(gone, "iv:tag:gone"));
-      await run(SecretStore.write(kept, "iv:tag:kept"));
-      await run(SecretStore.remove(gone));
-      expect(await run(SecretStore.read(kept))).toBe("iv:tag:kept");
+      await run(SecretStore.use((svc) => svc.write(gone, "iv:tag:gone")));
+      await run(SecretStore.use((svc) => svc.write(kept, "iv:tag:kept")));
+      await run(SecretStore.use((svc) => svc.remove(gone)));
+      expect(await run(SecretStore.use((svc) => svc.read(kept)))).toBe("iv:tag:kept");
     });
 
     test.each(VERBATIM)("stores %j verbatim", async (ciphertext) => {
       const name = freshKey("verbatim");
-      await run(SecretStore.write(name, ciphertext));
-      expect(await run(SecretStore.read(name))).toBe(ciphertext);
+      await run(SecretStore.use((svc) => svc.write(name, ciphertext)));
+      expect(await run(SecretStore.use((svc) => svc.read(name)))).toBe(ciphertext);
     });
   });
 }
@@ -247,26 +247,29 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
         isTrashed: fields?.isTrashed,
       });
       const [row] = await run(
-        PromoStore.insert([
-          {
-            ...ref,
-            code: fields?.code === undefined ? "SUMMER20" : fields.code,
-            discount: fields?.discount ?? "20% off",
-            terms: fields?.terms === undefined ? "orders over £50" : fields.terms,
-            expiresAt: fields?.expiresAt === undefined ? endOfDay("2026-06-30") : fields.expiresAt,
-            merchant: fields?.merchant === undefined ? "Zara" : fields.merchant,
-          },
-        ]),
+        PromoStore.use((svc) =>
+          svc.insert([
+            {
+              ...ref,
+              code: fields?.code === undefined ? "SUMMER20" : fields.code,
+              discount: fields?.discount ?? "20% off",
+              terms: fields?.terms === undefined ? "orders over £50" : fields.terms,
+              expiresAt:
+                fields?.expiresAt === undefined ? endOfDay("2026-06-30") : fields.expiresAt,
+              merchant: fields?.merchant === undefined ? "Zara" : fields.merchant,
+            },
+          ]),
+        ),
       );
       return row;
     };
 
-    const suggestions = () => run(PromoStore.unsaved({ accountId, ...WINDOW }));
+    const suggestions = () => run(PromoStore.use((svc) => svc.unsaved({ accountId, ...WINDOW })));
     const savedById = async (id: string) =>
-      (await run(PromoStore.saved())).filter((r) => r.id === id);
+      (await run(PromoStore.use((svc) => svc.saved()))).filter((r) => r.id === id);
 
     test("answers null — not undefined — for an id with no row", async () => {
-      expect(await run(PromoStore.byId(crypto.randomUUID()))).toBeNull();
+      expect(await run(PromoStore.use((svc) => svc.byId(crypto.randomUUID())))).toBeNull();
     });
 
     test("hands back what it inserted, with an id and in the unsaved state", async () => {
@@ -274,7 +277,7 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
 
       expect(row.id).toBeTruthy();
       expect(row.savedAt).toBeNull();
-      expect(await run(PromoStore.byId(row.id))).toEqual(row);
+      expect(await run(PromoStore.use((svc) => svc.byId(row.id)))).toEqual(row);
     });
 
     test("stores the five extracted fields byte for byte", async () => {
@@ -285,7 +288,7 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
         merchant: "",
       });
 
-      const stored = await run(PromoStore.byId(row.id));
+      const stored = await run(PromoStore.use((svc) => svc.byId(row.id)));
       expect(stored).toMatchObject({
         code: "µ nordic ø — 日本語",
         discount: " 20 % ",
@@ -301,14 +304,14 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       // Not just "a timestamp came back": the millisecond is the whole point of
       // storing a date this way, and a column that truncated to the day would
       // expire a promo the shop still honours.
-      expect((await run(PromoStore.byId(row.id)))?.expiresAt).toEqual(expiresAt);
+      expect((await run(PromoStore.use((svc) => svc.byId(row.id))))?.expiresAt).toEqual(expiresAt);
       expect(expiresAt.toISOString()).toBe("2026-12-25T23:59:59.999Z");
     });
 
     test("keeps the nullable fields null rather than defaulting them", async () => {
       const row = await extract({ code: null, terms: null, expiresAt: null, merchant: null });
 
-      expect(await run(PromoStore.byId(row.id))).toMatchObject({
+      expect(await run(PromoStore.use((svc) => svc.byId(row.id)))).toMatchObject({
         code: null,
         terms: null,
         expiresAt: null,
@@ -325,14 +328,23 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
     test("inserts every row it is given, and nothing for an empty list", async () => {
       const ref = await world.message({ accountId, internalDate: IN_WINDOW });
       const rows = await run(
-        PromoStore.insert([
-          { ...ref, code: "A", discount: "10% off", terms: null, expiresAt: null, merchant: null },
-          { ...ref, code: "B", discount: "£5 off", terms: null, expiresAt: null, merchant: null },
-        ]),
+        PromoStore.use((svc) =>
+          svc.insert([
+            {
+              ...ref,
+              code: "A",
+              discount: "10% off",
+              terms: null,
+              expiresAt: null,
+              merchant: null,
+            },
+            { ...ref, code: "B", discount: "£5 off", terms: null, expiresAt: null, merchant: null },
+          ]),
+        ),
       );
 
       expect(rows.map((r) => r.code).toSorted()).toEqual(["A", "B"]);
-      expect(await run(PromoStore.insert([]))).toEqual([]);
+      expect(await run(PromoStore.use((svc) => svc.insert([])))).toEqual([]);
     });
 
     test("suggests the unsaved rows of one account, inside the window", async () => {
@@ -354,7 +366,7 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       const theirs = await extract({ accountId: second.id });
       const outside = await extract({ internalDate: new Date("2026-07-01T09:00:00.000Z") });
 
-      const rows = (await run(PromoStore.unsaved({}))).filter((r) =>
+      const rows = (await run(PromoStore.use((svc) => svc.unsaved({})))).filter((r) =>
         [mine.id, theirs.id, outside.id].includes(r.id),
       );
 
@@ -377,7 +389,7 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       const row = await extract();
       const savedAt = new Date("2026-06-16T10:00:00.000Z");
 
-      await run(PromoStore.markSaved({ id: row.id, savedAt, message: COPY }));
+      await run(PromoStore.use((svc) => svc.markSaved({ id: row.id, savedAt, message: COPY })));
 
       expect((await suggestions()).map((r) => r.id)).not.toContain(row.id);
       // …carrying the mailbox it arrived in, which is a column on the page and
@@ -390,13 +402,17 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       const first = new Date("2026-06-16T10:00:00.000Z");
       const second = new Date("2026-06-17T10:00:00.000Z");
 
-      await run(PromoStore.markSaved({ id: row.id, savedAt: first, message: COPY }));
       await run(
-        PromoStore.markSaved({
-          id: row.id,
-          savedAt: second,
-          message: { ...COPY, subject: null, bodyHtml: null },
-        }),
+        PromoStore.use((svc) => svc.markSaved({ id: row.id, savedAt: first, message: COPY })),
+      );
+      await run(
+        PromoStore.use((svc) =>
+          svc.markSaved({
+            id: row.id,
+            savedAt: second,
+            message: { ...COPY, subject: null, bodyHtml: null },
+          }),
+        ),
       );
 
       const saved = await savedById(row.id);
@@ -414,21 +430,25 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       const older = await extract();
       const newer = await extract({ accountId: second.id });
       await run(
-        PromoStore.markSaved({
-          id: older.id,
-          savedAt: new Date("2026-06-16T10:00:00.000Z"),
-          message: COPY,
-        }),
+        PromoStore.use((svc) =>
+          svc.markSaved({
+            id: older.id,
+            savedAt: new Date("2026-06-16T10:00:00.000Z"),
+            message: COPY,
+          }),
+        ),
       );
       await run(
-        PromoStore.markSaved({
-          id: newer.id,
-          savedAt: new Date("2026-06-18T10:00:00.000Z"),
-          message: COPY,
-        }),
+        PromoStore.use((svc) =>
+          svc.markSaved({
+            id: newer.id,
+            savedAt: new Date("2026-06-18T10:00:00.000Z"),
+            message: COPY,
+          }),
+        ),
       );
 
-      const rows = (await run(PromoStore.saved())).filter((r) =>
+      const rows = (await run(PromoStore.use((svc) => svc.saved()))).filter((r) =>
         [older.id, newer.id].includes(r.id),
       );
       expect(rows.map((r) => r.id)).toEqual([newer.id, older.id]);
@@ -439,16 +459,22 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
     test("a patch writes the fields it names and leaves the rest as stored", async () => {
       const row = await extract();
       await run(
-        PromoStore.markSaved({
-          id: row.id,
-          savedAt: new Date("2026-06-16T10:00:00.000Z"),
-          message: COPY,
-        }),
+        PromoStore.use((svc) =>
+          svc.markSaved({
+            id: row.id,
+            savedAt: new Date("2026-06-16T10:00:00.000Z"),
+            message: COPY,
+          }),
+        ),
       );
 
-      await run(PromoStore.patch({ id: row.id, fields: { code: "SUMMER25", expiresAt: null } }));
+      await run(
+        PromoStore.use((svc) =>
+          svc.patch({ id: row.id, fields: { code: "SUMMER25", expiresAt: null } }),
+        ),
+      );
 
-      expect(await run(PromoStore.byId(row.id))).toMatchObject({
+      expect(await run(PromoStore.use((svc) => svc.byId(row.id)))).toMatchObject({
         code: "SUMMER25",
         expiresAt: null,
         discount: "20% off",
@@ -463,29 +489,29 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
     test("a patch that names nothing leaves the row alone", async () => {
       const row = await extract();
 
-      await run(PromoStore.patch({ id: row.id, fields: {} }));
+      await run(PromoStore.use((svc) => svc.patch({ id: row.id, fields: {} })));
 
-      expect(await run(PromoStore.byId(row.id))).toEqual(row);
+      expect(await run(PromoStore.use((svc) => svc.byId(row.id)))).toEqual(row);
     });
 
     test("a removal reports the row it took, and the id reads null after", async () => {
       const row = await extract();
 
-      expect(await run(PromoStore.remove(row.id))).toBe(1);
-      expect(await run(PromoStore.byId(row.id))).toBeNull();
+      expect(await run(PromoStore.use((svc) => svc.remove(row.id)))).toBe(1);
+      expect(await run(PromoStore.use((svc) => svc.byId(row.id)))).toBeNull();
     });
 
     test("removing an id with no row is 0, not a failure", async () => {
-      expect(await run(PromoStore.remove(crypto.randomUUID()))).toBe(0);
+      expect(await run(PromoStore.use((svc) => svc.remove(crypto.randomUUID())))).toBe(0);
     });
 
     test("a removal takes one row only", async () => {
       const gone = await extract();
       const kept = await extract();
 
-      await run(PromoStore.remove(gone.id));
+      await run(PromoStore.use((svc) => svc.remove(gone.id)));
 
-      expect(await run(PromoStore.byId(kept.id))).not.toBeNull();
+      expect(await run(PromoStore.use((svc) => svc.byId(kept.id)))).not.toBeNull();
     });
 
     /**
@@ -497,44 +523,64 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
     test("clearing a message's unsaved rows takes all of them, and reports how many", async () => {
       const ref = await world.message({ accountId, internalDate: IN_WINDOW });
       const rows = await run(
-        PromoStore.insert([
-          { ...ref, code: "A", discount: "10% off", terms: null, expiresAt: null, merchant: null },
-          { ...ref, code: "B", discount: "£5 off", terms: null, expiresAt: null, merchant: null },
-        ]),
+        PromoStore.use((svc) =>
+          svc.insert([
+            {
+              ...ref,
+              code: "A",
+              discount: "10% off",
+              terms: null,
+              expiresAt: null,
+              merchant: null,
+            },
+            { ...ref, code: "B", discount: "£5 off", terms: null, expiresAt: null, merchant: null },
+          ]),
+        ),
       );
 
-      expect(await run(PromoStore.removeUnsavedForMessage(ref))).toBe(2);
+      expect(await run(PromoStore.use((svc) => svc.removeUnsavedForMessage(ref)))).toBe(2);
       for (const row of rows) {
-        expect(await run(PromoStore.byId(row.id))).toBeNull();
+        expect(await run(PromoStore.use((svc) => svc.byId(row.id)))).toBeNull();
       }
     });
 
     test("clearing leaves a saved row on the same message alone", async () => {
       const ref = await world.message({ accountId, internalDate: IN_WINDOW });
       const [keep, drop] = await run(
-        PromoStore.insert([
-          {
-            ...ref,
-            code: "KEPT",
-            discount: "10% off",
-            terms: null,
-            expiresAt: null,
-            merchant: null,
-          },
-          { ...ref, code: "OLD", discount: "£5 off", terms: null, expiresAt: null, merchant: null },
-        ]),
+        PromoStore.use((svc) =>
+          svc.insert([
+            {
+              ...ref,
+              code: "KEPT",
+              discount: "10% off",
+              terms: null,
+              expiresAt: null,
+              merchant: null,
+            },
+            {
+              ...ref,
+              code: "OLD",
+              discount: "£5 off",
+              terms: null,
+              expiresAt: null,
+              merchant: null,
+            },
+          ]),
+        ),
       );
       await run(
-        PromoStore.markSaved({
-          id: keep.id,
-          savedAt: new Date("2026-06-16T10:00:00.000Z"),
-          message: COPY,
-        }),
+        PromoStore.use((svc) =>
+          svc.markSaved({
+            id: keep.id,
+            savedAt: new Date("2026-06-16T10:00:00.000Z"),
+            message: COPY,
+          }),
+        ),
       );
 
-      expect(await run(PromoStore.removeUnsavedForMessage(ref))).toBe(1);
-      expect(await run(PromoStore.byId(keep.id))).not.toBeNull();
-      expect(await run(PromoStore.byId(drop.id))).toBeNull();
+      expect(await run(PromoStore.use((svc) => svc.removeUnsavedForMessage(ref)))).toBe(1);
+      expect(await run(PromoStore.use((svc) => svc.byId(keep.id)))).not.toBeNull();
+      expect(await run(PromoStore.use((svc) => svc.byId(drop.id)))).toBeNull();
     });
 
     test("clearing one message's rows leaves another message's alone", async () => {
@@ -542,20 +588,22 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       const other = await extract();
 
       await run(
-        PromoStore.removeUnsavedForMessage({
-          accountId: mine.accountId,
-          gmailMessageId: mine.gmailMessageId,
-        }),
+        PromoStore.use((svc) =>
+          svc.removeUnsavedForMessage({
+            accountId: mine.accountId,
+            gmailMessageId: mine.gmailMessageId,
+          }),
+        ),
       );
 
-      expect(await run(PromoStore.byId(mine.id))).toBeNull();
-      expect(await run(PromoStore.byId(other.id))).not.toBeNull();
+      expect(await run(PromoStore.use((svc) => svc.byId(mine.id)))).toBeNull();
+      expect(await run(PromoStore.use((svc) => svc.byId(other.id)))).not.toBeNull();
     });
 
     test("clearing a message with no detections is 0, not a failure", async () => {
       const ref = await world.message({ accountId, internalDate: IN_WINDOW });
 
-      expect(await run(PromoStore.removeUnsavedForMessage(ref))).toBe(0);
+      expect(await run(PromoStore.use((svc) => svc.removeUnsavedForMessage(ref)))).toBe(0);
     });
   });
 }

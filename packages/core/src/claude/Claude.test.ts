@@ -1,10 +1,9 @@
 // Service tests for the Effect-based `Claude` (claude/Claude.ts). The CLI
-// transport is `claude-code-effect`, so the subprocess is faked at that SDK's
-// own seam — `ClaudeCodeTest.handler`, a `CommandExecutor` layer that hands
-// back a canned capture — rather than by mocking miel's shell adapter, which
-// the transport no longer calls. The real arg assembly, envelope parse and
-// error taxonomy all still run against that capture, so these tests exercise
-// more of the path than the old spawn mock did, not less.
+// transport is `effect-ai-claude-code`, so the subprocess is faked at that
+// provider's own seam — `ClaudeCodeTest.make`, a `ChildProcessSpawner` that
+// hands back a canned capture — rather than by mocking anything of miel's. The
+// real arg assembly, envelope parse and error routing all still run against
+// that capture, and the code under test maps the result onto miel's taxonomy.
 //
 // The environment is still mocked; the model settings and the Claude Code
 // token come from the in-memory stores (#132), seeded per test — a row is how
@@ -15,7 +14,7 @@
 // Run: bun test src/claude/Claude.test.ts
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Effect, Exit } from "effect";
-import { ClaudeCodeTest, type SpawnInput } from "claude-code-effect";
+import { ClaudeCodeTest } from "effect-ai-claude-code";
 import { defaultModelFor, MODEL_TASKS, type ModelTask, type Provider } from "../providerModels";
 import type { PromoExtractInputT } from "../schemas/promo";
 import type { ReplyGenInputT } from "../schemas/reply";
@@ -26,16 +25,16 @@ import { makeTestStores, type TestStores } from "../testkit/stores";
 import type { Stores } from "../stores/contracts";
 
 // ── spawn / env fakes ────────────────────────────────────────────────────────
-// `spawnResult` is mutated per test before exercising the service; the SDK's
-// deep-fake executor hands it back, so no subprocess is ever launched. This is
-// the seam the CLI transport actually has now: `ClaudeCodeTest.handler` slots
-// in where the platform's `CommandExecutor` would, and the SDK's real arg
-// assembly, envelope parse and typed errors all run against the canned capture
-// — which is then mapped onto miel's taxonomy by the code under test.
+// `spawnResult` is mutated per test before exercising the service; the
+// provider's deep-fake spawner hands it back, so no subprocess is ever
+// launched. This is the seam the CLI transport actually has: `ClaudeCodeTest`
+// slots in where Bun's `ChildProcessSpawner` would, and the provider's real
+// arg assembly, envelope parse and typed errors all run against the canned
+// capture — which is then mapped onto miel's taxonomy by the code under test.
 //
-// Unlike the module mock it replaces, this is scoped rather than process-wide:
-// `_setCommandExecutorLayerForTests` is set and cleared by this file alone, so
-// no other suite's meaning of a module changes because this one loaded.
+// It is scoped rather than process-wide: `_setSpawnerLayerForTests` is set and
+// cleared by this file alone, so no other suite's meaning of a module changes
+// because this one loaded.
 //
 // Settings are not mocked at all: the real service reads them out of a seeded
 // store. Nor is the hosted transport — what this file has to prove about
@@ -43,33 +42,41 @@ import type { Stores } from "../stores/contracts";
 // counter below shows directly.
 const realEnv = await import("../env");
 
-type SpawnResult = { stdout: string; stderr: string; exitCode: number };
+/** What the fake CLI prints: stream-json lines on stdout, then exits. */
+type SpawnResult = { stdout: ReadonlyArray<object | string>; stderr: string; exitCode: number };
 let spawnResult: SpawnResult;
 let spawnCalls: number;
-let lastSpawn: SpawnInput | null;
+let lastSpawn: ClaudeCodeTest.Spawn | null;
 
-/** The SDK's fake executor, recording each launch and answering with the canned capture. */
-const testExecutor = ClaudeCodeTest.handler((input) => {
+/** The provider's fake spawner, recording each launch and answering with the canned capture. */
+const testSpawner = ClaudeCodeTest.make((spawn) => {
   spawnCalls += 1;
-  lastSpawn = input;
-  return Effect.succeed(spawnResult);
+  lastSpawn = spawn;
+  return spawnResult;
 });
 
-/** The model id the CLI reports back, as the sole key of `modelUsage`. */
+/** The model id the CLI reports back, in its `init` envelope. */
 const RESOLVED_MODEL = "claude-haiku-4-5";
 const SESSION_ID = "sess-test-1";
 
 /**
- * A success envelope as the CLI actually emits one.
+ * A success run as the CLI actually emits one in stream-json: the `init`
+ * envelope carrying the session and the resolved model, then the `result`
+ * envelope carrying the validated `structured_output`.
  *
- * `session_id` and `modelUsage` are not decoration: the transport reads the run
- * id and the resolved model out of them, and treats a success envelope missing
- * either as malformed rather than inventing a blank handle. miel's own parser
- * used to tolerate both being absent, so these fixtures used to carry neither —
- * which made them envelopes no `claude` binary produces.
+ * `session_id` and the model are not decoration: the transport reads the run
+ * id and the resolved model out of them, and a success envelope missing its
+ * `structured_output` is a malformed answer rather than a blank one.
  */
-const successEnvelope = (structuredOutput: unknown): string =>
-  JSON.stringify({
+const successLines = (structuredOutput: unknown): ReadonlyArray<object> => [
+  {
+    type: "system",
+    subtype: "init",
+    session_id: SESSION_ID,
+    model: RESOLVED_MODEL,
+    claude_code_version: "2.1.283",
+  },
+  {
     type: "result",
     subtype: "success",
     is_error: false,
@@ -78,7 +85,8 @@ const successEnvelope = (structuredOutput: unknown): string =>
     modelUsage: { [RESOLVED_MODEL]: { inputTokens: 10, outputTokens: 5 } },
     usage: { input_tokens: 10, output_tokens: 5 },
     total_cost_usd: 0.001,
-  });
+  },
+];
 
 // `getEnv` reads `process.env` live (no caching). CLAUDE_BIN + the
 // prompt-builder fields get harmless defaults. There is no token field: the
@@ -110,7 +118,7 @@ const { CLAUDE_CODE_TOKEN_SECRET } = await import("../services/claudeCodeToken")
 const { SETTING_KEYS } = await import("../services/settings");
 
 // Long enough to clear the store's minimum length; its value is only ever
-// compared against what the spawn mock was handed.
+// compared against what the spawn fake was handed.
 const TOKEN = "sk-ant-oat01-claude-service-test";
 
 let stores: TestStores;
@@ -140,11 +148,11 @@ const seed = (opts: { provider?: string; token?: string | null } = {}): TestStor
 };
 
 // Import the live layer AFTER the env mock is registered.
-const { ClaudeLive, Claude, _setCommandExecutorLayerForTests } = await import("./Claude");
+const { ClaudeLive, Claude, _setSpawnerLayerForTests } = await import("./Claude");
 
 // Every spawn in this file goes through the fake; nothing else in the suite
-// touches the executor, so it is set once and never restored mid-run.
-_setCommandExecutorLayerForTests(testExecutor);
+// touches the spawner, so it is set once and never restored mid-run.
+_setSpawnerLayerForTests(testSpawner);
 
 const run = <A, E>(eff: Effect.Effect<A, E, ClaudeTag | Stores>) =>
   runExit(stores.provide(Effect.provide(eff, ClaudeLive)));
@@ -204,7 +212,7 @@ const runTask = (task: ModelTask) =>
 
 describe("Claude.run('triage')", () => {
   beforeEach(() => {
-    spawnResult = { stdout: "", stderr: "", exitCode: 0 };
+    spawnResult = { stdout: [], stderr: "", exitCode: 0 };
     spawnCalls = 0;
     lastSpawn = null;
     process.env.CLAUDE_BIN = "claude";
@@ -224,61 +232,53 @@ describe("Claude.run('triage')", () => {
   // the CLI itself reads. That the store is the only source is
   // claudeCodeToken.test.ts's to prove.
   test("hands the stored token to the subprocess env", async () => {
-    spawnResult = {
-      stdout: successEnvelope({ results: [] }),
-      stderr: "",
-      exitCode: 0,
-    };
+    spawnResult = { stdout: successLines({ results: [] }), stderr: "", exitCode: 0 };
     expectSuccess(await run(Effect.flatMap(Claude, (s) => s.run("triage", TRIAGE_INPUT))));
 
-    // The SDK inherits `process.env` and overlays the token on top, so the
-    // assertion is that the overlay carries the stored value — not that the
-    // child env consists of nothing else.
     expect(lastSpawn?.env.CLAUDE_CODE_OAUTH_TOKEN).toBe(TOKEN);
   });
 
   test("a good envelope (is_error:false, exit 0) parses to the structured output", async () => {
-    spawnResult = {
-      stdout: successEnvelope({ results: [] }),
-      stderr: "",
-      exitCode: 0,
-    };
+    spawnResult = { stdout: successLines({ results: [] }), stderr: "", exitCode: 0 };
     const exit = await run(Effect.flatMap(Claude, (s) => s.run("triage", TRIAGE_INPUT)));
     const res = expectSuccess(exit);
     expect(res.output.results).toEqual([]);
+    expect(res.runId).toBe(SESSION_ID);
+    expect(res.model).toBe(RESOLVED_MODEL);
   });
 
   test("non-JSON stdout on a clean exit fails with ClaudeParseError", async () => {
-    spawnResult = { stdout: "not json at all", stderr: "", exitCode: 0 };
+    spawnResult = { stdout: ["not json at all"], stderr: "", exitCode: 0 };
     const exit = await run(Effect.flatMap(Claude, (s) => s.run("triage", TRIAGE_INPUT)));
     expectFailureTag(exit, "ClaudeParseError");
   });
 
   test("a non-zero exit whose stderr looks like a login problem fails with ClaudeAuthError", async () => {
-    spawnResult = {
-      stdout: "",
-      stderr: "Not logged in / please run /login",
-      exitCode: 1,
-    };
+    spawnResult = { stdout: [], stderr: "Not logged in / please run /login", exitCode: 1 };
     const exit = await run(Effect.flatMap(Claude, (s) => s.run("triage", TRIAGE_INPUT)));
     expectFailureTag(exit, "ClaudeAuthError");
   });
 
   test("a generic non-zero exit fails with ClaudeSpawnError", async () => {
-    spawnResult = { stdout: "", stderr: "boom: segfault", exitCode: 1 };
+    spawnResult = { stdout: [], stderr: "boom: segfault", exitCode: 1 };
     const exit = await run(Effect.flatMap(Claude, (s) => s.run("triage", TRIAGE_INPUT)));
     expectFailureTag(exit, "ClaudeSpawnError");
+  });
+
+  // A valid envelope whose `structured_output` is not what the task's schema
+  // says — the model broke its contract, which is a schema error and not a
+  // parse error or a spawn problem.
+  test("a structured output the schema refuses fails with ClaudeSchemaError", async () => {
+    spawnResult = { stdout: successLines({ nonsense: true }), stderr: "", exitCode: 0 };
+    const exit = await run(Effect.flatMap(Claude, (s) => s.run("triage", TRIAGE_INPUT)));
+    expectFailureTag(exit, "ClaudeSchemaError");
   });
 });
 
 // Which transport runs is the provider's decision, and only one of them spawns.
 describe("Claude.run provider routing (#105)", () => {
   beforeEach(() => {
-    spawnResult = {
-      stdout: successEnvelope({ results: [] }),
-      stderr: "",
-      exitCode: 0,
-    };
+    spawnResult = { stdout: successLines({ results: [] }), stderr: "", exitCode: 0 };
     spawnCalls = 0;
     stores = seed();
   });
@@ -289,10 +289,10 @@ describe("Claude.run provider routing (#105)", () => {
     expect(spawnCalls).toBe(1);
   });
 
-  // The hosted path is exercised in hosted.test.ts through the runner's own
-  // vendor SDKs; here the secret store holds no credential row, so the run
-  // never gets as far as a transport. It must not fall back to the subprocess
-  // and quietly triage somewhere the user did not pick.
+  // The hosted path is exercised in hosted.test.ts through the transport's own
+  // seam; here the secret store holds no credential row, so the run never gets
+  // as far as a transport. It must not fall back to the subprocess and quietly
+  // triage somewhere the user did not pick.
   test.each(["anthropic", "google", "openai"])("%s never reaches the CLI", async (provider) => {
     stores = seed({ provider });
     const exit = await run(Effect.flatMap(Claude, (s) => s.run("triage", TRIAGE_INPUT)));
@@ -347,11 +347,7 @@ describe("Claude.run over the task table (#128)", () => {
   });
 
   test.each([...MODEL_TASKS])("%s spawns the CLI once and parses its own output", async (task) => {
-    spawnResult = {
-      stdout: successEnvelope(OUTPUTS[task]),
-      stderr: "",
-      exitCode: 0,
-    };
+    spawnResult = { stdout: successLines(OUTPUTS[task]), stderr: "", exitCode: 0 };
 
     const result = expectSuccess(await runTask(task));
 
@@ -366,15 +362,22 @@ describe("Claude.run over the task table (#128)", () => {
     ["reply", false],
     ["promo-extract", false],
   ] as const)("%s passes --allowedTools only when its row lists one", async (task, hasTools) => {
-    spawnResult = {
-      stdout: successEnvelope(OUTPUTS[task]),
-      stderr: "",
-      exitCode: 0,
-    };
+    spawnResult = { stdout: successLines(OUTPUTS[task]), stderr: "", exitCode: 0 };
 
     expectSuccess(await runTask(task));
 
     expect(lastSpawn?.args.includes("--allowedTools")).toBe(hasTools);
+  });
+
+  // The schema is what constrains the model, and it is the task's own.
+  test.each([...MODEL_TASKS])("%s sends its own schema as --json-schema", async (task) => {
+    spawnResult = { stdout: successLines(OUTPUTS[task]), stderr: "", exitCode: 0 };
+
+    expectSuccess(await runTask(task));
+
+    const args = lastSpawn?.args ?? [];
+    const schema = JSON.parse(args[args.indexOf("--json-schema") + 1] ?? "null");
+    expect(Object.keys(schema.properties)).toEqual(Object.keys(OUTPUTS[task]));
   });
 
   // The other side of the one branch: a vendor with no stored key stops every
@@ -396,7 +399,7 @@ describe("Claude.run over the task table (#128)", () => {
   // The CLI transport's failure mapping is the run's, not triage's: a task
   // added tomorrow gets it without writing anything.
   test.each([...MODEL_TASKS])("%s maps a login failure to ClaudeAuthError", async (task) => {
-    spawnResult = { stdout: "", stderr: "Not logged in / please run /login", exitCode: 1 };
+    spawnResult = { stdout: [], stderr: "Not logged in / please run /login", exitCode: 1 };
 
     expectFailureTag(await runTask(task), "ClaudeAuthError");
   });

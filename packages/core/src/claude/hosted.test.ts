@@ -1,6 +1,6 @@
 // The hosted (HTTP) path, exercised through the `Claude` service — the
-// transport itself lives in `ai-task-runner-effect` and has its own suite
-// there; what this file proves is miel's half of the contract (#105, #125):
+// transport itself is `claude/hosted.ts`, the Vercel ai-sdk behind one
+// substitutable function; what this file proves is the contract (#105, #125):
 //
 //   - the vendor named by the provider is what the call is made against, with
 //     that vendor's stored key (#104) and the bare model id — the key read out
@@ -13,7 +13,7 @@
 //     throws a message quoting it, and a payload the task's schema refuses
 //     surfaces as a HostedApiError exactly as before.
 //
-// The fake sits at the runner's own seam (`_setHostedGenerateForTests` →
+// The fake sits at the transport's own seam (`_setHostedGenerateForTests` →
 // `HostedGenerate`), so the real credential read, provider resolution and
 // error mapping all run; no network, no module mocks.
 // Run: bun test src/claude/hosted.test.ts
@@ -49,7 +49,7 @@ mock.module("../env", () => ({
 }));
 afterAll(() => {
   mock.restore();
-  // bun shares globals across test files: leave the runner's hosted seam the
+  // bun shares globals across test files: leave the hosted seam the
   // way other suites expect to find it.
   _setHostedGenerateForTests(null);
 });

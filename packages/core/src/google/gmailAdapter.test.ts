@@ -6,7 +6,7 @@ afterAll(() => mock.restore());
 
 // gmailAdapter.sendReply must fetch the original message first to learn its
 // threadId + Message-ID header, then send the reply with those so it threads
-// correctly. We mock the Effect layer entirely: `./contracts` accessors return
+// correctly. We mock the Effect layer entirely: `./contracts` services answer
 // marker objects describing the call, and `./runtime`'s runWithApp interprets
 // them — so we can assert exactly what `send` received.
 
@@ -14,6 +14,14 @@ interface Marker {
   op: string;
   args: unknown[];
 }
+
+/**
+ * A `Context.Service` stand-in. The adapter reaches every service through
+ * `Tag.use((svc) => svc.method(...))`, so `use` is the whole of what a fake
+ * tag needs — it hands the fake implementation to the callback and returns
+ * whatever marker that produced.
+ */
+const service = <T extends object>(impl: T) => ({ use: <A>(f: (svc: T) => A): A => f(impl) });
 
 let sendCapture: Record<string, unknown> | null = null;
 const deleteFilterCalls: unknown[][] = [];
@@ -29,19 +37,19 @@ const ORIGINAL = {
 };
 
 mock.module("./contracts", () => ({
-  GmailMessages: {
+  GmailMessages: service({
     get: (...args: unknown[]) => ({ op: "get", args }) as Marker,
     send: (...args: unknown[]) => ({ op: "send", args }) as Marker,
     search: (...args: unknown[]) => ({ op: "search", args }) as Marker,
-  },
-  GmailLabels: { list: () => ({}), create: () => ({}) },
-  GmailFilters: {
+  }),
+  GmailLabels: service({ list: () => ({}), create: () => ({}) }),
+  GmailFilters: service({
     list: () => ({}),
     create: () => ({}),
     delete: (...args: unknown[]) => ({ op: "filters.delete", args }) as Marker,
-  },
-  GmailThreads: { trash: () => ({}), archive: () => ({}) },
-  GmailModify: { batch: () => ({}) },
+  }),
+  GmailThreads: service({ trash: () => ({}), archive: () => ({}) }),
+  GmailModify: service({ batch: () => ({}) }),
   refKey: (r: { email?: string }) => `email:${r.email}`,
 }));
 

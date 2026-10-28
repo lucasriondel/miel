@@ -1,4 +1,4 @@
-import { Effect, Either, Ref } from "effect";
+import { Effect, Result, Ref } from "effect";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { accounts } from "../../db/schema";
@@ -99,10 +99,10 @@ export const fetchAndTriageEffect = (
       labelsByGmailId: fetch.labelsByGmailId,
       log,
       emit,
-    }).pipe(Effect.either);
+    }).pipe(Effect.result);
 
-    if (Either.isLeft(triageEither)) {
-      const err = triageEither.left;
+    if (Result.isFailure(triageEither)) {
+      const err = triageEither.failure;
       const message = err instanceof Error ? err.message : String(err);
       yield* stepFinishTriageRun({
         triageRunId,
@@ -116,7 +116,7 @@ export const fetchAndTriageEffect = (
       return yield* Effect.fail(err);
     }
 
-    const triage = triageEither.right;
+    const triage = triageEither.success;
     yield* stepFinishTriageRun({
       triageRunId,
       status: triageRunStatusFor(triage),

@@ -25,7 +25,7 @@ const impl: GmailFiltersImpl = {
   list: (ref) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const res = yield* Effect.tryPromise({
         try: () => gmail.users.settings.filters.list({ userId: "me" }),
@@ -42,7 +42,7 @@ const impl: GmailFiltersImpl = {
   create: (ref, spec: FilterSpec) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const criteria: Record<string, string> = {};
       if (spec.from) criteria.from = spec.from;
@@ -81,7 +81,7 @@ const impl: GmailFiltersImpl = {
   delete: (ref, filterId) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       yield* Effect.tryPromise({
         try: () => gmail.users.settings.filters.delete({ userId: "me", id: filterId }),

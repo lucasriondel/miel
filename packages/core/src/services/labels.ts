@@ -33,15 +33,17 @@ export const syncLabelsForAccountEffect = (args: {
       return [];
     }
 
-    const upserted = yield* LabelStore.upsert(
-      remote.map((l) => ({
-        accountId: args.accountId,
-        gmailLabelId: l.id,
-        name: l.name,
-        type: storedType(l.type),
-        colorBg: l.color?.backgroundColor ?? null,
-        colorFg: l.color?.textColor ?? null,
-      })),
+    const upserted = yield* LabelStore.use((svc) =>
+      svc.upsert(
+        remote.map((l) => ({
+          accountId: args.accountId,
+          gmailLabelId: l.id,
+          name: l.name,
+          type: storedType(l.type),
+          colorBg: l.color?.backgroundColor ?? null,
+          colorFg: l.color?.textColor ?? null,
+        })),
+      ),
     );
     debug("syncLabelsForAccount done", {
       account: args.accountEmail,
@@ -52,12 +54,13 @@ export const syncLabelsForAccountEffect = (args: {
 
 export const getLabelsForAccountEffect = (
   accountId: string,
-): Effect.Effect<LabelRow[], never, LabelStore> => LabelStore.byAccount(accountId);
+): Effect.Effect<LabelRow[], never, LabelStore> =>
+  LabelStore.use((svc) => svc.byAccount(accountId));
 
 export const getLabelsByGmailIdsEffect = (args: {
   accountId: string;
   gmailLabelIds: string[];
-}): Effect.Effect<LabelRow[], never, LabelStore> => LabelStore.byGmailIds(args);
+}): Effect.Effect<LabelRow[], never, LabelStore> => LabelStore.use((svc) => svc.byGmailIds(args));
 
 export const ensureLabelEffect = (args: {
   accountId: string;
@@ -68,10 +71,12 @@ export const ensureLabelEffect = (args: {
   Effect.gen(function* () {
     debug("ensureLabel", { account: args.accountEmail, name: args.name });
     const gmail = args.gmail ?? createGmailAdapter();
-    const existing = yield* LabelStore.byName({
-      accountId: args.accountId,
-      name: args.name,
-    });
+    const existing = yield* LabelStore.use((svc) =>
+      svc.byName({
+        accountId: args.accountId,
+        name: args.name,
+      }),
+    );
     if (existing) {
       debug("ensureLabel hit", { name: args.name, labelId: existing.id });
       return existing;
@@ -84,7 +89,7 @@ export const ensureLabelEffect = (args: {
     const created = yield* tryAsync(() =>
       gmail.createLabel({ account: args.accountEmail, name: args.name }),
     ).pipe(
-      Effect.catchAll((err) => {
+      Effect.catch((err) => {
         if (err instanceof ShellError && /label already exists/i.test(err.stderr)) {
           debug("ensureLabel already exists in gmail", { name: args.name });
           return Effect.gen(function* () {
@@ -102,16 +107,18 @@ export const ensureLabelEffect = (args: {
       }),
     );
 
-    const [inserted] = yield* LabelStore.upsert([
-      {
-        accountId: args.accountId,
-        gmailLabelId: created.id,
-        name: created.name,
-        type: storedType(created.type),
-        colorBg: created.color?.backgroundColor ?? null,
-        colorFg: created.color?.textColor ?? null,
-      },
-    ]);
+    const [inserted] = yield* LabelStore.use((svc) =>
+      svc.upsert([
+        {
+          accountId: args.accountId,
+          gmailLabelId: created.id,
+          name: created.name,
+          type: storedType(created.type),
+          colorBg: created.color?.backgroundColor ?? null,
+          colorFg: created.color?.textColor ?? null,
+        },
+      ]),
+    );
     debug("ensureLabel created", {
       name: args.name,
       labelId: inserted.id,

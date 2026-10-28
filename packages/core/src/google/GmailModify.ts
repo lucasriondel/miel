@@ -19,7 +19,7 @@ const impl: GmailModifyImpl = {
         debug("batch noop (no messages)", { ref: key });
         return;
       }
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       yield* Effect.tryPromise({
         try: () =>

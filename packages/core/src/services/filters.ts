@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { accounts, gmailFilters, labels } from "../db/schema";
@@ -299,7 +299,7 @@ export const mergeFiltersForAccountEffect = (args: {
     const deletedGmailFilterIds: string[] = [];
     const failedDeletions: FilterDeletionFailure[] = [];
     for (const source of sources) {
-      const outcome = yield* Effect.either(
+      const outcome = yield* Effect.result(
         tryAsync(() =>
           gmail.deleteFilter({
             account: accountEmail,
@@ -307,10 +307,10 @@ export const mergeFiltersForAccountEffect = (args: {
           }),
         ),
       );
-      if (Either.isLeft(outcome)) {
+      if (Result.isFailure(outcome)) {
         failedDeletions.push({
           gmailFilterId: source.gmailFilterId,
-          message: outcome.left.message,
+          message: outcome.failure.message,
         });
       } else {
         deletedGmailFilterIds.push(source.gmailFilterId);

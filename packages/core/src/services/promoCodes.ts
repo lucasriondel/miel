@@ -194,7 +194,7 @@ const extractOne = (
     // Which class a failure is in stays the combinator's answer, not this
     // module's; the original error is kept only to name a failure that carries
     // its specifics in fields rather than in a message, the way syncAll does.
-    Effect.catchAll((err) =>
+    Effect.catch((err) =>
       recoverUnlessProviderUnavailable<OneMessageResult>((detail) => {
         const entry = `promoExtract(${message.gmailMessageId}): ${describeFailure(err, detail)}`;
         log(entry);
@@ -350,11 +350,13 @@ export const listPromoSuggestionsEffect = (
 ): Effect.Effect<PromoSuggestion[], never, PromoStore> =>
   Effect.gen(function* () {
     const now = args.now ?? new Date();
-    const rows = yield* PromoStore.unsaved({
-      accountId: args.accountId,
-      internalDateFrom: args.internalDateFrom ? new Date(args.internalDateFrom) : undefined,
-      internalDateTo: args.internalDateTo ? new Date(args.internalDateTo) : undefined,
-    });
+    const rows = yield* PromoStore.use((svc) =>
+      svc.unsaved({
+        accountId: args.accountId,
+        internalDateFrom: args.internalDateFrom ? new Date(args.internalDateFrom) : undefined,
+        internalDateTo: args.internalDateTo ? new Date(args.internalDateTo) : undefined,
+      }),
+    );
 
     return rows.filter((row) => stillValid(row, now)).map(suggestion);
   });
@@ -467,7 +469,7 @@ export const listSavedPromosEffect = (
 ): Effect.Effect<SavedPromosPage, never, PromoStore> =>
   Effect.gen(function* () {
     const now = args.now ?? new Date();
-    const rows = yield* PromoStore.saved();
+    const rows = yield* PromoStore.use((svc) => svc.saved());
 
     const active = rows.filter((row) => stillValid(row, now));
     const expired = rows.filter((row) => !stillValid(row, now));
@@ -507,7 +509,7 @@ export const listSuggestedPromosEffect = (
 ): Effect.Effect<PromoListing[], never, PromoStore> =>
   Effect.gen(function* () {
     const now = args.now ?? new Date();
-    const rows = yield* PromoStore.unsaved({});
+    const rows = yield* PromoStore.use((svc) => svc.unsaved({}));
 
     return distinctByCode(rows.filter((row) => stillValid(row, now))).map(savedPromo);
   });
@@ -562,7 +564,7 @@ export const readSavedPromoMailEffect = (args: {
   id: string;
 }): Effect.Effect<SavedPromoMail | null, never, PromoStore> =>
   Effect.gen(function* () {
-    const row = yield* PromoStore.byId(args.id);
+    const row = yield* PromoStore.use((svc) => svc.byId(args.id));
     if (!row || row.savedAt === null) return null;
 
     return {
@@ -633,11 +635,11 @@ export const savePromoEffect = (
   args: SavePromoArgs,
 ): Effect.Effect<SavePromoResult, Error, PromoStore | MessageStore> =>
   Effect.gen(function* () {
-    const row = yield* PromoStore.byId(args.id);
+    const row = yield* PromoStore.use((svc) => svc.byId(args.id));
     if (!row) return yield* Effect.fail(new Error(`Promo not found: ${args.id}`));
 
     const ref = { accountId: row.accountId, gmailMessageId: row.gmailMessageId };
-    const message = yield* MessageStore.detail(ref);
+    const message = yield* MessageStore.use((svc) => svc.detail(ref));
     if (!message) {
       return yield* Effect.fail(new Error(`Message not found: ${row.gmailMessageId}`));
     }
@@ -645,22 +647,24 @@ export const savePromoEffect = (
     // Saved already means the record has been taken; a second press is the mail
     // still being in the inbox, so it is the trash below that is retried.
     if (row.savedAt === null) {
-      yield* PromoStore.markSaved({
-        id: row.id,
-        savedAt: args.now ?? new Date(),
-        message: {
-          subject: message.subject,
-          fromName: message.fromName,
-          fromEmail: message.fromEmail,
-          internalDate: message.internalDate,
-          bodyHtml: message.bodyHtml,
-          bodyText: message.bodyText,
-        },
-      });
+      yield* PromoStore.use((svc) =>
+        svc.markSaved({
+          id: row.id,
+          savedAt: args.now ?? new Date(),
+          message: {
+            subject: message.subject,
+            fromName: message.fromName,
+            fromEmail: message.fromEmail,
+            internalDate: message.internalDate,
+            bodyHtml: message.bodyHtml,
+            bodyText: message.bodyText,
+          },
+        }),
+      );
     }
 
     const trashed = yield* trashMessageEffect({ ...ref, gmail: args.gmail }).pipe(
-      Effect.catchAll((err: Error) => {
+      Effect.catch((err: Error) => {
         debug.warn("promo saved but the mail was not trashed", {
           id: row.id,
           gmailMessageId: row.gmailMessageId,
@@ -769,12 +773,12 @@ export const updateSavedPromoEffect = (args: {
   fields: PromoFieldsPatch;
 }): Effect.Effect<EditedPromo | null, never, PromoStore> =>
   Effect.gen(function* () {
-    const row = yield* PromoStore.byId(args.id);
+    const row = yield* PromoStore.use((svc) => svc.byId(args.id));
     if (!row || row.savedAt === null) return null;
 
-    yield* PromoStore.patch({ id: row.id, fields: storedFields(args.fields) });
+    yield* PromoStore.use((svc) => svc.patch({ id: row.id, fields: storedFields(args.fields) }));
 
-    const updated = yield* PromoStore.byId(row.id);
+    const updated = yield* PromoStore.use((svc) => svc.byId(row.id));
     return updated ? editedPromo(updated) : null;
   });
 
@@ -807,10 +811,10 @@ export const deleteSavedPromoEffect = (args: {
   id: string;
 }): Effect.Effect<boolean, never, PromoStore> =>
   Effect.gen(function* () {
-    const row = yield* PromoStore.byId(args.id);
+    const row = yield* PromoStore.use((svc) => svc.byId(args.id));
     if (!row || row.savedAt === null) return false;
 
-    const removed = yield* PromoStore.remove(row.id);
+    const removed = yield* PromoStore.use((svc) => svc.remove(row.id));
     debug.info("saved promo deleted", { id: row.id });
     return removed > 0;
   });
@@ -846,10 +850,12 @@ export const clearExpiredSavedPromosEffect = (
 ): Effect.Effect<number, never, PromoStore> =>
   Effect.gen(function* () {
     const now = args.now ?? new Date();
-    const rows = yield* PromoStore.saved();
+    const rows = yield* PromoStore.use((svc) => svc.saved());
     const expired = rows.filter((row) => !stillValid(row, now));
 
-    const removed = yield* Effect.forEach(expired, (row) => PromoStore.remove(row.id));
+    const removed = yield* Effect.forEach(expired, (row) =>
+      PromoStore.use((svc) => svc.remove(row.id)),
+    );
     const count = removed.reduce((sum, n) => sum + n, 0);
     debug.info("expired saved promos cleared", { count });
     return count;
@@ -927,7 +933,7 @@ export const extractPromosForMessageEffect = (
   Claude | PromoStore | MessageStore
 > =>
   Effect.gen(function* () {
-    const message = yield* MessageStore.detail(args);
+    const message = yield* MessageStore.use((svc) => svc.detail(args));
     if (!message) {
       return yield* Effect.fail(new Error(`Message not found: ${args.gmailMessageId}`));
     }
@@ -956,8 +962,10 @@ export const extractPromosForMessageEffect = (
     // and leaving the old guess up would contradict what the button just said.
     // A mail whose only offer needs no code is such a run: {@link toRows} drops
     // it, so `found` is false and the panel reports nothing found.
-    yield* PromoStore.removeUnsavedForMessage(args);
-    const stored = yield* PromoStore.insert(toRows(args.accountId, candidate, output.promos));
+    yield* PromoStore.use((svc) => svc.removeUnsavedForMessage(args));
+    const stored = yield* PromoStore.use((svc) =>
+      svc.insert(toRows(args.accountId, candidate, output.promos)),
+    );
 
     debug.info("promos extracted on request", {
       gmailMessageId: args.gmailMessageId,

@@ -15,7 +15,7 @@ const impl: GmailLabelsImpl = {
   list: (ref) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const res = yield* Effect.tryPromise({
         try: () => gmail.users.labels.list({ userId: "me" }),
@@ -33,7 +33,7 @@ const impl: GmailLabelsImpl = {
   create: (ref, name) =>
     Effect.gen(function* () {
       const key = refKey(ref);
-      const auth = yield* GoogleAuth.clientFor(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const res = yield* Effect.tryPromise({
         try: () =>

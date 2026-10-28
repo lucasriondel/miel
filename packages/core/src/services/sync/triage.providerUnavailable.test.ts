@@ -16,7 +16,7 @@ import { describe, expect, test } from "bun:test";
 
 process.env.DATABASE_URL ??= "postgres://test:test@localhost/test";
 
-import { Effect, Either, Layer } from "effect";
+import { Effect, Result, Layer } from "effect";
 import { runTriageBatches } from "./triage";
 import { Claude } from "../../claude/Claude";
 import { claudeThatFails } from "../../testkit/claude";
@@ -57,7 +57,7 @@ const runBatches = (err: unknown, events: SyncServerEventT[]) =>
       // The one seam (#133): the fake is the Claude interface itself, injected
       // at the tag sync depends on — no wrapper service in between.
       Effect.provide(Layer.succeed(Claude, claudeThatFails(err))),
-      Effect.either,
+      Effect.result,
     ),
   );
 
@@ -77,9 +77,9 @@ describe("runTriageBatches", () => {
 
     const result = await runBatches(notRunnable(), events);
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(tagOf(result.left)).toBe("ProviderNotRunnableError");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(tagOf(result.failure)).toBe("ProviderNotRunnableError");
     }
     // Not counted as a batch that merely failed: the run is over.
     expect(events.some((e) => e.type === "triage.finished")).toBe(false);
@@ -90,9 +90,9 @@ describe("runTriageBatches", () => {
 
     const result = await runBatches(new ClaudeTokenMissingError(), events);
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(tagOf(result.left)).toBe("ClaudeTokenMissingError");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(tagOf(result.failure)).toBe("ClaudeTokenMissingError");
     }
     expect(events.some((e) => e.type === "triage.finished")).toBe(false);
   });
@@ -102,9 +102,9 @@ describe("runTriageBatches", () => {
 
     const result = await runBatches(new ClaudeAuthError({ detail: "invalid token" }), events);
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(tagOf(result.left)).toBe("ClaudeAuthError");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(tagOf(result.failure)).toBe("ClaudeAuthError");
     }
   });
 
@@ -113,11 +113,11 @@ describe("runTriageBatches", () => {
 
     const result = await runBatches(new Error("model returned nonsense"), events);
 
-    expect(Either.isRight(result)).toBe(true);
-    if (Either.isRight(result)) {
-      expect(result.right.failedBatches).toBe(2);
-      expect(result.right.errors).toHaveLength(2);
-      expect(result.right.errors[0]).toContain("model returned nonsense");
+    expect(Result.isSuccess(result)).toBe(true);
+    if (Result.isSuccess(result)) {
+      expect(result.success.failedBatches).toBe(2);
+      expect(result.success.errors).toHaveLength(2);
+      expect(result.success.errors[0]).toContain("model returned nonsense");
     }
     // The run finished — that is the whole difference from the cases above.
     expect(events.filter((e) => e.type === "triage.finished")).toHaveLength(1);

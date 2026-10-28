@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { z } from "zod";
 
 /**
@@ -23,8 +24,14 @@ export const PromoExtractInput = z.object({
 });
 export type PromoExtractInputT = z.infer<typeof PromoExtractInput>;
 
-/** An expiry is a calendar date, so it is stored and read as one. */
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * An expiry is a calendar date, so it is stored and read as one. The `u` flag
+ * is what lets the Schema export it as a JSON Schema `pattern`, so the model is
+ * told the shape as well as asked for it.
+ */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
+
+const NonEmpty = Schema.String.check(Schema.isNonEmpty());
 
 /**
  * One offer.
@@ -34,7 +41,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * confidence score: a score invites a threshold nobody can tune, and there is
  * no feedback loop to tune it against.
  */
-export const ExtractedPromo = z.object({
+export const ExtractedPromo = Schema.Struct({
   /**
    * The literal code. Nullable, and deliberately still so after #166: the
    * service drops a code-less entry before it becomes a row, because a promo
@@ -43,32 +50,32 @@ export const ExtractedPromo = z.object({
    * schema violation fails the whole mail — losing the coded offers beside it.
    * A code-less entry is a skipped entry, never a failed extraction.
    */
-  code: z.string().min(1).nullable(),
+  code: Schema.NullOr(NonEmpty),
   /** The badge headline — `20% off`. */
-  discount: z.string().min(1),
+  discount: NonEmpty,
   /** The qualifying rest — `orders over £50, excl. sale`. */
-  terms: z.string().min(1).nullable(),
+  terms: Schema.NullOr(NonEmpty),
   /**
    * An absolute date (`YYYY-MM-DD`), or null. Never guessed — and the shape is
    * checked here as well as asked for in the prompt, because "ends Sunday" is
    * not a deadline anyone standing at a checkout can act on.
    */
-  expiresAt: z.string().regex(ISO_DATE).nullable(),
+  expiresAt: Schema.NullOr(Schema.String.check(Schema.isPattern(ISO_DATE))),
   /**
    * The shop's recognisable name. Worth asking for despite the sender being
    * right there: the sender is `newsletter@email.marketing-cloud.example.com`,
    * and a saved promo outlives the mail it came from.
    */
-  merchant: z.string().min(1).nullable(),
+  merchant: Schema.NullOr(NonEmpty),
 });
-export type ExtractedPromoT = z.infer<typeof ExtractedPromo>;
+export type ExtractedPromoT = typeof ExtractedPromo.Type;
 
 /**
  * Zero or more promos. A retailer's mail routinely carries three, and
  * first-code-wins would silently drop data the model already found; an empty
  * array is the negative answer.
  */
-export const PromoExtractOutput = z.object({
-  promos: z.array(ExtractedPromo),
+export const PromoExtractOutput = Schema.Struct({
+  promos: Schema.mutable(Schema.Array(ExtractedPromo)),
 });
-export type PromoExtractOutputT = z.infer<typeof PromoExtractOutput>;
+export type PromoExtractOutputT = typeof PromoExtractOutput.Type;

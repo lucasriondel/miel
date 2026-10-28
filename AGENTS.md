@@ -7,11 +7,12 @@ Gmail triage tool. Fetches messages via the Google Gmail REST API (`googleapis`)
 - Runtime: **Bun 1.3** (set in `package.json`'s `packageManager`). Use `bun` for installs and scripts, not npm/pnpm.
 - Monorepo: **Turborepo** with Bun workspaces under `packages/*`.
 - Language: TypeScript (ES2022, strict, bundler resolution — see `tsconfig.base.json`).
+- Effects: **Effect 4** (`effect` ^4, `@effect/platform-bun` at the same version — v4 releases the ecosystem under one number). Services are `Context.Service` classes, typed failures are `Result`, and `Effect.catch` is the recovery combinator; the v3 spellings (`Effect.Tag`, `Either`, `catchAll`, the static accessor proxies) are gone, so a service is reached by `yield* Tag` or `Tag.use((svc) => …)`.
 - DB: **Postgres 16** via Docker, accessed with **drizzle-orm** + `postgres` driver. Schema in `packages/core/src/db/schema.ts`, migrations in `packages/core/drizzle/`.
 - API: **Hono** on Bun.serve.
 - Web: **React 19 + Vite 8 + Tailwind 4 + TanStack Query 5 + React Router 7**. Tailwind 4 means CSS-first config: no `tailwind.config.js`, `packages/web/src/index.css` is the entry (`@import "tailwindcss"` then the vendored gousse sheets, whose `@theme` block defines the tokens), and `@tailwindcss/vite` does the scanning.
 - Google APIs: **googleapis** + **google-auth-library** (in-app OAuth, per-account refresh tokens stored in Postgres). Effect services in `packages/core/src/google/*` wrap each Gmail resource.
-- Validation: **Zod** everywhere (env, API I/O, Claude/Gmail JSON).
+- Validation: **Zod** everywhere (env, API I/O, Gmail JSON) — with one deliberate exception: the three AI *output* contracts (`TriageOutput`, `ReplyGenOutput`, `PromoExtractOutput`) are `effect` Schemas, because `effect/ai`'s `generateObject` takes a Schema and nothing else, and one JSON Schema for both transports has to derive from one object. The AI *inputs* beside them stay Zod.
 
 ## Packages
 
@@ -180,16 +181,40 @@ Migration `0010` rewrites the pre-#105 spellings (`hosted-api` → `anthropic`,
 prefix stripped off model ids) and `normalizeModelSettings` does the same on
 read, so a row an old build wrote still resolves.
 
-The two transports stay distinct on purpose, and both live in
-**`ai-task-runner-effect`** now — the extracted, generic runner package
-(`~/dev/perso/ai-task-runner-effect`, on npm), which composes
-**`claude-code-effect`** for the CLI transport (`claude -p`, `--allowedTools`,
-a real session id) and the Vercel ai-sdk for the hosted one (one
-schema-constrained HTTP call, no tools). Its `makeTaskRunner(table, deps)`
-holds the one hosted-vs-CLI branch and takes miel's two answers as a contract:
-`resolve` is `resolveTaskProviderEffect`, `credential` reads the vendor's key
-out of `encrypted_secrets` (`Redacted`, unwrapped only at the call that spends
-it). It is a factory, not a tag, so the injection seam stays miel's own (#133).
+The two transports stay distinct on purpose, and the one hosted-vs-CLI branch
+is `claude/Claude.ts`'s own `runTask`. The CLI transport is
+**`effect-ai-claude-code`** (`~/dev/perso/libs/effect-ai-claude-code`, the
+user's own) — an `effect/ai` `LanguageModel` over `claude -p`, so the call is
+`LanguageModel.generateObject({ prompt, schema })` provided with
+`ClaudeCodeLanguageModel.layer` (model, `allowedTools`), `ClaudeCodeClient.layer`
+(the stored token as `auth: { oauthToken }`, `CLAUDE_BIN`, the timeout) and
+Bun's `ChildProcessSpawner`; the session id and resolved model are read off
+the response's `response-metadata` part. The hosted transport is
+`claude/hosted.ts`: the Vercel ai-sdk, one schema-constrained HTTP call with
+no tools, behind one substitutable function (`HostedGenerate`). The three
+vendors stay on the ai-sdk because Effect v4 ships no Google provider. Both
+branches run after `resolveTaskProviderEffect` has answered which provider and
+model the task runs on, and the vendor's key is read out of `encrypted_secrets`
+`Redacted`, unwrapped only at the call that spends it. (There used to be two
+packages in between — `ai-task-runner-effect` composing `claude-code-effect`,
+both Effect 3 — and the v4 migration folded the runner back into core rather
+than port a generic task system nothing else used.)
+
+**Until the lib is published**, core depends on it as
+`"effect-ai-claude-code": "file:../../../../libs/effect-ai-claude-code"` — a
+copy of the sibling checkout taken at install time, not a live link. Three
+consequences to know. `bun install` needs that checkout to exist, so the #74
+promise ("public registries only, no credentials") is suspended and CI's
+`bun install --frozen-lockfile` cannot pass until the package is on npm; an
+edit in the checkout reaches miel only after `bun install --force` (bun does
+not re-copy an unchanged specifier); and the checkout's `devDependencies` pin
+of `effect` must equal the version miel resolves — bun installs a `file:`
+package's dev pins beside it, and a differing pin lands a second `effect` in
+`node_modules/.bun` that the lib's source then imports, splitting every type
+and every runtime identity (`Layer.provide` of ours into an Effect of theirs
+silently fails). A `link:` is not an alternative: bun resolves a symlinked
+package's imports from its real path, so the checkout would run on its own
+`node_modules/effect` — the same split, at runtime only.
 Triage still has two prompts — the hosted one drops the "curl the body from
 the local API" paragraph, which it has no tool to act on and which would post
 `API_SECRET` to a third party. Neither prompt inlines a body; `claudeUsage.ts`
@@ -197,9 +222,10 @@ publishes what triage sends and the landing page derives its disclosure from it.
 
 What differs per task is data, and the branch between those two transports is
 written once (#128). `claude/tasks.ts` is the table — one row per `ModelTask`
-in the package's `TaskSpec` shape: the output contract as an `ObjectCodec`
-(`zodCodec` wraps each Zod schema — the JSON Schema both transports constrain
-the model with, and a decode failing with miel's own `ClaudeSchemaError`), the
+in its `TaskSpec` shape: the output contract as an `effect` Schema (the JSON
+Schema both transports constrain the model with derives from it — the lib's
+default transformer for the CLI, `hostedJsonSchema` with closed objects for
+the vendors — and both decode the answer through it), the
 CLI prompt builder, the hosted prompt builder, the one-line hosted instruction
 and the tools the CLI may use — and the service is a single `run(task, input)`
 returning that task's typed output. Three methods used to spell the same four
@@ -232,18 +258,23 @@ carry a body, not one. The landing page and the privacy policy build their
 sentence out of that list rather than restating it, so a third body-bearing
 task fails their suites until the copy names it.
 
-What stays in `claude/Claude.ts` is everything that is a miel decision: the
-token's source, the auth heuristic (`looksLikeAuthProblem`), and the mapping of
-the runner's and the SDK's structural failures onto miel's own taxonomy — the
-runner's `TaskNotRunnableError` (its key-deleted race guard) becomes the
-resolver's `ProviderNotRunnableError` so a boundary cannot tell the two apart,
-its `HostedApiError`/`TaskSchemaError` become miel's `HostedApiError`, and the
-CLI tags map as they did when the transport was inline. Tests fake both
-transports at their real seams: `_setCommandExecutorLayerForTests` (the SDK's
-`ClaudeCodeTest.handler`) for the CLI, `_setHostedGenerateForTests` (the
-runner's `HostedGenerate`) for the hosted call — `claude/hosted.test.ts` runs
-the whole hosted path, real credential decryption included, with no network
-and no module mocks.
+What `claude/Claude.ts` keeps visible is everything that is a miel decision:
+the token's source, the auth heuristic (`looksLikeAuthProblem`), and the
+mapping of both transports' failures onto miel's own taxonomy. The provider
+has no error classes of its own — every CLI failure is an `effect/ai` `AiError`
+whose `reason` is what `fromAiError` switches on: `AuthenticationError` →
+`ClaudeAuthError`, `StructuredOutputError` → `ClaudeSchemaError`,
+`InvalidOutputError` → `ClaudeParseError`, a timeout → `ClaudeTimeoutError`,
+and everything else (`InvalidRequestError` for a spawn failure or an exit with
+no envelope, a relayed API error) → `ClaudeSpawnError` unless the wording says
+the token is what is wrong. A key gone between resolution and the read raises
+the resolver's own `ProviderNotRunnableError` (run phase) so a boundary cannot
+tell the two apart; a hosted payload the Schema refuses is a `HostedApiError`.
+Tests fake both transports at their real seams: `_setSpawnerLayerForTests`
+(the lib's `ClaudeCodeTest.make`, a `ChildProcessSpawner` answering stream-json
+lines) for the CLI, `_setHostedGenerateForTests` (`HostedGenerate`) for the
+hosted call — `claude/hosted.test.ts` runs the whole hosted path, real
+credential decryption included, with no network and no module mocks.
 
 That service is also the only place a fake goes in (#133). `Claude`, the Effect
 tag in `claude/Claude.ts`, is the single injection seam: triage, reply and
@@ -893,7 +924,7 @@ loudly instead.
 ## The store seam
 
 Services do not build their own queries. The stores
-(`packages/core/src/stores/contracts.ts`) are narrow `Effect.Tag` services, one
+(`packages/core/src/stores/contracts.ts`) are narrow `Context.Service` services, one
 per aggregate, each with a Postgres adapter (`stores/postgres.ts`) and an
 in-memory one (`testkit/stores.ts`, `testkit/mailbox.ts`). Two implementations
 are what make the seam real (#132).

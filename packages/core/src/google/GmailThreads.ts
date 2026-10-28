@@ -21,7 +21,7 @@ function modify(
 ) {
   return Effect.gen(function* () {
     const key = refKey(ref);
-    const auth = yield* GoogleAuth.clientFor(ref);
+    const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
     const gmail = google.gmail({ version: "v1", auth });
     yield* Effect.tryPromise({
       try: () =>
