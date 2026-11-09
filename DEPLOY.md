@@ -169,7 +169,7 @@ The public site — homepage, privacy policy, terms — as its own nginx image.
 > still works — they're simply unused.
 
 The image runs `bun run build` for the package, which prerenders the three routes,
-staticizes them into `dist/public` (no scripts, no fetchable subresource) and then
+staticizes them into `dist/public` (no scripts but the Umami visit counter, no fetchable subresource) and then
 verifies each built page carries its whole text as raw HTML. A page that regressed
 to client-only rendering **fails the image build**, so it can't reach the domain.
 

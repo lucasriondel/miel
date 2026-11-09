@@ -13,6 +13,7 @@ import {
   readBuiltPages,
   verifyPage,
 } from "./verifyPrerendered";
+import { ANALYTICS_SCRIPT_SRC, UMAMI_DOMAINS, UMAMI_WEBSITE_ID } from "../analytics";
 import { SCOPE_DISCLOSURES } from "../content/scopes";
 import {
   CLAUDE_DISCLOSURE,
@@ -87,6 +88,16 @@ describe("verifyPage", () => {
       `<script>var x = "Second paragraph"</script>`,
     );
     expect(page(hidden).join("\n")).toContain("Second paragraph");
+  });
+
+  test("accepts the analytics tag, the one script a page may carry", () => {
+    const tag = `<script src="${ANALYTICS_SCRIPT_SRC}" defer=""></script>`;
+    expect(page(DEMO_HTML.replace("<body>", `<body>${tag}`))).toEqual([]);
+  });
+
+  test("reports any other script beside the analytics tag", () => {
+    const tags = `<script src="${ANALYTICS_SCRIPT_SRC}"></script><script src="/client.js"></script>`;
+    expect(page(DEMO_HTML.replace("<body>", `<body>${tags}`)).join("\n")).toContain("/client.js");
   });
 
   test("reports a missing link", () => {
@@ -201,6 +212,19 @@ describe("page contracts", () => {
     expect(contractFor(TERMS.path).links).toEqual(
       expect.arrayContaining([HOME_PATH, PRIVACY.path]),
     );
+  });
+
+  test("require exactly one script on every page, the configured analytics tag", () => {
+    for (const contract of PAGE_CONTRACTS) {
+      const scripts = contract.counts.find((count) => count.what === "script");
+      const analytics = contract.counts.find((count) => count.what === "analytics script");
+      expect(scripts?.expected).toBe(1);
+      expect(analytics?.expected).toBe(1);
+      // `match`, as verifyPage counts: a global pattern's `test` would keep state.
+      expect(`<script src="${ANALYTICS_SCRIPT_SRC}">`.match(analytics!.pattern)).toHaveLength(1);
+      expect(contract.markup).toContain(`data-website-id="${UMAMI_WEBSITE_ID}"`);
+      expect(contract.markup).toContain(`data-domains="${UMAMI_DOMAINS}"`);
+    }
   });
 
   test("refuse a page a link to itself", () => {

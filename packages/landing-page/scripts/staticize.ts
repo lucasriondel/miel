@@ -1,7 +1,8 @@
 /**
  * Post-build step: turn `dist/client` (TanStack Start's prerendered output plus
  * its client bundle) into `dist/public`, which holds nothing but self-contained
- * HTML — no scripts, no stylesheets, no fonts, no images.
+ * HTML — no stylesheets, no fonts, no images, and no scripts except the
+ * analytics tag (`src/analytics.ts`).
  *
  * `dist/public` is what gets copied into the nginx document root.
  */

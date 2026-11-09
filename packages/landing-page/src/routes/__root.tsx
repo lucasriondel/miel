@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { ANALYTICS_SCRIPT } from "../analytics";
 import { HOME } from "../content/site";
 import { CSS } from "../styles";
 
@@ -12,6 +13,8 @@ export const Route = createRootRoute({
       { title: HOME.title },
       { name: "description", content: HOME.tagline },
     ],
+    // The one script the staticize step keeps; see `src/analytics.ts`.
+    scripts: [ANALYTICS_SCRIPT],
   }),
   component: RootComponent,
 });

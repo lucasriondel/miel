@@ -19,6 +19,6 @@ Most of miel's domain language is cross-package by construction — `@miel/core`
 | **API** — the Hono HTTP API. Routes thinly wrap core services; bearer auth via `API_SECRET`. | `packages/api/` | _not yet written_ | _none yet_ |
 | **Web** — the Vite SPA served under `/app`. The inbox, message detail, compose window, settings and the gousse-ui design system. | `packages/web/` | _not yet written_ | _none yet_ |
 | **CLI** — the `miel` Commander CLI for sync/accounts/apply/reply/db ops. Headless runs and smoke tests. | `packages/cli/` | _not yet written_ | _none yet_ |
-| **Landing page** — the public site at the host root (home, `/privacy`, `/terms`). TanStack Start, prerendered, no JavaScript in the output. Depends on core only through leaf subpaths. | `packages/landing-page/` | _not yet written_ | _none yet_ |
+| **Landing page** — the public site at the host root (home, `/privacy`, `/terms`). TanStack Start, prerendered, no JavaScript in the output except the Umami visit counter. Depends on core only through leaf subpaths. | `packages/landing-page/` | _not yet written_ | _none yet_ |
 
 A glossary or ADR directory appears when `/domain-modeling` actually resolves a term or a decision for that package — they are written lazily, not scaffolded upfront. Update the table when one lands.
