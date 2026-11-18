@@ -7,15 +7,19 @@ import {
   batchModifyMessages,
   downloadAttachment,
   extractPromosForMessage,
+  forwardMessage,
   generateReply,
   getMessageDetail,
   listMessages,
+  quotePreview,
   sendReply,
   sendToWorp,
   setMessageRead,
   setMessagePriority,
+  snoozeMessage,
   trashMessage,
   unarchiveMessage,
+  unsnoozeMessage,
   untrashMessage,
 } from "@miel/core";
 
@@ -30,6 +34,7 @@ messagesRoutes.get("/", async (c) => {
     cursor: c.req.query("cursor"),
     includeArchived: c.req.query("includeArchived"),
     archivedOnly: c.req.query("archivedOnly"),
+    snoozedOnly: c.req.query("snoozedOnly"),
     includeTrashed: c.req.query("includeTrashed"),
     includeRemoved: c.req.query("includeRemoved"),
     internalDateFrom: c.req.query("internalDateFrom"),
@@ -43,6 +48,7 @@ messagesRoutes.get("/", async (c) => {
     cursor: q.cursor,
     includeArchived: q.includeArchived,
     archivedOnly: q.archivedOnly,
+    snoozedOnly: q.snoozedOnly,
     includeTrashed: q.includeTrashed,
     includeRemoved: q.includeRemoved,
     internalDateFrom: q.internalDateFrom,
@@ -133,11 +139,16 @@ messagesRoutes.post("/:accountId/:gmailMessageId/generate-reply", async (c) => {
   const accountId = c.req.param("accountId");
   const gmailMessageId = c.req.param("gmailMessageId");
   const body = apiSchemas.GenerateReplyRequest.parse(await c.req.json());
-  const result = await generateReply({
-    accountId,
-    gmailMessageId,
-    prompt: body.prompt,
-  });
+  const result = await generateReply(
+    {
+      accountId,
+      gmailMessageId,
+      prompt: body.prompt,
+      previousDraft: body.previousDraft,
+    },
+    // Stoppable by the id the client chose, or by dropping the request.
+    { requestId: body.requestId, signal: c.req.raw.signal },
+  );
   return c.json(result);
 });
 
@@ -155,8 +166,47 @@ messagesRoutes.post("/:accountId/:gmailMessageId/send-reply", async (c) => {
     bcc: body.bcc,
     replyAll: body.replyAll,
     draftId: body.draftId,
+    from: body.from,
+    fromAccountId: body.fromAccountId,
+    includeQuote: body.includeQuote,
+    quotedText: body.quotedText,
+    uploadIds: body.uploadIds,
   });
   return c.json(result);
+});
+
+// Forward: the user's text, the "Forwarded message" block, and the original's
+// attachments (all, or the ones `keepAttachmentIds` names) fetched from Gmail.
+messagesRoutes.post("/:accountId/:gmailMessageId/forward", async (c) => {
+  const accountId = c.req.param("accountId");
+  const gmailMessageId = c.req.param("gmailMessageId");
+  const body = apiSchemas.ForwardMessageRequest.parse(await c.req.json());
+  const result = await forwardMessage({ accountId, gmailMessageId, ...body });
+  return c.json(result);
+});
+
+// What the server puts under a reply (the quote) and a forward (the block and
+// its attachments), for the compose window to show and let the user trim.
+messagesRoutes.get("/:accountId/:gmailMessageId/quote", async (c) => {
+  const accountId = c.req.param("accountId");
+  const gmailMessageId = c.req.param("gmailMessageId");
+  return c.json(await quotePreview({ accountId, gmailMessageId }));
+});
+
+// Snooze: archived in Gmail until `until`, then back in the inbox, unread.
+messagesRoutes.post("/:accountId/:gmailMessageId/snooze", async (c) => {
+  const accountId = c.req.param("accountId");
+  const gmailMessageId = c.req.param("gmailMessageId");
+  const body = apiSchemas.SnoozeRequest.parse(await c.req.json());
+  const result = await snoozeMessage({ accountId, gmailMessageId, until: new Date(body.until) });
+  return c.json(result);
+});
+
+// Wake it now — "Unsnooze", or the toast's Undo.
+messagesRoutes.delete("/:accountId/:gmailMessageId/snooze", async (c) => {
+  const accountId = c.req.param("accountId");
+  const gmailMessageId = c.req.param("gmailMessageId");
+  return c.json(await unsnoozeMessage({ accountId, gmailMessageId }));
 });
 
 /**

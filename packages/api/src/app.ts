@@ -30,7 +30,7 @@ export function createApp(opts: { webOrigin?: string } = {}) {
       // which reads as a broken API rather than a missing variable.
       origin: [origin, "https://miel.localhost"],
       allowHeaders: ["Authorization", "Content-Type"],
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     }),
   );
   app.use("*", requestLog());

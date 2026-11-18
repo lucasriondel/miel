@@ -18,6 +18,17 @@ const GMAIL_TAGS = new Set([
   "GmailFilterError",
 ]);
 
+/** Each compose refusal's status; anything unlisted is a 400. */
+const COMPOSE_REFUSAL_STATUS: Record<string, 400 | 404 | 409 | 413> = {
+  attachment_too_large: 413,
+  upload_not_found: 404,
+  attachment_not_found: 404,
+  message_not_found: 404,
+  account_not_found: 404,
+  scheduled_not_found: 404,
+  scheduled_not_editable: 409,
+};
+
 export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof HTTPException) {
     return err.getResponse();
@@ -89,6 +100,29 @@ export const errorHandler: ErrorHandler = (err, c) => {
   }
   if (tag && GMAIL_TAGS.has(tag)) {
     return c.json({ error: "gmail_error", message }, 502);
+  }
+  // A compose-side request refused before anything reached Gmail: what it named
+  // does not exist (404), cannot be changed any more (409), is too big (413),
+  // or is otherwise not sendable (400). The reason code travels with the
+  // sentence, so a UI can key on the one and show the other.
+  if (tag === "ComposeRefusedError") {
+    const refusal = err as { reason?: string };
+    return c.json(
+      { error: refusal.reason, message },
+      COMPOSE_REFUSAL_STATUS[refusal.reason ?? ""] ?? 400,
+    );
+  }
+  // A draft the user stopped. Usually nobody is listening any more (the client
+  // dropped the request); when someone is, it is told plainly.
+  if (tag === "GenerationCancelledError") {
+    return c.json({ error: "generation_cancelled" }, 409);
+  }
+  if (tag === "InvalidGoogleOAuthConfigError") {
+    const cfg = err as { field?: string; reason?: string };
+    return c.json(
+      { error: "invalid_google_oauth_config", field: cfg.field, reason: cfg.reason, message },
+      400,
+    );
   }
   // A merge is rejected before anything is mutated, so this is always "your
   // request can't be built", never a half-applied change. Ids that aren't this

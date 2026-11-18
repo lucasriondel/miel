@@ -26,7 +26,7 @@ import {
   connectReturnUrl,
   exchangeCodeAndProfile,
   getEnv,
-  googleOAuthConfigStatus,
+  getGoogleOAuthStatus,
   parseConnectReturnTarget,
   runWithGoogleAuth,
 } from "@miel/core";
@@ -37,12 +37,12 @@ const connectStates = createConnectStateStore();
 
 export const googleOAuthStartRoutes = new Hono();
 
-// Whether this server has the three GOOGLE_* variables the flow below needs
-// (#120). Answers with names, never values — the client secret is one, and the
-// other two tell a UI nothing it can act on beyond "set this". Read at
-// use-time like every other read of them, so a restart with the variables
-// supplied is reflected without a code change.
-googleOAuthStartRoutes.get("/google/config", (c) => c.json(googleOAuthConfigStatus()));
+// Whether this server can start the flow below (#120): the client saved in the
+// app, or the GOOGLE_* variables when none is. `configured` and `missing` keep
+// the shape they always had; the rest (source, client id, redirect URI, a
+// masked secret hint, how many accounts a new client would disconnect) is the
+// same status `GET /settings/google-oauth` answers. Never the secret.
+googleOAuthStartRoutes.get("/google/config", async (c) => c.json(await getGoogleOAuthStatus()));
 
 // Bearer-protected: the web calls this and opens the returned URL.
 googleOAuthStartRoutes.get("/google/start", async (c) => {
