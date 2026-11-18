@@ -10,6 +10,7 @@
     "./accentFolding": "./src/accentFolding.ts",
     "./appBasePath": "./src/appBasePath.ts",
     "./claudeUsage": "./src/claudeUsage.ts",
+    "./composeLimits": "./src/composeLimits.ts",
     "./connectReturn": "./src/connectReturn.ts",
     "./credentialMasking": "./src/credentialMasking.ts",
     "./filterMergeSpec": "./src/filterMergeSpec.ts",

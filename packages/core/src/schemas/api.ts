@@ -53,6 +53,12 @@ export const ListMessagesQuery = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((v) => v === "true"),
+  // The Snoozed view, parsed the same way and for the same reason. Wins over
+  // `archivedOnly`; a snoozed conversation is never in Done.
+  snoozedOnly: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
   includeTrashed: z.coerce.boolean().default(false),
   includeRemoved: z.coerce.boolean().default(false),
   internalDateFrom: z.string().datetime().optional(),
@@ -144,8 +150,28 @@ export const DismissSuggestionsRequest = z.object({
 });
 export type DismissSuggestionsRequestT = z.infer<typeof DismissSuggestionsRequest>;
 
+/**
+ * The draft a refinement edits — the compose window's current subject and body
+ * ("Shorter", "Warmer", "In French"). Absent drafts from scratch.
+ */
+const PreviousDraftField = z
+  .object({
+    subject: z.string().optional(),
+    body: z.string(),
+  })
+  .optional();
+
+/**
+ * A client-chosen id for this generation, so it can be stopped with
+ * `POST /compose/generations/:requestId/cancel`. Optional: dropping the request
+ * stops it too.
+ */
+const GenerationRequestId = z.string().min(1).max(100).optional();
+
 export const GenerateReplyRequest = z.object({
   prompt: z.string().min(1),
+  previousDraft: PreviousDraftField,
+  requestId: GenerationRequestId,
 });
 export type GenerateReplyRequestT = z.infer<typeof GenerateReplyRequest>;
 
@@ -165,8 +191,44 @@ export const SendReplyRequest = z.object({
   replyAll: z.boolean().optional(),
   // The compose window's autosaved draft, deleted once the reply is sent.
   draftId: z.string().min(1).optional(),
+  // A send-as alias of the sending account (`GET /accounts/:id/send-as`).
+  from: z.string().min(1).optional(),
+  // Send from another connected mailbox: no Gmail thread there, threading
+  // headers only.
+  fromAccountId: z.string().uuid().optional(),
+  // The quoted original is sent under the reply unless this is false.
+  includeQuote: z.boolean().optional(),
+  // The quote's text as the user trimmed it.
+  quotedText: z.string().optional(),
+  // Files uploaded through `POST /compose/uploads`, by id, in chip order.
+  uploadIds: z.array(z.string().uuid()).max(50).optional(),
 });
 export type SendReplyRequestT = z.infer<typeof SendReplyRequest>;
+
+/**
+ * Forwarding a stored message: To is required (a forward empties it), the body
+ * may be empty (the forwarded message is the content), and the original's
+ * attachments travel unless `keepAttachmentIds` names a subset — a removed chip
+ * is simply not named.
+ */
+export const ForwardMessageRequest = z.object({
+  to: z.array(z.string().min(1)).min(1),
+  cc: z.array(z.string().min(1)).optional(),
+  bcc: z.array(z.string().min(1)).optional(),
+  subject: z.string(),
+  body: z.string().default(""),
+  keepAttachmentIds: z.array(z.string().min(1)).optional(),
+  uploadIds: z.array(z.string().uuid()).max(50).optional(),
+  from: z.string().min(1).optional(),
+  draftId: z.string().min(1).optional(),
+});
+export type ForwardMessageRequestT = z.infer<typeof ForwardMessageRequest>;
+
+/** Snoozing a conversation until a time in the future (ISO-8601). */
+export const SnoozeRequest = z.object({
+  until: z.string().datetime({ offset: true }),
+});
+export type SnoozeRequestT = z.infer<typeof SnoozeRequest>;
 
 /**
  * Sending a message that answers nothing — the compose window opened from the
@@ -182,6 +244,8 @@ export const SendMessageRequest = z.object({
   subject: z.string(),
   body: z.string().min(1),
   draftId: z.string().min(1).optional(),
+  from: z.string().min(1).optional(),
+  uploadIds: z.array(z.string().uuid()).max(50).optional(),
 });
 export type SendMessageRequestT = z.infer<typeof SendMessageRequest>;
 
@@ -194,6 +258,8 @@ export const GenerateMessageRequest = z.object({
   prompt: z.string().min(1),
   to: z.array(z.string()).optional(),
   subject: z.string().optional(),
+  previousDraft: PreviousDraftField,
+  requestId: GenerationRequestId,
 });
 export type GenerateMessageRequestT = z.infer<typeof GenerateMessageRequest>;
 
@@ -213,8 +279,92 @@ export const SaveDraftRequest = z.object({
   bcc: z.array(z.string()).optional(),
   subject: z.string().default(""),
   body: z.string().default(""),
+  from: z.string().min(1).optional(),
+  uploadIds: z.array(z.string().uuid()).max(50).optional(),
+  // A reply draft carries the quote the send will (default true).
+  includeQuote: z.boolean().optional(),
+  quotedText: z.string().optional(),
 });
 export type SaveDraftRequestT = z.infer<typeof SaveDraftRequest>;
+
+/**
+ * Scheduling a send. The message is the same request an immediate send makes,
+ * plus when and which kind: a new message (`accountId` only), a reply or a
+ * forward (`sourceGmailMessageId` too). `sendAt` must be in the future.
+ */
+export const ScheduleSendRequest = z
+  .object({
+    accountId: z.string().uuid(),
+    kind: z.enum(["new", "reply", "forward"]),
+    sourceGmailMessageId: z.string().min(1).optional(),
+    sendAt: z.string().datetime({ offset: true }),
+    to: z.array(z.string().min(1)).default([]),
+    cc: z.array(z.string().min(1)).optional(),
+    bcc: z.array(z.string().min(1)).optional(),
+    subject: z.string(),
+    body: z.string(),
+    from: z.string().min(1).optional(),
+    uploadIds: z.array(z.string().uuid()).max(50).optional(),
+    keepAttachmentIds: z.array(z.string().min(1)).optional(),
+    replyAll: z.boolean().optional(),
+    includeQuote: z.boolean().optional(),
+    quotedText: z.string().optional(),
+    draftId: z.string().min(1).optional(),
+  })
+  .refine((v) => v.kind === "new" || Boolean(v.sourceGmailMessageId), {
+    message: "A reply or forward names the message it answers.",
+    path: ["sourceGmailMessageId"],
+  })
+  .refine((v) => v.kind === "reply" || v.to.length > 0, {
+    message: "A new message or a forward needs at least one To address.",
+    path: ["to"],
+  })
+  .refine((v) => v.kind === "forward" || v.body.length > 0, {
+    message: "The body may not be empty.",
+    path: ["body"],
+  });
+export type ScheduleSendRequestT = z.infer<typeof ScheduleSendRequest>;
+
+/** A new time for a scheduled send. */
+export const RescheduleRequest = z.object({
+  sendAt: z.string().datetime({ offset: true }),
+});
+export type RescheduleRequestT = z.infer<typeof RescheduleRequest>;
+
+export const ScheduledSendIdParams = z.object({ id: z.string().uuid() });
+
+/** The account and the upload, both in the path. */
+export const UploadParams = z.object({
+  accountId: z.string().uuid(),
+  uploadId: z.string().uuid(),
+});
+
+/** The address suggestions' query: what is typed so far, and how many to answer. */
+export const ContactsQuery = z.object({
+  q: z.string().max(200).default(""),
+  limit: z.coerce.number().int().min(1).max(20).default(8),
+});
+export type ContactsQueryT = z.infer<typeof ContactsQuery>;
+
+/** Renaming a mailbox for this install; null or "" clears the nickname. */
+export const UpdateAccountRequest = z
+  .object({
+    nickname: z.string().max(200).nullable(),
+  })
+  .strict();
+export type UpdateAccountRequestT = z.infer<typeof UpdateAccountRequest>;
+
+/**
+ * The Google OAuth client entered in the app (onboarding's Google step). The
+ * secret may be omitted to keep the one already stored — changing only the
+ * redirect URI should not need a re-paste.
+ */
+export const UpdateGoogleOAuthRequest = z.object({
+  clientId: z.string().trim().min(1),
+  clientSecret: z.string().trim().min(1).optional(),
+  redirectUri: z.string().trim().min(1),
+});
+export type UpdateGoogleOAuthRequestT = z.infer<typeof UpdateGoogleOAuthRequest>;
 
 /** Discarding a draft: both halves are in the path, a DELETE has no body. */
 export const DraftParams = z.object({
