@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { Spinner } from "@/components/ui/spinner";
 
 interface Props {
@@ -13,7 +12,7 @@ interface Props {
 }
 
 /**
- * The remove affordance for one connected account: a trash button that swaps
+ * The remove affordance for one connected account: a Remove button that swaps
  * into an inline confirm in place, mirroring `FilterRowActions`. Removing an
  * account drops every message, label and triage synced for it, so the confirm
  * step is required rather than optional.
@@ -38,15 +37,9 @@ export const AccountRowActions = ({
 
   if (!confirming) {
     return (
-      <button
-        type="button"
-        aria-label="Remove account"
-        title="Remove account"
-        onClick={onRequestConfirm}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gousse-muted transition-[transform,background-color,color] active:scale-[0.96] hover:bg-gousse-high/10 hover:text-gousse-high"
-      >
-        <Trash2 className="h-4 w-4" aria-hidden />
-      </button>
+      <AppButton aria-label="Remove account" onClick={onRequestConfirm}>
+        Remove
+      </AppButton>
     );
   }
 
@@ -67,13 +60,13 @@ export const AccountRowActions = ({
       }}
     >
       <span className="text-xs text-gousse-muted">Remove this account?</span>
-      <Button variant="danger" onClick={onConfirm} disabled={pending}>
-        {pending ? <Spinner /> : null}
+      <AppButton tone="danger" onClick={onConfirm} disabled={pending}>
+        {pending ? <Spinner size={12} /> : null}
         Remove
-      </Button>
-      <Button variant="ghost" onClick={onCancel} disabled={pending}>
+      </AppButton>
+      <AppButton tone="ghost" onClick={onCancel} disabled={pending}>
         Cancel
-      </Button>
+      </AppButton>
     </div>
   );
 };

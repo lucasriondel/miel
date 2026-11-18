@@ -1,8 +1,8 @@
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { useUpdateWorpSettings } from "../../api/worpSettings.hooks";
 import { apiErrorMessage } from "../../api/apiErrorMessage";
 import { SavedFlash } from "@/components/ui/saved-flash";
-import { SettingRow } from "@/components/ui/setting-row";
+import { SettingsRow } from "./SettingsRow";
 import { WorpHeaderRow } from "./WorpHeaderRow";
 import { useWorpHeaderDraft } from "./useWorpHeaderDraft";
 import type { DraftHint } from "./worpHeaderDraft";
@@ -36,7 +36,7 @@ export const WorpHeadersRow = ({ extraHeaders }: Props) => {
   };
 
   return (
-    <SettingRow
+    <SettingsRow
       title="Extra headers"
       description="Sent with every relay, after worp's own Authorization. Only needed when worp sits behind a proxy such as Cloudflare Access."
       alignTop
@@ -62,19 +62,19 @@ export const WorpHeadersRow = ({ extraHeaders }: Props) => {
       <WorpHeaderHints hint={draft.hint} hasStored={extraHeaders.length > 0} />
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="ghost" disabled={save.isPending} onClick={() => draft.add()}>
+        <AppButton tone="ghost" disabled={save.isPending} onClick={() => draft.add()}>
           Add header
-        </Button>
-        <Button variant="ghost" disabled={save.isPending} onClick={draft.addCloudflareAccess}>
+        </AppButton>
+        <AppButton tone="ghost" disabled={save.isPending} onClick={draft.addCloudflareAccess}>
           Behind Cloudflare Access
-        </Button>
+        </AppButton>
         {/* Disabled exactly when there is no patch — which is exactly when the
             hint above says why, because `reviewDraft` decides both at once. */}
-        <Button variant="primary" disabled={save.isPending || patch === null} onClick={submit}>
+        <AppButton tone="primary" disabled={save.isPending || patch === null} onClick={submit}>
           Save headers
-        </Button>
+        </AppButton>
       </div>
-    </SettingRow>
+    </SettingsRow>
   );
 };
 

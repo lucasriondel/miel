@@ -5,8 +5,9 @@ import {
   PROVIDER_LABELS,
   type ModelTask,
 } from "@miel/core/providerModels";
-import { SettingsCard } from "@/components/ui/setting-row";
 import { ModelRow } from "./ModelRow";
+import { SettingsPanel } from "./SettingsPanel";
+import { TasksColumnLabels } from "./TasksColumnLabels";
 import { useProviderCredentials } from "../../api/providerCredential.hooks";
 import type { ModelSettings } from "../../api/types";
 
@@ -65,7 +66,8 @@ export const MODEL_ROWS = {
 const ROWS = Object.entries(MODEL_ROWS) as Array<[ModelTask, (typeof MODEL_ROWS)[ModelTask]]>;
 
 /**
- * One provider/model picker per AI task, as dense rows in a single card.
+ * The Tasks card: one provider/model picker per AI task, as a table with a
+ * Task / Provider / Model heading band.
  *
  * The pickers only offer providers with a stored credential, so when nothing
  * but the local one is set up every select has a single option. That is not
@@ -81,7 +83,7 @@ export const ModelsCard = ({ value }: Props) => {
 
   return (
     <div className="flex flex-col gap-2">
-      <SettingsCard>
+      <SettingsPanel title="Tasks" header={<TasksColumnLabels />}>
         {ROWS.map(([task, row]) => (
           <ModelRow
             key={task}
@@ -93,11 +95,11 @@ export const ModelsCard = ({ value }: Props) => {
             onSaved={setSettings}
           />
         ))}
-      </SettingsCard>
+      </SettingsPanel>
       {noVendorKeys ? (
         <p className="px-1 text-xs text-gousse-muted">
           Only {localName} is set up, so it is the only provider offered. Add a vendor key under
-          Connections to run a task on {vendorNames}.
+          Providers to run a task on {vendorNames}.
         </p>
       ) : null}
     </div>

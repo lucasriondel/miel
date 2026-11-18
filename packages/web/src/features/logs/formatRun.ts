@@ -28,12 +28,12 @@ export function statusLabel(status: LogEntry["status"]): string {
 
 export function statusClass(status: LogEntry["status"]): string {
   if (status === "running") {
-    return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    return "bg-gousse-medium-bg text-gousse-medium-text";
   }
   if (status === "completed") {
-    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    return "bg-gousse-tint-green text-gousse-tint-green-ink";
   }
-  return "bg-rose-500/10 text-rose-700 dark:text-rose-300";
+  return "bg-gousse-high-bg text-gousse-high-text";
 }
 
 export function triggerLabel(trigger: LogEntry["trigger"]): string {

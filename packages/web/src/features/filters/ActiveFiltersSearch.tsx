@@ -28,14 +28,14 @@ export const ActiveFiltersSearch = ({ value, onChange }: Props) => (
       }}
       placeholder="Search filters"
       aria-label="Search active filters"
-      className="w-full rounded-full border border-gousse-line bg-gousse-panel py-1.5 pl-8 pr-8 text-sm text-gousse-ink transition-[border-color,box-shadow] placeholder:text-gousse-muted focus:border-gousse-accent focus:outline-none focus:ring-2 focus:ring-gousse-accent/20 [&::-webkit-search-cancel-button]:hidden"
+      className="h-8 w-full rounded-lg border border-transparent bg-gousse-fill pl-8 pr-8 text-[13px] text-gousse-ink transition-[border-color,box-shadow,background-color] placeholder:text-gousse-muted hover:bg-gousse-field-hover focus:border-gousse-primary focus:bg-gousse-panel focus:outline-none focus:ring-[3px] focus:ring-gousse-primary/15 [&::-webkit-search-cancel-button]:hidden"
     />
     {value.length > 0 ? (
       <button
         type="button"
         onClick={() => onChange("")}
         aria-label="Clear filter search"
-        className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-gousse-muted transition-colors hover:bg-gousse-line/50 hover:text-gousse-ink"
+        className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md text-gousse-muted transition-colors hover:bg-gousse-line hover:text-gousse-ink"
       >
         <X className="h-3 w-3" aria-hidden />
       </button>

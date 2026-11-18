@@ -21,7 +21,7 @@ interface Props {
 }
 
 const ColLabel = ({ children }: { children: string }) => (
-  <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-gousse-muted">
+  <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.04em] text-gousse-muted">
     {children}
   </div>
 );
@@ -60,7 +60,9 @@ export const FilterRow = ({
   };
 
   return (
-    <div className={`filter-card px-4 py-3.5 ${selected ? "ring-2 ring-gousse-accent/40" : ""}`}>
+    <div
+      className={`rounded-xl border border-gousse-line bg-gousse-panel transition-[border-color,background-color] hover:border-gousse-border-strong px-4 py-3.5 ${selected ? "border-gousse-primary/40 ring-[3px] ring-gousse-primary/15" : ""}`}
+    >
       <div className="flex items-center gap-3">
         {selectMode && (
           <label className="flex shrink-0 items-center">

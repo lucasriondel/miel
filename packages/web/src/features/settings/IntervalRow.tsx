@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Segmented } from "./Segmented";
-import { SettingRow } from "@/components/ui/setting-row";
+import { SettingsRow } from "./SettingsRow";
 import { SavedFlash } from "@/components/ui/saved-flash";
 import { useUpdateSchedule } from "../../api/mutations";
 import { apiErrorMessage } from "../../api/apiErrorMessage";
@@ -12,8 +12,14 @@ interface Props {
 
 // Short chip labels for the segmented control (the full labels live in the
 // dropdown-oriented presets; here space is tight).
-const SHORT: Record<number, string> = { 15: "15m", 30: "30m", 60: "1h", 120: "2h", 360: "6h" };
-const shortLabel = (m: number) => SHORT[m] ?? (m % 60 === 0 ? `${m / 60}h` : `${m}m`);
+const SHORT: Record<number, string> = {
+  15: "15 min",
+  30: "30 min",
+  60: "1 h",
+  120: "2 h",
+  360: "6 h",
+};
+const shortLabel = (m: number) => SHORT[m] ?? (m % 60 === 0 ? `${m / 60} h` : `${m} min`);
 
 /** Run-interval row: a segmented picker that autosaves on change. */
 export const IntervalRow = ({ value }: Props) => {
@@ -29,13 +35,13 @@ export const IntervalRow = ({ value }: Props) => {
   ];
 
   return (
-    <SettingRow
-      title="Run interval"
+    <SettingsRow
+      title="Run every"
       description="How often new mail is fetched and triaged."
       control={
         <>
           <Segmented
-            ariaLabel="Run interval"
+            ariaLabel="Run every"
             options={options}
             value={value}
             disabled={update.isPending}

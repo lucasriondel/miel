@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ConnectReturnTarget } from "@miel/core/connectReturn";
 import { startGoogleOAuth } from "../../api/googleOAuth";
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { Spinner } from "@/components/ui/spinner";
 
 interface ConnectGoogleButtonProps {
@@ -16,6 +16,9 @@ interface ConnectGoogleButtonProps {
    * The onboarding gate uses it to drop the previous attempt's failure message.
    */
   onStart?: () => void;
+  /** The resting label. Settings' Mailboxes card says "Connect a Gmail account". */
+  label?: string;
+  className?: string;
 }
 
 /**
@@ -23,7 +26,12 @@ interface ConnectGoogleButtonProps {
  * `startGoogleOAuth`) and navigates the browser to Google's consent screen.
  * Bare button — the surrounding copy lives in whatever row hosts it.
  */
-export const ConnectGoogleButton = ({ returnTo, onStart }: ConnectGoogleButtonProps) => {
+export const ConnectGoogleButton = ({
+  returnTo,
+  onStart,
+  label = "Connect with Google",
+  className,
+}: ConnectGoogleButtonProps) => {
   const [starting, setStarting] = useState(false);
 
   const connect = async () => {
@@ -35,9 +43,9 @@ export const ConnectGoogleButton = ({ returnTo, onStart }: ConnectGoogleButtonPr
   };
 
   return (
-    <Button variant="primary" onClick={connect} disabled={starting}>
+    <AppButton tone="primary" size="lg" onClick={connect} disabled={starting} className={className}>
       {starting ? <Spinner size={12} /> : null}
-      {starting ? "Redirecting…" : "Connect with Google"}
-    </Button>
+      {starting ? "Redirecting…" : label}
+    </AppButton>
   );
 };

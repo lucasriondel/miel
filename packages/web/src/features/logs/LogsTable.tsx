@@ -7,17 +7,17 @@ interface Props {
 
 export const LogsTable = ({ entries }: Props) => {
   return (
-    <div className="overflow-hidden rounded-xl border border-gousse-line bg-gousse-panel shadow-gousse-sm">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-gousse-line bg-gousse-bg/40 text-xs uppercase tracking-wide text-gousse-muted">
+    <div className="overflow-x-auto rounded-xl border border-gousse-line bg-gousse-panel">
+      <table className="w-full text-left text-[13px]">
+        <thead className="h-[30px] border-b border-gousse-line bg-gousse-bg text-[11px] uppercase tracking-[0.04em] text-gousse-muted">
           <tr>
-            <th className="px-3 py-2 font-semibold">When</th>
-            <th className="px-3 py-2 font-semibold">Type</th>
-            <th className="px-3 py-2 font-semibold">Trigger</th>
-            <th className="px-3 py-2 font-semibold">Account</th>
-            <th className="px-3 py-2 font-semibold">Status</th>
-            <th className="px-3 py-2 font-semibold">Counts</th>
-            <th className="px-3 py-2 font-semibold">Duration</th>
+            <th className="px-4 py-2 font-medium">When</th>
+            <th className="px-4 py-2 font-medium">Type</th>
+            <th className="px-4 py-2 font-medium">Trigger</th>
+            <th className="px-4 py-2 font-medium">Account</th>
+            <th className="px-4 py-2 font-medium">Status</th>
+            <th className="px-4 py-2 font-medium">Counts</th>
+            <th className="px-4 py-2 font-medium">Duration</th>
           </tr>
         </thead>
         <tbody>
