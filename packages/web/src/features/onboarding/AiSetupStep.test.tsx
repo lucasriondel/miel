@@ -1,4 +1,4 @@
-// Step two of the onboarding gate (#111): a connected mailbox that cannot be
+// The AI step of the onboarding gate (#111): a connected mailbox that cannot be
 // triaged is the core promise failing on the first sync, so the gate asks for a
 // triage provider, that provider's credential and a model before it lets go.
 //
@@ -96,23 +96,24 @@ describe("what the step asks for", () => {
     for (const m of PROVIDER_MODELS.openai) expect(html).not.toContain(`value="${m.id}"`);
   });
 
-  test("asks for the local provider's token when that is what triages", () => {
+  // The redesign's credential grid opens a row's field on "Add" rather than
+  // showing four empty fields at once, so what is asserted is that every
+  // provider is offered its credential here — the token for the local one, a
+  // key for each vendor.
+  test("offers the local provider's token when that is what triages", () => {
     const html = render(settingsWith("claude-code", "claude-haiku-4-5"));
 
-    expect(html).toContain('type="password"');
-    // The same row the Credentials card renders, so the instructions match.
-    expect(html).toContain("claude setup-token");
+    expect(html).toContain('aria-label="Claude Code"');
+    expect(html).toContain("Add token");
   });
 
-  test("asks for every vendor's key up front, not only the selected one's", () => {
+  test("offers every vendor a key up front, not only the selected one", () => {
     const html = render(settingsWith("claude-code", "claude-haiku-4-5"));
 
-    // One field per vendor plus the local token — the grid is how a vendor
-    // becomes selectable at all, so all of them are offered a key here.
     for (const vendor of CREDENTIAL_PROVIDERS) {
-      expect(html).toContain(`aria-label="${PROVIDER_LABELS[vendor]} API key"`);
+      expect(html).toContain(`aria-label="${PROVIDER_LABELS[vendor]}"`);
     }
-    expect(html).toContain('type="password"');
+    expect(html.match(/>Add key</g)).toHaveLength(CREDENTIAL_PROVIDERS.length);
   });
 
   test("never renders a credential back — the field starts empty", () => {

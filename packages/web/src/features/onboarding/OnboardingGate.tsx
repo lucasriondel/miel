@@ -1,33 +1,43 @@
 import { Modal } from "../../components/modal/Modal";
 import { useAccounts, useSettings } from "../../api/queries";
 import { useGoogleOAuthConfig } from "../../api/googleOAuthConfig.hooks";
-import { assetUrl } from "../../lib/basePath";
 import { AiSetupStep } from "./AiSetupStep";
 import { ConnectStep } from "./ConnectStep";
+import { GateHeader } from "./GateHeader";
 import { GoogleConfigStep } from "./GoogleConfigStep";
-import { StepProgress } from "./StepProgress";
-import { onboardingStep } from "./onboardingStep";
+import { ServerStep } from "./ServerStep";
+import { onboardingStep, type ServerCheckGateState } from "./onboardingStep";
+import { useServerCheck } from "./serverCheck";
 import { useTriageCredential } from "./useTriageCredential";
 
 const TITLE_ID = "onboarding-gate-title";
 const DESCRIPTION_ID = "onboarding-gate-description";
 const ERROR_ID = "onboarding-gate-error";
 
+/** What the server check reads as while the gate's other request is answering. */
+const ANSWERING: ServerCheckGateState = {
+  isPending: false,
+  isError: false,
+  data: { status: "ok" },
+};
+
 interface Props {
-  /** The last connect failure, shown on step two. See {@link ConnectStep}. */
+  /** The last connect failure, shown on the mailbox step. See {@link ConnectStep}. */
   error?: string | null;
   /** Called when the user retries, so the stale failure goes with the attempt. */
   onRetry?: () => void;
 }
 
 /**
- * First-run gate: three ordered steps, and the app stays blocked until all of
- * them are done (#111, #120). Give the server a Google OAuth client, because
- * without one there is no consent URL and the next step's button could only
- * fail; connect a Gmail account, because there is nothing to triage without
- * one; then give triage a provider and a credential, because a mailbox that
- * syncs and cannot be classified is the product's promise failing on the first
- * run with the reason buried in Settings.
+ * First-run gate: four ordered steps — Server · Google · Mailbox · AI triage —
+ * and the app stays blocked until all of them are done (#111, #120). A server
+ * this page can talk to, because nothing else can be asked of one it cannot;
+ * a Google OAuth client on it, because without one there is no consent URL and
+ * the next step's button could only fail; a connected Gmail account, because
+ * there is nothing to triage without one; then a provider and a credential for
+ * triage, because a mailbox that syncs and cannot be classified is the
+ * product's promise failing on the first run with the reason buried in
+ * Settings.
  *
  * Deliberately non-dismissable on every step — no close control, no Escape, no
  * backdrop click, and `Modal` keeps focus inside — because there is no version
@@ -36,18 +46,27 @@ interface Props {
  *
  * Which step, and whether to open at all, is {@link onboardingStep}: settled
  * data only, so neither a slow request nor a failed background refetch can
- * flash the wall up or blink it away.
+ * flash the wall up or blink it away. The server check is only asked when the
+ * Google-config request — made on every load anyway — has failed, and it is
+ * what says whether that failure was the server's address or its secret.
  */
 export const OnboardingGate = ({ error, onRetry }: Props) => {
   // Environment, not a setting: the three GOOGLE_* variables the API reads.
   const googleConfig = useGoogleOAuthConfig();
+  const serverCheck = useServerCheck(googleConfig.isError);
+  const server = googleConfig.isError ? serverCheck : ANSWERING;
   const accounts = useAccounts();
   // The credential that matters is the selected triage provider's, so the
   // settings are what say which one to ask about.
   const settings = useSettings();
   const credential = useTriageCredential(settings.data?.triageProvider);
-  const step = onboardingStep(googleConfig, accounts, credential);
-  const onFormStep = step === "ai" || step === "google-config";
+  const step = onboardingStep(server, googleConfig, accounts, credential);
+
+  const checkAgain = () => {
+    void googleConfig.refetch();
+    if (googleConfig.isError) void serverCheck.refetch();
+  };
+  const serverStatus = serverCheck.data?.status;
 
   return (
     <Modal
@@ -55,28 +74,28 @@ export const OnboardingGate = ({ error, onRetry }: Props) => {
       labelledBy={TITLE_ID}
       // Both, in reading order: the pitch, then why the last try didn't take.
       describedBy={error && step === "connect" ? `${DESCRIPTION_ID} ${ERROR_ID}` : DESCRIPTION_ID}
-      className={`onboarding-gate flex flex-col ${
-        // The AI step holds a settings row — two dropdowns and a paste field —
-        // and the config step a list of variables with explanations; both need
-        // the width and read as a form, not as a pitch.
-        onFormStep ? "sm:max-w-xl" : "items-center text-center"
+      className={`flex flex-col items-center ${
+        // The AI step holds two cards of settings rows — a credential grid and
+        // a task row — and needs the width; the rest are one question each.
+        step === "ai" ? "sm:max-w-[576px]" : ""
       }`}
     >
-      <div className="flex w-full flex-col items-center">
-        <img
-          src={assetUrl("/miel.webp")}
-          alt=""
-          className="h-14 w-14 rounded-2xl shadow-gousse-sm"
+      <GateHeader step={step ?? "connect"} />
+      {step === "server" && serverStatus && serverStatus !== "ok" ? (
+        <ServerStep
+          titleId={TITLE_ID}
+          descriptionId={DESCRIPTION_ID}
+          status={serverStatus}
+          checking={serverCheck.isFetching || googleConfig.isFetching}
+          onCheckAgain={checkAgain}
         />
-        <div className="mt-4">
-          <StepProgress current={step ?? "connect"} />
-        </div>
-      </div>
-      {step === "google-config" && googleConfig.data ? (
+      ) : step === "google-config" && googleConfig.data ? (
         <GoogleConfigStep
           titleId={TITLE_ID}
           descriptionId={DESCRIPTION_ID}
           missing={googleConfig.data.missing}
+          checking={googleConfig.isFetching}
+          onCheckAgain={checkAgain}
         />
       ) : step === "ai" && settings.data ? (
         <AiSetupStep titleId={TITLE_ID} descriptionId={DESCRIPTION_ID} settings={settings.data} />

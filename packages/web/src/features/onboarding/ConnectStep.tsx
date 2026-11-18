@@ -1,5 +1,8 @@
-import { ConnectGoogleButton } from "../settings/ConnectGoogleButton";
+import { useState } from "react";
 import { ConnectFailureNotice } from "./ConnectFailureNotice";
+import { ConnectWithGoogleButton } from "./ConnectWithGoogleButton";
+import { GateFootnote } from "./GateFootnote";
+import { GateIntro } from "./GateIntro";
 
 interface Props {
   titleId: string;
@@ -17,23 +20,35 @@ interface Props {
 }
 
 /**
- * Step one of the gate: with no Gmail account connected there is nothing to
- * triage on any route, so this is the first thing asked for.
+ * The mailbox step: with no Gmail account connected there is nothing to triage
+ * on any route, so this is asked as soon as the server can do OAuth at all.
+ *
+ * Two faces, as the redesign draws them: the pitch with "Connect with Google",
+ * and — once pressed — "Waiting for Google…" while the browser leaves for the
+ * consent screen. The flow is same-tab, so the waiting face is short-lived; it
+ * exists so a second press cannot start a second flow.
  */
-export const ConnectStep = ({ titleId, descriptionId, errorId, error, onRetry }: Props) => (
-  <>
-    <h1 id={titleId} className="mt-5 text-lg font-bold tracking-tight text-gousse-ink">
-      Connect a Gmail account
-    </h1>
-    <p id={descriptionId} className="mt-2 text-sm font-medium leading-relaxed text-gousse-muted">
-      miel reads your mail and triages it with AI — all of which needs a mailbox to work on. Connect
-      a Google account to get started.
-    </p>
-    {error ? <ConnectFailureNotice id={errorId} message={error} /> : null}
-    <div className="mt-6">
-      {/* Back to the inbox of the account just connected, not settings: the
-          gate's only promise is the app behind it. */}
-      <ConnectGoogleButton returnTo="inbox" onStart={onRetry} />
-    </div>
-  </>
-);
+export const ConnectStep = ({ titleId, descriptionId, errorId, error, onRetry }: Props) => {
+  const [waiting, setWaiting] = useState(false);
+  return (
+    <>
+      <GateIntro
+        titleId={titleId}
+        descriptionId={descriptionId}
+        centered
+        title="Connect a Gmail account"
+      >
+        {waiting
+          ? "Taking you to Google to grant access. This window carries on by itself once you are back."
+          : "miel needs a mailbox to triage. Connect a Google account to start."}
+      </GateIntro>
+      {error && !waiting ? <ConnectFailureNotice id={errorId} message={error} /> : null}
+      <ConnectWithGoogleButton waiting={waiting} onWaitingChange={setWaiting} onStart={onRetry} />
+      <GateFootnote>
+        {waiting
+          ? "Stuck here? Reload this page to start again."
+          : "You'll be sent to Google to grant access, then straight back here."}
+      </GateFootnote>
+    </>
+  );
+};

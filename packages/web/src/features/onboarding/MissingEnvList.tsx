@@ -1,5 +1,3 @@
-import { NoticeList, NoticeListItem } from "@/components/ui/notice";
-
 /** What each variable is, so the list is actionable without leaving the app. */
 const DESCRIPTIONS: Record<string, string> = {
   GOOGLE_CLIENT_ID: "The OAuth client id of your Google Cloud Web application client.",
@@ -21,16 +19,23 @@ interface Props {
  * the server said, not a fixed three, so a variable added later shows up here
  * without a matching entry above.
  *
- * A `NoticeList` rather than a stack of sibling blocks: it renders `<ul>`/`<li>`
- * so the count is announced, which is the part a screen reader needs when the
- * list is the whole content of a step.
+ * A real `<ul>`/`<li>` so the count is announced, which is the part a screen
+ * reader needs when the list is the whole content of a step.
  */
 export const MissingEnvList = ({ names }: Props) => (
-  <NoticeList>
+  <ul
+    aria-label="Missing variables"
+    className="divide-y divide-gousse-high-border overflow-hidden rounded-[10px] border border-gousse-high-border bg-gousse-high-bg"
+  >
     {names.map((name) => (
-      <NoticeListItem key={name} variant="danger" title={<code className="font-mono">{name}</code>}>
-        {DESCRIPTIONS[name]}
-      </NoticeListItem>
+      <li key={name} className="px-3 py-2">
+        <code className="font-mono text-xs font-semibold text-gousse-high-text">{name}</code>
+        {DESCRIPTIONS[name] ? (
+          <p className="mt-0.5 text-xs leading-[18px] text-gousse-high-text/85">
+            {DESCRIPTIONS[name]}
+          </p>
+        ) : null}
+      </li>
     ))}
-  </NoticeList>
+  </ul>
 );

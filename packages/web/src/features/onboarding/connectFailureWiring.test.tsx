@@ -132,7 +132,9 @@ describe("the gate owns the failure", () => {
     await waitFor(() =>
       expect(within(dialog()!).getByText(new RegExp(ACCESS_DENIED))).toBeDefined(),
     );
-    expect(within(dialog()!).getByRole("heading").textContent).toBe("Connect a Gmail account");
+    expect(within(dialog()!).getByRole("heading", { level: 1 }).textContent).toBe(
+      "Connect a Gmail account",
+    );
   });
 
   test("the failure is announced, and read after the pitch as the dialog's description", async () => {
@@ -145,7 +147,7 @@ describe("the gate owns the failure", () => {
     // take.
     expect(described).toHaveLength(2);
     expect(document.getElementById(described[0]!)!.textContent).toContain(
-      "Connect a Google account to get started.",
+      "Connect a Google account to start.",
     );
     expect(described[1]).toBe(screen.getByRole("alert").id);
   });
@@ -159,7 +161,9 @@ describe("the gate owns the failure", () => {
       </QueryClientProvider>,
     );
 
-    expect(within(dialog()!).getByRole("heading").textContent).toBe("Set up AI triage");
+    expect(within(dialog()!).getByRole("heading", { level: 1 }).textContent).toBe(
+      "Set up AI triage",
+    );
     expect(dialog()!.getAttribute("aria-describedby")!.split(" ")).toHaveLength(1);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText(new RegExp(ACCESS_DENIED))).toBeNull();

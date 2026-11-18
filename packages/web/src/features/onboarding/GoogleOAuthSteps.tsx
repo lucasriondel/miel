@@ -16,14 +16,12 @@ import { GOOGLE_OAUTH_SETUP_STEPS } from "@miel/core/googleOAuthSetup";
 export const GoogleOAuthSteps = () => (
   <ol
     aria-label="Creating a Google OAuth client"
-    className="flex list-decimal flex-col gap-3 pl-5 text-left marker:font-semibold marker:text-gousse-muted"
+    className="flex list-decimal flex-col gap-3 pl-5 text-left marker:text-xs marker:font-semibold marker:text-gousse-muted"
   >
     {GOOGLE_OAUTH_SETUP_STEPS.map((step) => (
       <li key={step.title} className="pl-1">
-        <span className="text-sm font-semibold text-gousse-ink">{step.title}</span>
-        <span className="mt-0.5 block text-xs font-medium leading-relaxed text-gousse-muted">
-          {step.detail}
-        </span>
+        <span className="text-[13px] font-semibold text-gousse-ink">{step.title}</span>
+        <span className="mt-0.5 block text-xs leading-[18px] text-gousse-muted">{step.detail}</span>
       </li>
     ))}
   </ol>

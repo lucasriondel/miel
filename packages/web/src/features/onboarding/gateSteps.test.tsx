@@ -1,4 +1,4 @@
-// The gate as a user meets it (#111, #120): three ordered steps, the one on
+// The gate as a user meets it (#111, #120): four ordered steps, the one on
 // screen being the first unanswered question, and no way past any of them.
 //
 // Rendered into the DOM harness (#129) rather than matched against the
@@ -33,11 +33,28 @@ import type {
  */
 const requested: Array<{ path: string; query?: Record<string, unknown> }> = [];
 const CONSENT_URL = "https://accounts.google.com/o/oauth2/v2/auth?state=abc";
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public body: unknown,
+  ) {
+    super(message);
+  }
+}
+/** What `/auth/check` answers, when a test wants it to answer at all. */
+let authCheck: "unauthorized" | "unreachable" | null = null;
 mock.module("../../api/client", () => ({
-  ApiError: class ApiError extends Error {},
+  ApiError,
   apiFetch: async (req: { path: string; query?: Record<string, unknown> }) => {
     requested.push(req);
     if (req.path === "/auth/google/start") return { url: CONSENT_URL };
+    if (req.path === "/auth/check" && authCheck === "unauthorized") {
+      throw new ApiError("unauthorized", 401, { error: "unauthorized" });
+    }
+    if (req.path === "/auth/check" && authCheck === "unreachable") {
+      throw new TypeError("Failed to fetch");
+    }
     throw new Error(`unexpected request: ${req.path}`);
   },
 }));
@@ -136,32 +153,36 @@ const startedAt = window.location.href;
 afterEach(() => {
   window.location.href = startedAt;
   requested.length = 0;
+  authCheck = null;
 });
 
 const dialog = () => within(screen.getByRole("dialog"));
+/** The step's own title — the dialog's name; the cards inside it have headings of their own. */
+const title = () => dialog().getByRole("heading", { level: 1 }).textContent;
 
 describe("which step the gate opens on", () => {
   test("asks for the server's Google OAuth client before anything else", () => {
     renderGate(AT_CONFIG_STEP);
 
-    expect(dialog().getByRole("heading").textContent).toBe("Finish the server setup");
+    expect(title()).toBe("Create a Google OAuth client");
     // The server's own list of names, not a fixed three guessed here.
-    expect(dialog().getByText("GOOGLE_CLIENT_ID")).toBeDefined();
-    expect(dialog().getByText("GOOGLE_CLIENT_SECRET")).toBeDefined();
-    expect(dialog().queryByText("GOOGLE_REDIRECT_URI")).toBeNull();
+    const missing = within(dialog().getByRole("list", { name: "Missing variables" }));
+    expect(missing.getByText("GOOGLE_CLIENT_ID")).toBeDefined();
+    expect(missing.getByText("GOOGLE_CLIENT_SECRET")).toBeDefined();
+    expect(missing.queryByText("GOOGLE_REDIRECT_URI")).toBeNull();
   });
 
   test("asks for a mailbox once the server can sign someone in", () => {
     renderGate(AT_CONNECT_STEP);
 
-    expect(dialog().getByRole("heading").textContent).toBe("Connect a Gmail account");
+    expect(title()).toBe("Connect a Gmail account");
     expect(dialog().getByRole("button", { name: "Connect with Google" })).toBeDefined();
   });
 
   test("asks for triage's credential once a mailbox is connected", () => {
     renderGate(AT_AI_STEP);
 
-    expect(dialog().getByRole("heading").textContent).toBe("Set up AI triage");
+    expect(title()).toBe("Set up AI triage");
     expect(dialog().getByLabelText<HTMLSelectElement>("Triage provider").value).toBe("claude-code");
   });
 
@@ -184,7 +205,7 @@ describe("which step the gate opens on", () => {
     view.unmount();
 
     renderGate({ ...onAnthropic, key: "openai" });
-    expect(dialog().getByRole("heading").textContent).toBe("Set up AI triage");
+    expect(title()).toBe("Set up AI triage");
   });
 
   test("shows nothing while an answer is still unknown", () => {
@@ -195,14 +216,20 @@ describe("which step the gate opens on", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  test("marks which of the three steps the user is on", () => {
+  test("marks which of the four steps the user is on", () => {
     renderGate(AT_AI_STEP);
 
-    const marked = dialog()
-      .getAllByRole("listitem")
-      .filter((item) => item.getAttribute("aria-current") === "step");
+    const steps = within(dialog().getByRole("list", { name: "Setup progress" }));
+    const items = steps.getAllByRole("listitem");
+    expect(items.map((item) => item.textContent?.replace(" (done)", ""))).toEqual([
+      "Server",
+      "Google",
+      "Mailbox",
+      "4AI triage",
+    ]);
+    const marked = items.filter((item) => item.getAttribute("aria-current") === "step");
     expect(marked).toHaveLength(1);
-    expect(marked[0]!.textContent).toContain("Set up AI triage");
+    expect(marked[0]!.textContent).toContain("AI triage");
   });
 });
 
@@ -239,10 +266,46 @@ describe("no way past it", () => {
   test("the config step asks for nothing — those variables are the server's own", () => {
     renderGate(AT_CONFIG_STEP);
 
-    // Nothing to press and nothing to paste: the work happens outside the app,
-    // so naming what is missing is the whole of what the browser can do.
-    expect(dialog().queryAllByRole("button")).toHaveLength(0);
+    // Nothing to paste: the work happens outside the app, so naming what is
+    // missing, a prompt to copy and a re-check are all the browser can offer.
     expect(dialog().queryAllByRole("textbox")).toHaveLength(0);
+  });
+});
+
+describe("the server step", () => {
+  // With the Google-config request left unseeded it fails, which is when the
+  // gate asks `/auth/check` why.
+  const SERVER_DOWN: Seed = { accounts: [], settings: SETTINGS, token: NO_TOKEN };
+
+  test("names a refused secret, and which two values must match", async () => {
+    authCheck = "unauthorized";
+    renderGate(SERVER_DOWN);
+
+    await waitFor(() => expect(title()).toBe("This server turned the app away"));
+    expect(dialog().getByText("VITE_API_SECRET")).toBeDefined();
+    expect(dialog().getByText("API_SECRET")).toBeDefined();
+    expect(requested.map((r) => r.path)).toContain("/auth/check");
+  });
+
+  test("names a server that did not answer", async () => {
+    authCheck = "unreachable";
+    renderGate(SERVER_DOWN);
+
+    await waitFor(() => expect(title()).toBe("Can't reach your server"));
+    expect(dialog().getByRole("button", { name: "Check again" })).toBeDefined();
+  });
+
+  test("stays shut when the check failed in a way it cannot name", async () => {
+    renderGate(SERVER_DOWN);
+
+    await waitFor(() => expect(requested.map((r) => r.path)).toContain("/auth/check"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("asks nothing of a server that is answering", () => {
+    renderGate(AT_CONNECT_STEP);
+
+    expect(requested.map((r) => r.path)).not.toContain("/auth/check");
   });
 });
 
@@ -282,8 +345,10 @@ describe("the AI step", () => {
     renderGate(AT_AI_STEP);
 
     // The settings page's own grid, so a provider gains a credential here the
-    // same way it does there.
-    expect(dialog().getByLabelText("Claude Code token")).toBeDefined();
-    expect(dialog().getAllByLabelText(/ API key$/)).toHaveLength(CREDENTIAL_PROVIDERS.length);
+    // same way it does there: a row per provider, each offering its credential.
+    expect(dialog().getByRole("button", { name: "Add token" })).toBeDefined();
+    expect(dialog().getAllByRole("button", { name: "Add key" })).toHaveLength(
+      CREDENTIAL_PROVIDERS.length,
+    );
   });
 });

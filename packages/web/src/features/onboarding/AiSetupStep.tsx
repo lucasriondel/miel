@@ -1,6 +1,8 @@
-import { SettingsCard } from "@/components/ui/setting-row";
 import { ModelRow } from "../settings/ModelRow";
 import { CredentialsCard } from "../settings/CredentialsCard";
+import { SettingsPanel } from "../settings/SettingsPanel";
+import { TasksColumnLabels } from "../settings/TasksColumnLabels";
+import { GateIntro } from "./GateIntro";
 import type { ModelSettings } from "../../api/types";
 
 interface Props {
@@ -36,16 +38,13 @@ interface Props {
  */
 export const AiSetupStep = ({ titleId, descriptionId, settings }: Props) => (
   <>
-    <h1 id={titleId} className="mt-5 text-lg font-bold tracking-tight text-gousse-ink">
-      Set up AI triage
-    </h1>
-    <p id={descriptionId} className="mt-2 text-sm font-medium leading-relaxed text-gousse-muted">
-      miel classifies every message it syncs, and that runs through an AI provider of your choosing.
-      Give a provider its credential, then point triage at it.
-    </p>
-    <div className="mt-5 flex flex-col gap-4">
+    <GateIntro titleId={titleId} descriptionId={descriptionId} title="Set up AI triage">
+      miel classifies every message it syncs, through an AI provider of your choosing. Add a
+      credential for a provider, then pick the one that triages your mail.
+    </GateIntro>
+    <div className="mt-5 flex w-full flex-col gap-4 text-left">
       <CredentialsCard />
-      <SettingsCard>
+      <SettingsPanel title="Tasks" header={<TasksColumnLabels />}>
         <ModelRow
           task="triage"
           title="Triage"
@@ -53,11 +52,10 @@ export const AiSetupStep = ({ titleId, descriptionId, settings }: Props) => (
           value={settings.triageModel}
           provider={settings.triageProvider}
         />
-      </SettingsCard>
+      </SettingsPanel>
     </div>
-    <p className="mt-4 text-xs leading-relaxed text-gousse-muted">
-      Replies and promo-code extraction keep their defaults — all three are yours to change in
-      Settings.
+    <p className="mt-4 w-full text-left text-xs leading-[18px] text-gousse-muted">
+      Replies and promo codes keep their defaults — change them anytime in Settings.
     </p>
   </>
 );
