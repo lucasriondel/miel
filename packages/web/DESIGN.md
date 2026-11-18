@@ -210,8 +210,10 @@ looping flourishes.
   its own scroll body, through `PageLayout` (`features/shell/`).
 - **The sidebar** (`components/sidebar/AppSidebar`): 236px on `bg-gousse-fill`
   with a right hairline — the collapse toggle, the account switcher card,
-  Compose (`C`), the views (Inbox with its unread count, Done, Promo codes with
-  the codes to review), the account's labels, then Filters, Logs, Settings and
+  Compose (`C`), the views (Inbox with its unread count, Snoozed with its
+  count, Done, Promo codes with the codes to review — and Scheduled, which the
+  design does not draw, only while the account has mail waiting to go or a
+  send that failed), the account's labels, then Filters, Logs, Settings and
   the sync status at the foot. Collapsed on desktop it is a 72px **rail** of the
   same things as icon tiles (`SidebarRailContext`); below `sm` it is a drawer
   over the page with a scrim, opened from the menu button `PageHeader` draws
@@ -242,6 +244,11 @@ looping flourishes.
   of its own column (narrow beside the reader), not the viewport's.
 - **Popovers** (`PopoverPanel`): white, `shadow-gousse-xl`, portalled out of
   `overflow` clipping, with click-outside + Escape (`usePopover`). Reuse it.
+- **Time menus** (`features/time/`): one "when?" menu for snooze and schedule
+  send, in the Send-options specimen's shape — label left, the resolved time
+  right in 11px muted tabular figures ("Tue 08:00"), a separator, then "Pick
+  date & time…", which swaps the list for a date and time form in place. Drawn
+  inside a `PopoverPanel` (or the compose window's own menu).
 - **Modals** (`components/modal/Modal`): the top layer (`z-[100]`), portalled,
   `role="dialog" aria-modal`, focus trap and scroll lock. Dismissal is opt-in.
 - **Toasts** (`MielToaster` + `index.css`): bottom-centre, one dark line each in
@@ -251,7 +258,15 @@ looping flourishes.
   untrash (`api/mutations.ts`, `announcingUndo`).
 - **The compose dock** (`features/compose/ComposeDock`): up to three windows
   docked bottom-right at `z-[80]` — over the popovers, under the modals. Not a
-  modal: the page behind it is what a user reads while writing.
+  modal: the page behind it is what a user reads while writing. What a window
+  opens over itself — the From menu, address suggestions, the schedule form —
+  is a `ComposePopover` at `z-[85]`, so it floats over the dock without
+  `PopoverPanel` (which sits under it); its shape is the menu's: white,
+  `rounded-xl`, `p-1.5`, `shadow-gousse-xl`, `rounded-lg` items.
+- **Chips in a window** are pills, as tags are: recipients on `fill`,
+  attachments white with a `border` hairline (a spinner and percentage while
+  uploading, `high-bg` with the reason when refused), between the body and the
+  AI strip.
 
 ---
 

@@ -1059,13 +1059,14 @@ radii, which primitive to reach for. The redesign changed the frame:
   add its own `overflow-y-auto` inside that body. `App.test.tsx` renders it.
 - **The sidebar** holds what the old top bar did: the account switcher (a card
   at its top), Compose (`C` from anywhere not typing), the views — Inbox with
-  the period's unread count, Done, Promo codes with the codes to review — the
+  the period's unread count, Snoozed with the account's snoozed count, Done,
+  Promo codes with the codes to review, and Scheduled only while the account
+  has mail waiting to go or a send that failed — the
   labels, then Filters, Logs, Settings and the last-sync line. Collapsed on
   desktop it is a 72px rail of the same things (`SidebarRailContext`); below
   `sm` it is a drawer, opened from the menu button `PageHeader` draws while it
   is closed (`sidebarToggle.ts`), started closed and closed again on every
-  navigation. Only the desktop flag is persisted. The design's Snoozed row is
-  not drawn: nothing in Gmail's API or miel's schema can snooze.
+  navigation. Only the desktop flag is persisted.
 - **List and reader are one screen.** `messages/:gmailMessageId` is a child
   route of `account/:accountId`: `InboxPage` renders the list and an `Outlet`
   where `MessageDetailPage` is the reader column, handing it the list's
@@ -1113,12 +1114,14 @@ chip rows, subject, body, AI strip, footer, plus the pure modules
 `recipients.ts` (typing is committed into chips only on a comma, semicolon,
 Enter or blur — never rewritten under the caret) and `composeWindowState.ts` —
 and none of it knows a message is being answered. `features/reply/*` is the
-reply: the prefilled recipients and subject (`replyDefaults.ts`, including the
-text-only forward block — attachments are not forwarded), the split button and
-the reader's draft card, whose drafting is on demand only: nothing is generated
-until someone presses "Draft with AI". New mail and forwards send through
-`/compose/send`, replies through `send-reply` (`replyAll` prefills Cc from
-`replyAllCc`); a send that names a Gmail draft deletes it.
+reply: the prefilled recipients and subject (`replyDefaults.ts`), the quoted
+thread under a reply's body and the forwarded block under a forward's
+(`QuotedThread`, `ForwardedBlock`, `quoteText.ts`), the split button and the
+reader's draft card, whose drafting is on demand only: nothing is generated
+until someone presses "Draft with AI". New mail sends through `/compose/send`,
+replies through `send-reply` (`replyAll` prefills Cc from `replyAllCc`),
+forwards through `/messages/:a/:m/forward`; a send that names a Gmail draft
+deletes it.
 
 Which state a window is in is derived, not stored:
 `composeWindowMode(intent, draft)` folds the user's intent together with "is
@@ -1129,11 +1132,55 @@ purpose: it is an explicit request to keep the draft and get it out of the way.
 The body is unmounted while minimized rather than hidden, which is safe because
 every field lives in the provider.
 
-The backend now does everything the design draws around a send — attachments,
-the quoted original, forwards with their files, send-as and a second mailbox,
-address suggestions, schedule send, a server-side Stop and refinement of a draft
-— see *Writing mail: what a send carries* below. Snooze sits beside them under
-*Snooze*. The web client does not use all of it yet.
+Everything the design draws around a send is wired end to end — the server
+side is *Writing mail: what a send carries* below; the window's side is:
+
+- **The quote and the forward are the server's.** Nothing is typed into a body
+  on the window's behalf any more: a reply's body is only what the user wrote,
+  and `GET /messages/:a/:m/quote` draws what the server will append — the reply
+  quote collapsed to a `•••` pill (expand it to read or trim it; a trimmed quote
+  travels as `quotedText`, an emptied one as `includeQuote: false`, an untouched
+  one as nothing), and a forward's block expanded, read-only, with the
+  original's files as removable chips (`keepAttachmentIds` names the ones left).
+  A forward needs no text of its own to be sent.
+- **Files** upload one by one the moment they are attached — the paperclip
+  beside Send, or a drop anywhere on the window (`useFileDrop`, `DropOverlay`) —
+  through `api/uploads.ts`, an `XMLHttpRequest` because only it reports upload
+  progress, and `useAttachmentUploads` keeps the bytes so a change of mailbox
+  stages them again for the new one (an upload belongs to one account). A file
+  over 25 MB fails on its own chip before a byte is sent, a refusal says why on
+  its chip, and neither blocks the rest; a send waits for what is still
+  uploading and names the ids in chip order. The chips sit between the body
+  and the AI strip.
+- **From** is a menu when there is a choice (`fromOptions.ts`): the window's
+  mailbox, its *verified* send-as aliases, then the other connected mailboxes
+  (not on a forward, which the server builds in the mailbox the original
+  arrived in). A reply marks its own mailbox "received here"; picking another
+  sends `fromAccountId`. One option is plain text, as the design draws it.
+- **Suggestions** under To/Cc/Bcc are an ARIA combobox (`useRecipientSuggestions`,
+  `RecipientSuggestions`): the field keeps the caret, the arrows move the
+  highlight, Enter or Tab takes it, Escape hides the list without minimizing the
+  window, and a comma still commits exactly what was typed.
+- **Schedule send** is in Send's caret menu — Schedule send…, Tomorrow morning
+  and Monday morning with the time each resolves to (`features/time/`). The
+  window closes and a toast with Undo takes its place; Undo cancels the held
+  send and reopens the window as it was (`ComposeSessionActions.reopen`). A
+  reply answered from another mailbox is not offered it: the scheduled route
+  threads from the original's own mailbox.
+- **Stop is real**: every generation carries a `requestId` the window chose,
+  Stop aborts the request *and* posts `/compose/generations/:id/cancel`, and the
+  `generation_cancelled` answer is taken as the stop it is, never shown. The
+  refinement chips send `previousDraft` with the chip as the instruction.
+- **Refusals** read as sentences: `composeErrorMessage` (`apiErrorMessage.ts`)
+  replaces the server's id-bearing text for `account_not_found`,
+  `message_not_found`, `upload_not_found`, `attachment_not_found`,
+  `scheduled_not_found` and `send_as_not_allowed`. It is kept apart from
+  `apiErrorMessage` because the same codes answer other routes, where "the
+  message this answers" would be the wrong sentence.
+
+Panels a window opens over itself (the From menu, the suggestions, the schedule
+form) are `ComposePopover`: portalled, fixed to their anchor, at `z-[85]` —
+above the dock — and they catch Escape so it closes the panel, not the window.
 
 To and Cc being editable is end to end, not decoration: `SendReplyRequest`
 takes optional `to`/`cc`, `services/replyRecipients.ts` decides between what was
@@ -1254,6 +1301,11 @@ sent nothing.
   `claude/tasks.test.ts` asserts a refined new mail still inlines no body.
 - **Mailbox nicknames.** `PATCH /accounts/:id { nickname }` — this install's
   name for a mailbox, shown by the switcher and the From menu; Gmail is not told.
+  `accountDisplayName` is the one rule on screen (nickname, else the Google
+  name, else the address's local part), and the promo reader names its mailbox
+  through it (`useMailboxName`). Renaming is inline on the Settings › Mailboxes
+  row (`AccountNameEditor`: Enter saves, Escape cancels, empty clears, 60
+  characters), not optimistic, since the server trims and caps.
 
 There is still no AI drafting during sync: a draft is generated only when
 someone asks for one.
@@ -1271,6 +1323,25 @@ as for every message action. A snoozed thread is archived, so `archivedOnly`
 Snoozed view; a listed message carries `snoozedUntil`. A wake Gmail refuses is
 pushed back 15 minutes rather than retried every tick. It wakes on time only
 while the API runs; anything overdue wakes on the first tick after a restart.
+
+In the web app, the clock is `features/snooze/SnoozeButton.tsx`, mounted by
+`MessageActions` in both the reader's toolbar and a row's strip (last before the
+read/archive/delete trio). The design draws the clock and no picker, so the menu
+is the Send-options specimen's shape, built once in `features/time/`:
+`timePresets.ts` (pure, `now` a parameter — `snoozePresets`, `schedulePresets`,
+`presetTimeLabel`), `TimePresetMenu.tsx` and `CustomTimeForm.tsx`, which the
+compose window's "Schedule send…" reuses. The mutations are
+`api/snooze.mutations.ts`: a snooze leaves the lists like an archive
+(`hideWholeThread`, lists authoritative) and re-times a thread already snoozed,
+toasts "Snoozed until Tue 08:00 · Undo" from the mutation (Undo is the `DELETE`),
+and from the reader leaves by `useReturnToInbox` on the click — the fifth exit
+`detailExits.test.ts` counts. Unsnooze does not leave the reader: the message
+is still there to read. The Snoozed view is `?mailbox=snoozed`
+(`features/inbox/mailbox.ts`), not period-scoped, read with
+`snoozedListParams` so the sidebar's count and the view share one cache entry;
+its rows say "Until Tue 08:00" in the date's place and the reader shows a
+`SnoozedNotice` with Unsnooze. `features/snooze/snoozeWiring.test.tsx` renders
+both.
 
 ## Schedule send and the due-work loop
 
@@ -1301,6 +1372,19 @@ sweeps stale uploads, each pass failing on its own. The guarantees, all in
   reason; anything else is retried at 2 and 4 minutes, then failed
   (`MAX_SEND_ATTEMPTS`).
 
+In the web app, `api/scheduledSends.hooks.ts` is the read (`useScheduledSends`,
+under its own `["scheduled-sends"]` root, polled every 30 s while anything is
+pending or sending — there is no socket event for a send going out) and the two
+writes (`useCancelScheduledSend`, `useRescheduleSend`), which re-read the list
+and leave the words to the caller. The **Scheduled** page
+(`/account/:accountId/scheduled`, `pages/ScheduledPage.tsx`) is an addition the
+design does not draw: there, scheduling hands Gmail a time and Gmail keeps the
+list, but here miel holds the mail and a send can fail with nobody looking. So
+the sidebar row appears only while the account has a pending, sending or failed
+send, and the page lists them — Change time and Cancel on a pending one, Retry
+(led by "Right away") on a failed one, with its `error` in red; a 409
+`scheduled_not_editable` says "It is already being sent".
+
 ## The Google OAuth client entered in the app
 
 The onboarding gate's Google step asks for the client ID, secret and redirect
@@ -1328,12 +1412,33 @@ answers the same status (its `configured`/`missing` keep their old shape).
 - A redirect URI must be http(s), end in `GOOGLE_OAUTH_CALLBACK_PATH`, and carry
   no query; the secret may be omitted to keep the stored one.
 
+In the web app one form is both surfaces: `features/google-oauth/GoogleClientForm.tsx`
+is mounted by the gate's `GoogleConfigStep` (full-width "Save and continue") and
+by `features/settings/GoogleClientCard.tsx` on Settings › Mailboxes, which
+shows what is in effect (ID, masked secret, redirect URI, "Saved in miel" or
+"From the server environment"), unfolds the form on Edit and offers Forget
+(DELETE, confirmed in place) only for a database client. The rules are pure in
+`googleClientDraft.ts`: the redirect URI starts from the one in effect, else
+`<server URL>/api/auth/google/callback` (the dev loopback URI behind a
+`.localhost` host, which Google refuses); an empty secret box keeps the stored
+secret only for the same client ID; a different ID with `accountsToReconnect > 0`
+shows the disconnect warning and turns the button into "Save anyway"; a
+`400 invalid_google_oauth_config` lands under the field it names. A save writes
+the status into the gate's `["auth", "google", "config"]` cache, which is what
+moves the gate on, and toasts `reconnectRequired` when it is not 0. The step's
+footnote keeps the `.env` path and its "check again".
+
 ## The sync toast's counts
 
 `SyncRunResult` (and so `sync.finished`'s runs) carries `promosFound`, the codes
 the extraction found in that run's new mail — "Sync done · 14 new, 3 codes to
 review". Additive, so no alias dance: the received schema defaults it to 0, so a
 client of this release reading an older API's event still parses it.
+
+The web's one toast for a finished run is that line (`api/syncDoneToast.ts`,
+dispatched from `syncSocket.ts`): new mail summed over every run, the codes
+clause and a Review action to `/promo-codes` only when there are codes. The
+per-account "Found N new mails" toast on `mails.fetched` is gone with it.
 
 ## Acting on a message
 
