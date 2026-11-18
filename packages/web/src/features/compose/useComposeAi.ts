@@ -1,8 +1,12 @@
 import { useCallback, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
-import { generateMessageMutationOptions } from "../../api/compose.hooks";
+import {
+  cancelGeneration,
+  generateMessageMutationOptions,
+  isGenerationCancelled,
+  type PreviousDraft,
+} from "../../api/compose.hooks";
 import { generateReplyMutationOptions, type GenerateReplyResult } from "../../api/mutations";
-import { forwardBody } from "../reply/replyDefaults";
 import type { ComposeFields, ComposeSession } from "./composeSession";
 
 export type AiStatus = "idle" | "generating" | "drafted" | "confirm" | "failed" | "unavailable";
@@ -22,10 +26,15 @@ const isAbort = (err: unknown): boolean =>
 
 interface Options {
   session: ComposeSession;
-  /** The body the window opened with (a forward's quoted block), not counted as an edit. */
+  /** The body the window opened with (a drafted reply handed over), not counted as an edit. */
   initialBody: string;
   update: (patch: Partial<ComposeFields>) => void;
 }
+
+let generation = 0;
+/** One id per request, so Stop names the generation it means and no other. */
+const newRequestId = (): string =>
+  globalThis.crypto?.randomUUID?.() ?? `gen-${Date.now().toString(36)}-${(generation += 1)}`;
 
 /**
  * The AI half of a compose window — the instruction strip's lifecycle
@@ -33,11 +42,14 @@ interface Options {
  * edited body asks first, a failure leaves the body as it was).
  *
  * A new mail drafts through `/compose/generate`; anything answering a message
- * through that message's `generate-reply`. A forward keeps its quoted block
- * under whatever the AI writes above it.
+ * through that message's `generate-reply`. A refinement chip hands the model
+ * the window's current draft (`previousDraft`) with the chip as the
+ * instruction, so "Shorter" edits what is there instead of starting over.
  *
- * Stop aborts the request in the browser only: the provider call already
- * running on the server finishes there and its answer is dropped.
+ * Stop is real: every request carries an id of the window's choosing, and Stop
+ * both drops the request and asks the server to cancel that id, which kills the
+ * provider call. The server's `generation_cancelled` answer is the stop being
+ * confirmed, never an error to show.
  */
 export function useComposeAi({ session, initialBody, update }: Options) {
   const { fields, message } = session;
@@ -46,7 +58,7 @@ export function useComposeAi({ session, initialBody, update }: Options) {
   const [draftBody, setDraftBody] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [pending, setPending] = useState<string | null>(null);
-  const abort = useRef<AbortController | null>(null);
+  const abort = useRef<{ controller: AbortController; requestId: string } | null>(null);
 
   /** Typed over: what is in the body is not what the AI (or the prefill) put there. */
   const bodyEdited =
@@ -55,22 +67,62 @@ export function useComposeAi({ session, initialBody, update }: Options) {
     fields.body.trim() !== initialBody.trim();
 
   const request = useCallback(
-    (prompt: string, signal: AbortSignal): Promise<GenerateReplyResult> =>
+    (
+      prompt: string,
+      extra: { requestId: string; previousDraft?: PreviousDraft },
+      signal: AbortSignal,
+    ): Promise<GenerateReplyResult> =>
       session.kind === "new" || !message
         ? generateMessageMutationOptions().mutationFn({
-            accountId: session.accountId,
+            accountId: fields.fromAccountId,
             prompt,
             to: fields.to,
             subject: fields.subject.trim() || undefined,
+            ...extra,
             signal,
           })
         : generateReplyMutationOptions().mutationFn({
             accountId: message.accountId,
             gmailMessageId: message.gmailMessageId,
             prompt,
+            ...extra,
             signal,
           }),
-    [session.kind, session.accountId, message, fields.to, fields.subject],
+    [session.kind, fields.fromAccountId, message, fields.to, fields.subject],
+  );
+
+  /**
+   * One generation: `instruction` is what the model is told, `shown` what the
+   * strip says the draft came from (a refinement is told "Shorter" but shows
+   * the whole chain of instructions).
+   */
+  const generate = useCallback(
+    async (instruction: string, shown: string, previousDraft?: PreviousDraft) => {
+      setPending(null);
+      setError(null);
+      setGenerating(true);
+      const controller = new AbortController();
+      const requestId = newRequestId();
+      abort.current = { controller, requestId };
+      try {
+        const result = await request(instruction, { requestId, previousDraft }, controller.signal);
+        const keepSubject = fields.subject.trim().length > 0 && session.kind !== "new";
+        update({
+          body: result.body,
+          prompt: shown,
+          ...(keepSubject || !result.subject ? {} : { subject: result.subject }),
+        });
+        setDraftBody(result.body);
+        setDraftedFrom(shown);
+      } catch (err) {
+        const stopped = isAbort(err) || controller.signal.aborted || isGenerationCancelled(err);
+        if (!stopped) setError(err);
+      } finally {
+        if (abort.current?.controller === controller) abort.current = null;
+        setGenerating(false);
+      }
+    },
+    [request, fields.subject, session.kind, update],
   );
 
   const run = useCallback(
@@ -81,36 +133,30 @@ export function useComposeAi({ session, initialBody, update }: Options) {
         setPending(prompt);
         return;
       }
-      setPending(null);
-      setError(null);
-      setGenerating(true);
-      const controller = new AbortController();
-      abort.current = controller;
-      try {
-        const result = await request(prompt, controller.signal);
-        const body =
-          session.kind === "forward" && message
-            ? `${result.body.trimEnd()}${forwardBody(message)}`
-            : result.body;
-        const keepSubject = fields.subject.trim().length > 0 && session.kind !== "new";
-        update({
-          body,
-          prompt,
-          ...(keepSubject || !result.subject ? {} : { subject: result.subject }),
-        });
-        setDraftBody(body);
-        setDraftedFrom(prompt);
-      } catch (err) {
-        if (!isAbort(err) && !controller.signal.aborted) setError(err);
-      } finally {
-        if (abort.current === controller) abort.current = null;
-        setGenerating(false);
-      }
+      await generate(prompt, prompt);
     },
-    [generating, bodyEdited, request, session.kind, message, fields.subject, update],
+    [generating, bodyEdited, generate],
   );
 
-  const stop = useCallback(() => abort.current?.abort(), []);
+  /** A chip ("Shorter", "In French"): the model edits the draft on screen, edits included. */
+  const refine = useCallback(
+    async (refinement: string, shown: string) => {
+      if (generating) return;
+      const previousDraft = {
+        body: fields.body,
+        ...(fields.subject.trim() ? { subject: fields.subject } : {}),
+      };
+      await generate(refinement, shown, previousDraft);
+    },
+    [generating, fields.body, fields.subject, generate],
+  );
+
+  const stop = useCallback(() => {
+    const running = abort.current;
+    if (!running) return;
+    running.controller.abort();
+    void cancelGeneration(running.requestId).catch(() => {});
+  }, []);
   const keepMine = useCallback(() => setPending(null), []);
 
   const status: AiStatus = generating
@@ -125,5 +171,5 @@ export function useComposeAi({ session, initialBody, update }: Options) {
           ? "drafted"
           : "idle";
 
-  return { status, draftedFrom, error, pending, bodyEdited, run, stop, keepMine };
+  return { status, draftedFrom, error, pending, bodyEdited, run, refine, stop, keepMine };
 }

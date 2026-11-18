@@ -35,6 +35,7 @@ const ACCOUNT = {
   id: "acc-1",
   email: "you@example.com",
   displayName: "You Person",
+  nickname: null,
   avatarUrl: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   lastSyncedAt: null,
@@ -57,7 +58,29 @@ const baseAnswers = (): Record<string, (req: Request) => Answer> => ({
     body: { ok: true, draftId: "d-1", savedAt: "2026-11-18T10:41:00.000Z" },
   }),
   "DELETE /compose/drafts/acc-1/d-1": () => ({ body: { ok: true } }),
+  "GET /accounts/acc-1/send-as": () => ({ body: { aliases: [] } }),
+  "GET /accounts/acc-1/contacts": () => ({ body: { items: [] } }),
+  "GET /messages/acc-1/msg-1/quote": () => ({ body: QUOTE }),
+  "POST /messages/acc-1/msg-1/forward": () => ({
+    body: { ok: true, sentMessageId: "s-3", threadId: "th-1" },
+  }),
 });
+
+const QUOTE = {
+  reply: {
+    attribution: "On Thu 30 Oct 2025 at 18:02, Claire Martin <claire@example.com> wrote:",
+    text: "On Thu 30 Oct 2025 at 18:02, Claire Martin <claire@example.com> wrote:\n> Are you free on Thursday?",
+    html: "<blockquote>Are you free on Thursday?</blockquote>",
+  },
+  forward: {
+    attribution: "---------- Forwarded message ---------",
+    text: "---------- Forwarded message ---------\nFrom: Claire Martin <claire@example.com>\nDate: Thu 30 Oct 2025 at 18:02\nSubject: Lunch?\nTo: you@example.com\n\nAre you free on Thursday?",
+    html: "",
+  },
+  attachments: [
+    { attachmentId: "att-1", filename: "menu.pdf", mimeType: "application/pdf", size: 41_000 },
+  ],
+};
 
 const originalFetch = globalThis.fetch;
 
@@ -225,11 +248,15 @@ describe("a new message", () => {
         "Shall we have dinner at 9?",
       ),
     );
-    expect(requests.find((r) => r.path === "/compose/generate")!.body).toEqual({
+    const { requestId, ...generated } = requests.find((r) => r.path === "/compose/generate")!
+      .body as Record<string, unknown>;
+    expect(generated).toEqual({
       accountId: "acc-1",
       prompt: "invite her to dinner",
       to: ["claire@example.com"],
     });
+    // Chosen by the window, so its Stop can name this generation.
+    expect(typeof requestId).toBe("string");
     expect((screen.getByLabelText("Subject") as HTMLInputElement).value).toBe("Dinner");
     expect(screen.getByText(/Drafted from “invite her to dinner”/)).toBeDefined();
 
@@ -303,24 +330,31 @@ describe("answering a message", () => {
     });
   });
 
-  test("Forward empties To, says Fwd: and carries the original as text", async () => {
+  test("Forward empties To, says Fwd: and sends only what was typed through forward", async () => {
     await renderCompose();
     launch("launch forward");
 
     const w = within(win("Forward: Fwd: Lunch?"));
-    expect(w.queryByRole("button", { name: /^Remove/ })).toBeNull();
-    const body = (w.getByLabelText("Message body") as HTMLTextAreaElement).value;
-    expect(body).toContain("---------- Forwarded message ---------");
-    expect(body).toContain("From: Claire Martin <claire@example.com>");
-    expect(body).toContain("Subject: Lunch?");
-    expect(body).toContain("Are you free on Thursday?");
-
+    expect(w.queryByRole("button", { name: /^Remove [a-z]+@/ })).toBeNull();
+    // The original is the server's to carry: shown under the body, never typed into it.
+    expect((w.getByLabelText("Message body") as HTMLTextAreaElement).value).toBe("");
+    const block = await waitFor(() => w.getByRole("region", { name: "Forwarded message" }));
+    expect(block.textContent).toContain("From: Claire Martin <claire@example.com>");
+    expect(block.textContent).toContain("Are you free on Thursday?");
+    // A forward with nothing typed is still a forward.
     addRecipient("To", "nathalie@example.com");
     fireEvent.click(w.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sends()).toHaveLength(1));
-    // A forward is a new message that quotes one: no thread, no send-reply.
-    expect(sends()[0]!.path).toBe("/compose/send");
-    expect(sends()[0]!.body!.subject).toBe("Fwd: Lunch?");
+    expect(sends()[0]).toEqual({
+      method: "POST",
+      path: "/messages/acc-1/msg-1/forward",
+      body: {
+        to: ["nathalie@example.com"],
+        subject: "Fwd: Lunch?",
+        body: "",
+        keepAttachmentIds: ["att-1"],
+      },
+    });
   });
 
   test("Send & archive sends the reply, then archives the message answered", async () => {

@@ -1,5 +1,5 @@
 import type { MessageDetail } from "../../api/types";
-import { forwardBody, forwardSubject, knownNames, replySubject } from "../reply/replyDefaults";
+import { forwardSubject, knownNames, replySubject } from "../reply/replyDefaults";
 
 /**
  * One compose window's worth of state, as the provider holds it (the redesign's
@@ -25,6 +25,47 @@ export interface ComposeFields {
   body: string;
   /** The instruction for the AI, as typed in the strip. */
   prompt: string;
+  /**
+   * The mailbox it goes from: the session's own account unless the From menu
+   * picked another connected one (a new mail, or a reply sent from elsewhere).
+   */
+  fromAccountId: string;
+  /** A verified send-as alias of that mailbox; null sends as the mailbox itself. */
+  fromAlias: string | null;
+  /** Files the user attached, in the order their chips are drawn. */
+  uploads: UploadChip[];
+  /** A forward's original files whose chips were removed: not carried. */
+  droppedAttachmentIds: string[];
+  /**
+   * A reply's quote as the user trimmed it, or null while untouched — the
+   * server then quotes the stored original as it is.
+   */
+  quotedText: string | null;
+  /** The Gmail draft the window autosaves into, once one exists. */
+  draftId: string | null;
+  /** Names picked suggestions carried, so their chips say who rather than an address. */
+  contactNames: Record<string, string>;
+}
+
+/**
+ * One attached file. The bytes stay in the window (they are what a retry or a
+ * change of mailbox uploads again); this is what the chip shows and what a
+ * send names.
+ */
+export interface UploadChip {
+  key: string;
+  filename: string;
+  size: number;
+  mimeType: string;
+  status: "uploading" | "ready" | "failed";
+  /** 0–1 while uploading. */
+  progress: number;
+  /** The staged upload's id, once the server has it. */
+  uploadId: string | null;
+  /** Which mailbox it was staged for: an upload belongs to one account. */
+  uploadedFor: string | null;
+  /** Why the server refused it ("48.0 MB — over Gmail's 25 MB."). */
+  error: string | null;
 }
 
 export interface ComposeSession {
@@ -50,7 +91,7 @@ export interface ComposeAccount {
   displayName: string | null;
 }
 
-const EMPTY_FIELDS: ComposeFields = {
+const emptyFields = (accountId: string): ComposeFields => ({
   to: [],
   cc: [],
   bcc: [],
@@ -59,7 +100,14 @@ const EMPTY_FIELDS: ComposeFields = {
   subject: "",
   body: "",
   prompt: "",
-};
+  fromAccountId: accountId,
+  fromAlias: null,
+  uploads: [],
+  droppedAttachmentIds: [],
+  quotedText: null,
+  draftId: null,
+  contactNames: {},
+});
 
 let counter = 0;
 const nextId = () => `compose-${Date.now().toString(36)}-${(counter += 1)}`;
@@ -72,23 +120,24 @@ export const newSession = (account: ComposeAccount): ComposeSession => ({
   accountName: account.displayName,
   message: null,
   names: {},
-  fields: { ...EMPTY_FIELDS },
+  fields: emptyFields(account.id),
   intent: "open",
   focusInstruction: false,
 });
 
-/** The prefilled fields of each way to answer `message`. Never the body of a reply. */
+/**
+ * The prefilled fields of each way to answer `message`. Never a body: the
+ * quote under a reply and the block under a forward are the server's, drawn
+ * below the body rather than typed into it.
+ */
 export const replyFields = (message: MessageDetail, mode: ReplyMode): ComposeFields => {
+  const empty = emptyFields(message.accountId);
   if (mode === "forward") {
-    return {
-      ...EMPTY_FIELDS,
-      subject: forwardSubject(message.subject),
-      body: forwardBody(message),
-    };
+    return { ...empty, subject: forwardSubject(message.subject) };
   }
   const cc = mode === "replyAll" ? [...message.replyAllCc] : [];
   return {
-    ...EMPTY_FIELDS,
+    ...empty,
     to: message.fromEmail ? [message.fromEmail] : [],
     cc,
     showCc: cc.length > 0,
@@ -137,7 +186,8 @@ export const isBlank = (fields: ComposeFields): boolean =>
   fields.bcc.length === 0 &&
   fields.subject.trim().length === 0 &&
   fields.body.trim().length === 0 &&
-  fields.prompt.trim().length === 0;
+  fields.prompt.trim().length === 0 &&
+  fields.uploads.length === 0;
 
 /** The title bar's line: the subject as typed, else what the window is. */
 export const sessionTitle = (session: ComposeSession): string => {

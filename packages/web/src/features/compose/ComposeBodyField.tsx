@@ -8,12 +8,15 @@ interface Props {
   drafting: boolean;
   /** Take the caret when the window opens. */
   focusOnMount?: boolean;
+  /** A forward's body is a note above what it carries, not the message itself. */
+  placeholder?: string;
 }
 
 /**
  * The message itself: plain text at 14/22 with no toolbar — what is sent is
- * what is shown, and the send path carries a single `text/plain` part, so a
- * formatting control would promise what the transport does not carry.
+ * what is shown. The server adds an HTML part only to carry a quote or a
+ * forwarded original under it, so a formatting control would still promise
+ * what the user's own text does not carry.
  */
 export const ComposeBodyField = ({
   body,
@@ -21,6 +24,7 @@ export const ComposeBodyField = ({
   disabled,
   drafting,
   focusOnMount,
+  placeholder = "Write your message…",
 }: Props) =>
   drafting ? (
     <DraftSkeleton />
@@ -35,7 +39,7 @@ export const ComposeBodyField = ({
         // answer is written, as the user's own Reply asked.
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- see above
         autoFocus={focusOnMount}
-        placeholder="Write your message…"
+        placeholder={placeholder}
         className="min-h-[140px] flex-1 resize-none bg-transparent px-5 pt-4 pb-2 text-sm leading-[22px] text-gousse-ink outline-none placeholder:text-gousse-subtle disabled:text-gousse-muted"
       />
       {body.length === 0 && !disabled ? (

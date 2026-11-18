@@ -1,13 +1,13 @@
 import { AlertCircle } from "lucide-react";
 import { ApiError } from "../../api/client";
-import { apiErrorMessage } from "../../api/apiErrorMessage";
+import { composeErrorMessage } from "../../api/apiErrorMessage";
 
 /**
  * A refused send, above the footer: Gmail's own reason when it gave one, and
  * the two facts the user needs — nothing went, and nothing typed was lost.
  */
 export const SendErrorBanner = ({ error }: { error: unknown }) => {
-  const reason = apiErrorMessage(error).replace(/\.$/, "");
+  const reason = composeErrorMessage(error).replace(/\.$/, "");
   const gmail = error instanceof ApiError && error.message === "gmail_error";
   return (
     <p

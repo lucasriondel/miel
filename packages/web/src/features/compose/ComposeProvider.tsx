@@ -9,7 +9,8 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { useAccounts } from "../../api/queries";
-import type { MessageDetail } from "../../api/types";
+import type { Account, MessageDetail } from "../../api/types";
+import { accountDisplayName } from "../../components/sidebar/accountDisplayName";
 import { ComposeDock } from "./ComposeDock";
 import {
   isBlank,
@@ -38,11 +39,18 @@ export interface ComposeApi {
 }
 
 /** What a docked window may do to its own session. Internal to the compose feature. */
+export type FieldsPatch =
+  | Partial<ComposeFields>
+  | ((fields: ComposeFields) => Partial<ComposeFields>);
+
 export interface ComposeSessionActions {
-  update: (id: string, patch: Partial<ComposeFields>) => void;
+  /** A patch, or a function of the latest fields for writes that race (upload progress). */
+  update: (id: string, patch: FieldsPatch) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
   remove: (id: string) => void;
+  /** Put a closed window back as it was — the Undo of a scheduled send. */
+  reopen: (session: ComposeSession) => void;
 }
 
 const noop: ComposeApi = { openNew: () => {}, openReply: () => {} };
@@ -63,14 +71,11 @@ const focusOnly = (sessions: ComposeSession[], id: string): ComposeSession[] =>
         : s,
   );
 
-const toAccount = (a: {
-  id: string;
-  email: string;
-  displayName: string | null;
-}): ComposeAccount => ({
+/** The name the From row shows is the mailbox's name in miel — its nickname first. */
+const toAccount = (a: Account): ComposeAccount => ({
   id: a.id,
   email: a.email,
-  displayName: a.displayName,
+  displayName: accountDisplayName(a),
 });
 
 interface Props {
@@ -151,7 +156,17 @@ export const ComposeProvider = ({ children, draftSaveDelayMs = 1500 }: Props) =>
     () => ({
       update: (id, patch) =>
         setSessions((current) =>
-          current.map((s) => (s.id === id ? { ...s, fields: { ...s.fields, ...patch } } : s)),
+          current.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  fields: {
+                    ...s.fields,
+                    ...(typeof patch === "function" ? patch(s.fields) : patch),
+                  },
+                }
+              : s,
+          ),
         ),
       minimize: (id) =>
         setSessions((current) =>
@@ -161,6 +176,18 @@ export const ComposeProvider = ({ children, draftSaveDelayMs = 1500 }: Props) =>
         ),
       restore: (id) => setSessions((current) => focusOnly(current, id)),
       remove: (id) => setSessions((current) => current.filter((s) => s.id !== id)),
+      reopen: (session) => {
+        const current = sessionsRef.current;
+        if (!current.some((s) => s.id === session.id) && current.length >= MAX_WINDOWS) {
+          toast.error(FULL);
+          return;
+        }
+        setSessions((latest) =>
+          latest.some((s) => s.id === session.id)
+            ? focusOnly(latest, session.id)
+            : focusOnly([...latest, { ...session, intent: "open" }], session.id),
+        );
+      },
     }),
     [],
   );

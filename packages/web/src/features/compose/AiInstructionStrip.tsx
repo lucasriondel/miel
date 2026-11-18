@@ -15,6 +15,8 @@ interface Props {
   error: unknown;
   /** Draft (or redraft) from an instruction. */
   onRun: (instruction: string, force?: boolean) => void;
+  /** A refinement chip: the model edits the current draft; `shown` is the instruction chain. */
+  onRefine: (refinement: string, shown: string) => void;
   onStop: () => void;
   onKeepMine: () => void;
   /** Sending or sent: the strip stays but cannot start anything. */
@@ -42,6 +44,7 @@ export const AiInstructionStrip = ({
   draftedFrom,
   error,
   onRun,
+  onRefine,
   onStop,
   onKeepMine,
   locked,
@@ -145,8 +148,8 @@ export const AiInstructionStrip = ({
             disabled={locked}
             onRefine={(refinement) => {
               const next = `${(prompt || draftedFrom).replace(/[.\s]+$/, "")}. ${refinement}`;
-              onPromptChange(next);
-              run(next);
+              setEditing(false);
+              onRefine(refinement, next);
             }}
             onAddDetail={() => {
               onPromptChange(`${(prompt || draftedFrom).replace(/[.\s]+$/, "")}. `);
