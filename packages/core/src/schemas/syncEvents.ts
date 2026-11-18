@@ -6,6 +6,11 @@ const SyncRunResult = z.object({
   fetched: z.number().int(),
   triaged: z.number().int(),
   filtersSynced: z.number().int(),
+  // Additive, and defaulted rather than required on the parse: a client of this
+  // release reading a `sync.finished` from an API one release older (which does
+  // not send it) reads 0 instead of dropping the event — so this needs none of
+  // the alias dance a rename does.
+  promosFound: z.number().int().nonnegative().default(0),
   errors: z.array(z.string()),
 });
 export type SyncRunResultT = z.infer<typeof SyncRunResult>;

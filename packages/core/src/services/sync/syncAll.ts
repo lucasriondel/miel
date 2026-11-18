@@ -7,7 +7,7 @@ import { fetchAndTriageEffect } from "./fetchAndTriage";
 import { GmailService } from "./services";
 import type { Claude } from "../../claude/Claude";
 import { isProviderUnavailable } from "../../errors";
-import type { LabelStore, PromoStore, SettingsStore } from "../../stores/contracts";
+import type { ContactStore, LabelStore, PromoStore, SettingsStore } from "../../stores/contracts";
 import { createDebug } from "../../util/debug";
 
 const debug = createDebug("service:sync:syncAll");
@@ -24,6 +24,7 @@ const failedRun = (account: string, error: string): SyncRunResult => ({
   fetched: 0,
   triaged: 0,
   filtersSynced: 0,
+  promosFound: 0,
   errors: [error],
 });
 
@@ -32,7 +33,7 @@ export const syncAllEffect = (
 ): Effect.Effect<
   SyncRunResult[],
   never,
-  GmailService | Claude | SettingsStore | LabelStore | PromoStore
+  GmailService | Claude | SettingsStore | LabelStore | PromoStore | ContactStore
 > =>
   Effect.gen(function* () {
     debug.info("syncAll start", {
