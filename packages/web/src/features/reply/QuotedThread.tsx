@@ -46,7 +46,7 @@ export const QuotedThread = ({ quote, quotedText, onTrim, disabled }: Props) => 
           onChange={(e) => onTrim(e.target.value)}
           disabled={disabled}
           rows={Math.min(Math.max(text.split("\n").length, 2), 10)}
-          className="mt-1 w-full resize-y bg-transparent text-[13px] leading-5 text-gousse-muted outline-none"
+          className="mt-1 w-full resize-none bg-transparent text-[13px] leading-5 text-gousse-muted outline-none"
         />
       </div>
       <button
