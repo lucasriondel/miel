@@ -21,7 +21,8 @@ interface Props extends SidebarMailboxNavProps {
 
 /**
  * miel's sidebar, as the redesign draws it: the mailbox switcher, Compose, the
- * views (Inbox, Done, Promo codes), the account's labels, then Settings and the
+ * views (Inbox, Snoozed, Done, Promo codes — and Scheduled while there is mail
+ * waiting to go), the account's labels, then Settings and the
  * sync status at the foot — on the cool `--gousse-fill` ground, with a hairline
  * against the content.
  *

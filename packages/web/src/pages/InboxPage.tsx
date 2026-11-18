@@ -1,7 +1,14 @@
 import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { ChevronLeft, CircleCheck, Inbox as InboxIcon, Search as SearchIcon } from "lucide-react";
+import {
+  ChevronLeft,
+  CircleCheck,
+  Clock,
+  Inbox as InboxIcon,
+  Search as SearchIcon,
+} from "lucide-react";
 import { useAllMessages } from "../api/queries";
+import { snoozedListParams } from "../features/snooze/snoozedListParams";
 import { PrioritySection } from "../components/PrioritySection";
 import { UntriagedSection } from "../components/UntriagedSection";
 import { Empty } from "@/components/ui/empty";
@@ -68,13 +75,20 @@ export const InboxPage = () => {
     items: data,
     isLoading,
     error,
-  } = useAllMessages({
-    accountId: selectedAccountId,
-    labelId: selectedLabelId,
-    internalDateFrom: rangeStartIso,
-    internalDateTo: rangeEndIso,
-    archivedOnly: mailbox === "done" ? true : undefined,
-  });
+  } = useAllMessages(
+    // Snoozed is every snoozed thread of the account, whatever the period: the
+    // date that matters is when it comes back. Spelled exactly as the sidebar's
+    // count asks for it, so the two share one cache entry.
+    mailbox === "snoozed"
+      ? snoozedListParams(selectedAccountId)
+      : {
+          accountId: selectedAccountId,
+          labelId: selectedLabelId,
+          internalDateFrom: rangeStartIso,
+          internalDateTo: rangeEndIso,
+          archivedOnly: mailbox === "done" ? true : undefined,
+        },
+  );
 
   /**
    * A whole category in one gesture (#146). Entering select mode is part of the
@@ -110,9 +124,10 @@ export const InboxPage = () => {
 
   const header = (
     <PageHeader
-      title={mailbox === "done" ? "Done" : periodTitle(range)}
+      title={mailbox === "done" ? "Done" : mailbox === "snoozed" ? "Snoozed" : periodTitle(range)}
       leading={
-        <span className="hidden @5xl:inline-flex">
+        // No period to step through in Snoozed: it lists every snoozed thread.
+        <span className={cn("hidden", mailbox !== "snoozed" && "@5xl:inline-flex")}>
           <DateRangeNavInline
             range={range}
             isCurrentPeriod={isCurrentPeriod}
@@ -126,7 +141,7 @@ export const InboxPage = () => {
       center={<SearchField value={query} onChange={setQuery} />}
       trailing={
         <>
-          <span className="hidden @3xl:inline-flex">
+          <span className={cn("hidden", mailbox !== "snoozed" && "@3xl:inline-flex")}>
             <SegmentedToggle
               options={VIEW_OPTIONS}
               value={range.mode}
@@ -405,6 +420,16 @@ const InboxEmpty = ({
             ) : null}
           </>
         }
+      />
+    );
+  }
+
+  if (mailbox === "snoozed") {
+    return (
+      <InboxEmptyState
+        icon={<Clock aria-hidden />}
+        title="Nothing snoozed"
+        description="Snooze a message to have it come back to the inbox when you need it."
       />
     );
   }

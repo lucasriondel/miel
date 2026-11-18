@@ -22,6 +22,7 @@ import { useReaderPager } from "../features/message-detail/useReaderPager";
 import { useMarkReadOnOpen } from "../features/message-detail/useMarkReadOnOpen";
 import { ReplySplitButton } from "../features/reply/ReplySplitButton";
 import { DraftReplyCard } from "../features/reply/DraftReplyCard";
+import { SnoozedNotice } from "../features/snooze/SnoozedNotice";
 import { detectConfirmationCodes } from "../utils/detectConfirmation";
 
 /**
@@ -104,6 +105,7 @@ export const MessageDetailPage = () => {
             isArchived={message.isArchived}
             isTrashed={message.isTrashed}
             priority={latestPriority}
+            snoozedUntil={message.snoozedUntil}
             variant="detail"
           />
         ) : null}
@@ -122,6 +124,11 @@ export const MessageDetailPage = () => {
           ) : message ? (
             <>
               <MessageDetailHeader message={message} banner={<TriagePanel message={message} />} />
+              <SnoozedNotice
+                accountId={message.accountId}
+                gmailMessageId={message.gmailMessageId}
+                snoozedUntil={message.snoozedUntil}
+              />
               {confirmationDetection.found && (
                 <ConfirmationCodePanel
                   detection={confirmationDetection}

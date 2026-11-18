@@ -3,6 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { ListedMessage } from "../api/types";
 import { messageDetailPath } from "../features/inbox/inboxLocation";
 import { rowDate } from "./rowDate";
+import { presetTimeLabel } from "../features/time/timePresets";
 import { cn } from "@/lib/utils";
 import { MessageRowSecondLine } from "./MessageRowSecondLine";
 import { MessageRowEndCell } from "./MessageRowEndCell";
@@ -40,7 +41,11 @@ interface Props {
  */
 export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Props) => {
   const date = new Date(message.internalDate);
-  const dateText = rowDate(date);
+  // A snoozed row (the Snoozed view) says when it comes back rather than when
+  // it arrived: that is the one date that list is about.
+  const dateText = message.snoozedUntil
+    ? `Until ${presetTimeLabel(new Date(message.snoozedUntil), new Date())}`
+    : rowDate(date);
   const sender = message.fromName?.trim() || message.fromEmail;
   const subject = message.subject?.trim() || "(no subject)";
   const isUnread = message.labels.some((l) => l.name === "UNREAD");
@@ -168,6 +173,7 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
           isArchived={message.isArchived}
           isTrashed={message.isTrashed}
           priority={message.priority}
+          snoozedUntil={message.snoozedUntil}
           date={dateText}
           showActions={showActions}
         />
@@ -190,6 +196,7 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
           isArchived={message.isArchived}
           isTrashed={message.isTrashed}
           priority={message.priority}
+          snoozedUntil={message.snoozedUntil}
           isMobile
           revealed={revealed}
           onClose={close}

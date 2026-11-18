@@ -19,6 +19,8 @@ import { PriorityPicker } from "./PriorityPicker";
 import { RowAddLabelButton } from "../features/labels/RowAddLabelButton";
 import { buildGmailMessageUrl } from "../features/message-detail/gmailUrl";
 import { useReturnToInbox } from "../features/inbox/useReturnToInbox";
+import { SnoozeButton } from "../features/snooze/SnoozeButton";
+import { useSnoozeMessage, useUnsnoozeMessage } from "../api/snooze.mutations";
 
 export type MessageActionsVariant = "row" | "detail";
 
@@ -30,6 +32,8 @@ interface Props {
   isArchived: boolean;
   isTrashed: boolean;
   priority: Priority | null;
+  /** When a snoozed message comes back; null (or omitted) when it is not snoozed. */
+  snoozedUntil?: string | null;
   variant: MessageActionsVariant;
   /**
    * Row variant only: the labels the message already carries, so the picker the
@@ -63,6 +67,7 @@ export const MessageActions = ({
   isArchived,
   isTrashed,
   priority,
+  snoozedUntil = null,
   variant,
   appliedLabelIds,
   forceVisible,
@@ -72,9 +77,16 @@ export const MessageActions = ({
   const archive = useArchiveMessage();
   const trash = useTrashMessage();
   const setPriority = useSetMessagePriority();
+  const snooze = useSnoozeMessage();
+  const unsnooze = useUnsnoozeMessage();
 
   const input = { accountId, gmailMessageId };
-  const busy = setRead.isPending || archive.isPending || trash.isPending;
+  const busy =
+    setRead.isPending ||
+    archive.isPending ||
+    trash.isPending ||
+    snooze.isPending ||
+    unsnooze.isPending;
   // Detail only: the message the page is showing has just left the mailbox, so
   // staying on it would show a stale page. Returning is what keeps the inbox's
   // account, filters and scroll offset — the push to the root this replaces
@@ -100,6 +112,21 @@ export const MessageActions = ({
     if (isArchived) return;
     archive.mutate(input);
     leaveDetail?.();
+  };
+
+  // A snooze leaves the inbox like an archive does, so from the reader it
+  // leaves the page the same way: on the click, beside `mutate`. Re-snoozing a
+  // message already snoozed moves its wake time and leaves too — the reader was
+  // opened from the Snoozed list, and the list is where it goes on living.
+  const onSnooze = (at: Date) => {
+    snooze.mutate({ ...input, until: at.toISOString() });
+    leaveDetail?.();
+  };
+
+  // Waking it now keeps the reader where it is: the message is still there to
+  // read, it has only moved back to the inbox.
+  const onUnsnooze = () => {
+    unsnooze.mutate(input);
   };
 
   const onTrashClick = () => {
@@ -128,10 +155,25 @@ export const MessageActions = ({
           // the leftmost icons on a transparent fade with text showing through.
           "pointer-events-none absolute inset-y-0 right-0 hidden items-center gap-1 bg-[linear-gradient(to_left,rgb(var(--gousse-bg))_0,rgb(var(--gousse-bg))_calc(100%-2.5rem),rgb(var(--gousse-bg)/0)_100%)] pl-12 pr-4 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 sm:flex";
 
+  // The design's clock: the row draws it right after the priority picker; the
+  // reader beside its done check, which here is the last place before the trio
+  // — to the left of the three whose columns line up from the right edge.
+  const snoozeButton = (
+    <SnoozeButton
+      snoozedUntil={snoozedUntil}
+      size={buttonSize(variant)}
+      disabled={busy}
+      loading={snooze.isPending || unsnooze.isPending}
+      onSnooze={onSnooze}
+      onUnsnooze={onUnsnooze}
+    />
+  );
+
   return (
     <div className={containerClass}>
       <PriorityPicker priority={priority} onSelect={handlePrioritySelect} />
       {variant === "row" ? <span aria-hidden className="mx-0.5 h-4 w-px bg-gousse-line" /> : null}
+      {variant === "row" ? snoozeButton : null}
       {/* Row only (#170). Filing a mail you can identify from its row is the
           common case, and it used to cost opening the message or entering select
           mode. The detail bar has no need of it: its own trigger sits in the
@@ -147,6 +189,7 @@ export const MessageActions = ({
         />
       ) : null}
       <ActionLink href={gmailUrl} Icon={ExternalLink} label="View in Gmail" variant={variant} />
+      {variant === "row" ? null : snoozeButton}
       {/* Read / archive / delete are the three every set of message actions has
           — a row's, the detail bar's and a section header's — so they are last,
           in that order, and everything a set has on top of them sits to their

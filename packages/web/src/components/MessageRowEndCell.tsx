@@ -10,6 +10,8 @@ interface Props {
   isArchived: boolean;
   isTrashed: boolean;
   priority: Priority | null;
+  /** Passed through to the snooze menu, which re-times a snoozed message. */
+  snoozedUntil?: string | null;
   appliedLabelIds: readonly string[];
   /** The row's date, already formatted (`rowDate`). */
   date: string;

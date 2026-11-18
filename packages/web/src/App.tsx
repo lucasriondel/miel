@@ -5,6 +5,8 @@ import type { SidebarPlace } from "./components/sidebar/SidebarMailboxNav";
 import { useDateRange, type DateRange, type RangeMode } from "./features/sync/useDateRange";
 import { useFocusSync } from "./features/sync/useFocusSync";
 import { useAccounts, useAllMessages, useSuggestedPromos } from "./api/queries";
+import { useScheduledSends } from "./api/scheduledSends.hooks";
+import { snoozedListParams } from "./features/snooze/snoozedListParams";
 import { useConnectResult } from "./hooks/useConnectResult";
 import { OnboardingGate } from "./features/onboarding/OnboardingGate";
 import { TriageActivityProvider } from "./contexts/TriageActivityContext";
@@ -35,7 +37,7 @@ export interface LayoutContext {
   goToday: () => void;
   setViewMode: (mode: RangeMode) => void;
   selectedAccountEmail: string | undefined;
-  /** Which list the inbox page shows: the inbox, or Done (Gmail's archive). */
+  /** Which list the inbox page shows: the inbox, Done (Gmail's archive) or Snoozed. */
   mailbox: Mailbox;
 }
 
@@ -135,6 +137,12 @@ const AppLayout = () => {
     m.labels.some((l) => l.name === "UNREAD"),
   ).length;
   const promoCount = useSuggestedPromos().data?.items.length;
+  // Snoozed counts every snoozed thread of the account, not the period's — the
+  // same read the Snoozed view makes, so opening it costs nothing more.
+  const snoozedCount = useAllMessages(snoozedListParams(selectedAccountId)).items.length;
+  // Mail waiting to go, or that failed to: the Scheduled row exists only while
+  // there is some, so this count is also whether it is drawn.
+  const scheduledCount = useScheduledSends(selectedAccountId).data?.items.length ?? 0;
 
   // `C` opens a new message from the mailbox on screen — unless the keystroke
   // is someone typing.
@@ -226,11 +234,15 @@ const AppLayout = () => {
         ? "logs"
         : pathname.endsWith("/filters")
           ? "filters"
-          : mailbox === "done"
-            ? "done"
-            : selectedLabelId
-              ? null
-              : "inbox";
+          : pathname.endsWith("/scheduled")
+            ? "scheduled"
+            : mailbox === "done"
+              ? "done"
+              : mailbox === "snoozed"
+                ? "snoozed"
+                : selectedLabelId
+                  ? null
+                  : "inbox";
 
   return (
     <TriageActivityProvider>
@@ -256,8 +268,22 @@ const AppLayout = () => {
                 ? `${accountScope}${scopedSearch(search, { label: null, mailbox: "done" })}`
                 : undefined
             }
+            snoozedHref={
+              accountScope
+                ? `${accountScope}${scopedSearch(search, { label: null, mailbox: "snoozed" })}`
+                : undefined
+            }
+            scheduledHref={
+              // Kept while the page is open, so cancelling the last one does
+              // not pull the row out from under the page showing it.
+              accountScope && (scheduledCount > 0 || current === "scheduled")
+                ? `${accountScope}/scheduled`
+                : undefined
+            }
             current={current}
             inboxCount={inboxCount}
+            snoozedCount={snoozedCount}
+            scheduledCount={scheduledCount}
             promoCount={promoCount}
           />
           {/* Each page draws its own header above its own scroll body; the
@@ -284,7 +310,7 @@ const scopedSearch = (
   const params = new URLSearchParams(inboxSearch(search));
   if (patch.label) params.set("label", patch.label);
   else params.delete("label");
-  if (patch.mailbox === "done") params.set("mailbox", "done");
+  if (patch.mailbox && patch.mailbox !== "inbox") params.set("mailbox", patch.mailbox);
   else params.delete("mailbox");
   const query = params.toString();
   return query ? `?${query}` : "";
