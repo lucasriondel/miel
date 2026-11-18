@@ -685,11 +685,21 @@ reason — an adapter that joined *any* account would otherwise pass. On
 `PromoSuggestionFilter` every field is optional and which are named is what tells
 the two callers apart: an account and a window is the inbox, neither is the page.
 
-What the payload deliberately omits is the copy of the mail. The save
+What the payload deliberately omits is the mail's *bodies*. The save
 denormalised subject, sender, date and both bodies onto the row so a saved
-promo outlives the Gmail original it trashed; a *list* carrying them would send
-every saved mail's HTML to draw a table of five short fields. Reading the
+promo outlives the Gmail original it trashed; a *list* carrying the bodies would
+send every saved mail's HTML to draw a table of short fields. Reading the
 original is one promo at a time and gets its own read when it lands.
+
+The short fields are on the row, though: every `PromoListing` carries `savedAt`
+(null on a suggestion) and the mail's `subject`, `fromName`, `fromEmail` and
+`internalDate`, and every `PromoSuggestion` the last four — what a "To review"
+card and the reader's "Saved Oct 27" draw. Where they come from is the rule: a
+saved row answers them from **its copy**, a suggestion from **its inbox row**,
+which `PromoStore.unsaved()` already joins and now hands back as
+`SuggestedPromoCode.mail` (metadata only). A suggestion's own copy columns stay
+null — the copy is the save's to write, and nothing reads a suggestion's mail
+off them.
 
 `GET /promo-codes/saved` takes no parameters at all, and `["saved-promos"]` is
 its own query key — the page lists exactly what the suggestions no longer do,
@@ -1062,8 +1072,9 @@ header, the body field, the footer, plus the two pure modules `recipients.ts`
 and `composeWindowState.ts` — and none of it knows a message is being answered.
 `features/reply/*` is the reply: the prefilled recipients and subject
 (`replyDefaults.ts`), the AI instruction section carried over from #91, and the
-two mutations. A future blank Compose mounts the same shell with an empty form;
-that is why the seam exists, and it is deliberately not wired to a button here.
+two mutations. A blank Compose mounts the same shell with an empty form; that
+is why the seam exists. Its backend is in place (see *Composing a new message*);
+the button is the redesign's to wire.
 
 Which of the three states the window is in is derived, not stored:
 `composeWindowMode(intent, draft)` folds the user's intent together with "is
@@ -1079,6 +1090,56 @@ takes optional `to`/`cc`, `services/replyRecipients.ts` decides between what was
 typed and the old default (the sender of the message being answered), and
 `rfc822.ts` writes a `Cc` header when there is one. Optional throughout, because
 the CLI names neither and must keep addressing replies the way it always did.
+
+Reply-all and Bcc ride the same rule. The detail payload carries `ccEmails`,
+parsed off the stored `rawHeaders` (there is no Cc column, so no migration), and
+`replyAllCc`, the default Cc reply-all would use — the original's To and Cc minus
+this account and minus the sender being answered — so every client prefills the
+same chips; empty means reply-all reaches nobody a reply does not. The send takes
+`replyAll: true` for a client that names no Cc (the CLI), and a named Cc still
+wins. `bcc` is a header in the raw message and nothing more: Gmail delivers to it
+and strips it. All of it is `services/replyRecipients.ts`, pure.
+
+A send answers `threadId` beside `sentMessageId`, for a "View in Gmail" link. A
+send Gmail refuses is a `GmailSendError` whose `detail` is Gmail's own reason,
+read off the response by `gmailRefusalDetail` and scrubbed of anything
+token-shaped there; the API answers it as `gmail_error` (502) with the detail as
+the message, the arrangement `HostedApiError` already has — a tagged error's own
+`message` is empty, which is why the composer used to show nothing.
+
+## Composing a new message
+
+`POST /compose/send` sends a message that answers nothing, and
+`POST /compose/generate` has the model draft one. Their own prefix because there
+is no message in the path: the account travels in the body.
+`sendNewMessageEffect` in `services/reply.ts` sends through the adapter's
+`sendNew` — `GmailMessages.send` with no `threadId` and no threading headers, so
+Gmail starts a thread. With no stored message to default from, a To that cleans
+away to nothing is refused rather than sent to nobody.
+
+The AI draft is the **reply task**, not a fifth `ModelTask`: the design lists
+three tasks a user picks a model for, and writing mail is what this one does
+whether or not it answers something. `ReplyTaskInputT` is the union of the old
+input and `NewMailGenInput` (sender, To and subject hints, instruction — no
+`from`, no `body`), and `buildReplyPrompt` branches on whether a body is there.
+That absence is the disclosure rule: nothing a correspondent wrote is in the
+prompt, so `BODY_BEARING_TASKS` does not move, and `claude/tasks.test.ts`
+asserts the new-mail prompt is one builder for both transports and inlines no
+body.
+
+`services/reply.ts` moved onto the store seam with this (`MessageStore` for the
+account and the message answered), so it is in `stores/seam.test.ts`'s list and
+`services/reply.test.ts` runs it against the in-memory mailbox.
+
+**Drafts.** `PUT /compose/drafts` is the compose window's autosave into Gmail
+drafts, `DELETE /compose/drafts/:accountId/:draftId` the discard. No table: the
+draft lives in Gmail (`GmailDrafts`, `users.drafts.*`, covered by
+`gmail.modify`, so no re-consent) and its id in the window's state — no id
+creates, an id replaces, so saving on every pause never piles up copies. A reply
+draft names `replyToGmailMessageId` and is threaded as the send would be. Both
+sends take an optional `draftId` and delete that draft once the mail is out; a
+refusal there is logged and swallowed, because failing the request would report
+a sent mail as unsent.
 
 ## Acting on a message
 
@@ -1116,6 +1177,29 @@ too, so a hook that re-decided on each sighting of the label would both re-fire
 on a refetch and undo a "Mark as unread" the reader had just asked for. The
 consequence for the toggle's own suite is that it tests the trip back —
 opening an unread message leaves no "Mark as read" to click.
+
+## Undoing an archive or a trash, and the Done view
+
+"Done" is Gmail's archive — no flag of miel's, no migration. The Done view is
+`GET /messages?archivedOnly=true` (`MessageListFilter.archivedOnly`: archived
+only, trashed and removed still out unless asked for), parsed from the literal
+`"true"` rather than coerced, since `z.coerce.boolean()` reads `"false"` as
+true.
+
+The Undo behind the toasts is two routes, `POST /messages/:a/:m/unarchive` and
+`/untrash`, plus the same two as `BatchMessageActionRequest` actions for the
+section-level actions. Each is its action read backwards at the same two places
+— Gmail first, then the same thread-wide (single) or per-message (batch) local
+write with the flag cleared — so a refusal leaves nothing written. Untrash is a
+`threads.modify` that removes TRASH *and* adds INBOX, not the REST `untrash`,
+which lifts TRASH only and would leave the INBOX miel's trash took away gone; for
+the same reason it clears `isArchived` too. Unarchive is also how a message
+leaves Done. The web client's `BatchMessageAction` union does not name the two
+undos yet — that and the optimistic plans are the redesign's.
+
+`GET /auth/check` answers `{ ok: true }` behind the bearer middleware and does
+nothing else: a client connecting to a server tells a wrong secret (401) from a
+wrong URL (no answer) with it.
 
 ## Labelling the message you are reading
 
