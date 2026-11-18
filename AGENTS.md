@@ -191,8 +191,8 @@ read, so a row an old build wrote still resolves.
 
 The two transports stay distinct on purpose, and the one hosted-vs-CLI branch
 is `claude/Claude.ts`'s own `runTask`. The CLI transport is
-**`effect-ai-claude-code`** (`~/dev/perso/libs/effect-ai-claude-code`, the
-user's own) — an `effect/ai` `LanguageModel` over `claude -p`, so the call is
+**`effect-ai-claude-code`** (on npm; source in
+`~/dev/perso/libs/effect-ai-claude-code`, the user's own) — an `effect/ai` `LanguageModel` over `claude -p`, so the call is
 `LanguageModel.generateObject({ prompt, schema })` provided with
 `ClaudeCodeLanguageModel.layer` (model, `allowedTools`), `ClaudeCodeClient.layer`
 (the stored token as `auth: { oauthToken }`, `CLAUDE_BIN`, the timeout) and
@@ -208,21 +208,16 @@ packages in between — `ai-task-runner-effect` composing `claude-code-effect`,
 both Effect 3 — and the v4 migration folded the runner back into core rather
 than port a generic task system nothing else used.)
 
-**Until the lib is published**, core depends on it as
-`"effect-ai-claude-code": "file:../../../../libs/effect-ai-claude-code"` — a
-copy of the sibling checkout taken at install time, not a live link. Three
-consequences to know. `bun install` needs that checkout to exist, so the #74
-promise ("public registries only, no credentials") is suspended and CI's
-`bun install --frozen-lockfile` cannot pass until the package is on npm; an
-edit in the checkout reaches miel only after `bun install --force` (bun does
-not re-copy an unchanged specifier); and the checkout's `devDependencies` pin
-of `effect` must equal the version miel resolves — bun installs a `file:`
-package's dev pins beside it, and a differing pin lands a second `effect` in
-`node_modules/.bun` that the lib's source then imports, splitting every type
-and every runtime identity (`Layer.provide` of ours into an Effect of theirs
-silently fails). A `link:` is not an alternative: bun resolves a symlinked
-package's imports from its real path, so the checkout would run on its own
-`node_modules/effect` — the same split, at runtime only.
+Core depends on it from npm (`"effect-ai-claude-code": "^0.1.0"`), so
+`bun install` is back to public registries only (#74) and the Docker builds and
+CI's `--frozen-lockfile` install need nothing outside the repo. It used to be a
+`file:` copy of the sibling checkout, which no container build could see. One
+rule survives from then: the lib takes `effect` and `@effect/platform-*` as peer
+dependencies, and miel must resolve exactly one `effect` — a second copy in
+`node_modules/.bun` splits every type and every runtime identity (`Layer.provide`
+of ours into an Effect of theirs silently fails). A change to the lib reaches
+miel by publishing a new version and bumping the range here, never by pointing
+the dependency back at the checkout.
 Triage still has two prompts — the hosted one drops the "curl the body from
 the local API" paragraph, which it has no tool to act on and which would post
 `API_SECRET` to a third party. Neither prompt inlines a body; `claudeUsage.ts`
