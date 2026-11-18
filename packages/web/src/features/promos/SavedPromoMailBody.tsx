@@ -1,7 +1,6 @@
 import type { SavedPromoMail } from "../../api/types";
 import { cn } from "../../lib/utils";
 import { HtmlBodyFrame } from "../message-detail/HtmlBodyFrame";
-import { detailSurfaceClass } from "../message-detail/detailSurface";
 import { useRemoteImagesPreference } from "../preferences/remoteImages";
 
 interface Props {
@@ -23,6 +22,9 @@ interface Props {
  * gone from Gmail but its images are still hosted by the sender, and loading
  * one is still the read receipt it always was.
  */
+/** The bordered box the design draws the original mail in. */
+const SURFACE = "rounded-[10px] border border-gousse-line bg-gousse-panel";
+
 export const SavedPromoMailBody = ({ mail }: Props) => {
   const { preference } = useRemoteImagesPreference();
 
@@ -34,8 +36,8 @@ export const SavedPromoMailBody = ({ mail }: Props) => {
     return (
       <pre
         className={cn(
-          detailSurfaceClass("md"),
-          "max-h-[60vh] overflow-auto whitespace-pre-wrap p-5 text-sm font-medium text-gousse-ink",
+          SURFACE,
+          "max-h-[60vh] overflow-auto p-5 font-sans text-sm leading-[22px] whitespace-pre-wrap text-gousse-body",
         )}
       >
         {text}
@@ -44,12 +46,7 @@ export const SavedPromoMailBody = ({ mail }: Props) => {
   }
 
   return (
-    <div
-      className={cn(
-        detailSurfaceClass(),
-        "border-dashed px-5 py-8 text-center text-sm font-medium text-gousse-muted",
-      )}
-    >
+    <div className={cn(SURFACE, "border-dashed px-5 py-8 text-center text-sm text-gousse-muted")}>
       No body was kept for this email.
     </div>
   );
