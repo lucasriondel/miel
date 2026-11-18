@@ -32,11 +32,21 @@ import { closeDb, getDb } from "../db/client";
 import { accounts, appSettings, encryptedSecrets, messages } from "../db/schema";
 import {
   CONTRACT_KEY_PREFIX,
+  contactStoreContract,
+  mailboxSnoozeContract,
+  outboxStoreContract,
   promoStoreContract,
   secretStoreContract,
   settingsStoreContract,
 } from "../testkit/storeContract";
-import { PromoStoreLive, SecretStoreLive, SettingsStoreLive } from "./postgres";
+import {
+  ContactStoreLive,
+  MessageStoreLive,
+  OutboxStoreLive,
+  PromoStoreLive,
+  SecretStoreLive,
+  SettingsStoreLive,
+} from "./postgres";
 
 // One live layer for every test: the adapter holds no state of its own, and the
 // contract's keys are unique per test, so there is nothing to reset between them.
@@ -72,6 +82,45 @@ promoStoreContract("the Postgres promo store", async () => ({
     });
     return { accountId, gmailMessageId };
   },
+}));
+
+/** An account carrying the contract's prefix, so the sweep below takes it and its rows. */
+const contractAccount = async () => {
+  const { db } = getDb();
+  const [row] = await db
+    .insert(accounts)
+    .values({ email: `${CONTRACT_KEY_PREFIX}acct.${promoRow++}@example.com` })
+    .returning({ id: accounts.id, email: accounts.email });
+  return row;
+};
+
+// Snoozes cascade from the account like everything else here.
+mailboxSnoozeContract("the Postgres mailbox", async () => ({
+  layer: MessageStoreLive,
+  account: contractAccount,
+  message: async ({ accountId, internalDate, isArchived }) => {
+    const { db } = getDb();
+    const gmailMessageId = `${CONTRACT_KEY_PREFIX}m${promoRow++}`;
+    const gmailThreadId = `thread-${gmailMessageId}`;
+    await db.insert(messages).values({
+      accountId,
+      gmailMessageId,
+      gmailThreadId,
+      fromEmail: "sender@example.com",
+      internalDate,
+      isArchived: isArchived ?? false,
+    });
+    return { accountId, gmailMessageId, gmailThreadId };
+  },
+}));
+
+outboxStoreContract("the Postgres outbox", async () => ({
+  layer: OutboxStoreLive,
+  account: contractAccount,
+}));
+contactStoreContract("the Postgres contacts", async () => ({
+  layer: ContactStoreLive,
+  account: contractAccount,
 }));
 
 // The contract's rows are the only ones this file writes, and they all carry its

@@ -11,7 +11,15 @@ import {
   primaryKey,
   uniqueIndex,
   index,
+  customType,
 } from "drizzle-orm/pg-core";
+
+/** Raw bytes — a staged attachment's content (`compose_uploads.data`). */
+const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType: () => "bytea",
+  toDriver: (value) => Buffer.from(value),
+  fromDriver: (value) => new Uint8Array(value),
+});
 
 export const priorityEnum = pgEnum("priority", ["high", "medium", "low"]);
 export const syncWindowStatusEnum = pgEnum("sync_window_status", [
@@ -28,6 +36,9 @@ export const accounts = pgTable("accounts", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
   displayName: text("display_name"),
+  // The user's own name for the mailbox ("Lucas — Pro"), shown by the account
+  // switcher and the From menu. Null means "use the Google display name".
+  nickname: text("nickname"),
   avatarUrl: text("avatar_url"),
   // Google OAuth refresh token (AES-256-GCM ciphertext via util/crypto), plus
   // the scopes granted and when the grant was last established. Nullable: a row
@@ -309,3 +320,162 @@ export const appSettings = pgTable("app_settings", {
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * A snoozed conversation: miel's own, because Gmail's API exposes no snooze.
+ *
+ * Snoozing archives the thread in Gmail (INBOX off, exactly as archive does)
+ * and writes this row; the API process's due-work loop wakes it at `wake_at` by
+ * putting INBOX back and marking the snoozed message unread, then deletes the
+ * row. Keyed by thread because Gmail archives whole threads: one row per
+ * conversation, and snoozing it again moves the wake time rather than adding a
+ * second row. `gmail_message_id` is the message the user snoozed — the one the
+ * wake marks unread.
+ *
+ * Archived *and* snoozed is how the list tells the two apart: the Done view is
+ * archived mail with no row here, the Snoozed view is mail with one.
+ */
+export const snoozes = pgTable(
+  "snoozes",
+  {
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    gmailThreadId: text("gmail_thread_id").notNull(),
+    gmailMessageId: text("gmail_message_id").notNull(),
+    wakeAt: timestamp("wake_at", { withTimezone: true }).notNull(),
+    snoozedAt: timestamp("snoozed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.accountId, t.gmailThreadId] }),
+    byWakeAt: index("snoozes_wake_at").on(t.wakeAt),
+  }),
+);
+
+/**
+ * A file the compose window uploaded for a send that has not happened yet.
+ *
+ * Upload-then-reference rather than a multipart send: the window uploads each
+ * file as it is attached (which is what gives the design its per-file progress
+ * and its "Send waits for uploads"), keeps the id, and every send, draft save or
+ * scheduled send names the ids. The bytes live here rather than on disk so a
+ * scheduled send survives a restart, and a container's filesystem is not
+ * storage. Scoped to an account: a send from one mailbox cannot name another's
+ * upload. Rows are swept a day after their upload unless a scheduled send that
+ * has not gone out yet still names them.
+ */
+export const composeUploads = pgTable(
+  "compose_uploads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    mimeType: text("mime_type").notNull().default("application/octet-stream"),
+    size: integer("size").notNull(),
+    data: bytea("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byCreatedAt: index("compose_uploads_created_at").on(t.createdAt),
+  }),
+);
+
+/** What a scheduled send will send: the send request, as the client made it. */
+export interface ScheduledSendPayload {
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  body: string;
+  /** A send-as alias of the account; absent is the account's own address. */
+  from?: string;
+  /** `compose_uploads` ids, kept alive by this row until it is sent. */
+  uploadIds?: string[];
+  /** A forward's kept attachments, by the original's Gmail attachment id. */
+  forwardAttachmentIds?: string[];
+  includeQuote?: boolean;
+  quotedText?: string;
+  replyAll?: boolean;
+  draftId?: string;
+}
+
+export const scheduledSendStatusEnum = pgEnum("scheduled_send_status", [
+  "pending",
+  "sending",
+  "sent",
+  "failed",
+  "cancelled",
+]);
+
+/**
+ * Schedule send. Gmail's REST API has no scheduled send — its own
+ * scheduled mail is a web-client feature with no endpoint — so miel holds the
+ * message and the API process sends it when it is due.
+ *
+ * The row is a state machine: `pending` until it is due, `sending` once a tick
+ * has claimed it (`claimed_at`, `attempts`), then `sent`, `failed` or — from
+ * `pending` only — `cancelled`. The claim is a conditional update, so two ticks
+ * (or two API processes) cannot both send one row; a row left in `sending` by a
+ * process that died mid-send is reclaimed after a grace period, and before it is
+ * sent again Gmail is searched for `message_id_header` — the Message-ID miel
+ * wrote into the mail — so a send that did go out is recorded rather than
+ * repeated.
+ */
+export const scheduledSends = pgTable(
+  "scheduled_sends",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<"new" | "reply" | "forward">().notNull(),
+    // The message a reply or forward answers; Gmail's id, as everywhere else.
+    sourceGmailMessageId: text("source_gmail_message_id"),
+    payload: jsonb("payload").$type<ScheduledSendPayload>().notNull(),
+    messageIdHeader: text("message_id_header").notNull(),
+    sendAt: timestamp("send_at", { withTimezone: true }).notNull(),
+    status: scheduledSendStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    sentMessageId: text("sent_message_id"),
+    threadId: text("thread_id"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byStatusSendAt: index("scheduled_sends_status_send_at").on(t.status, t.sendAt),
+    byAccount: index("scheduled_sends_account").on(t.accountId, t.status),
+  }),
+);
+
+/**
+ * People an account has written to — what the compose window's address
+ * suggestions are drawn from ("Suggestions come from people you've emailed").
+ *
+ * The inbox sync deliberately skips sent mail (`-in:sent`), so nothing in
+ * `messages` knows who the user writes to. This table is filled from the two
+ * places that do: a sync harvests the To/Cc/Bcc headers of the account's sent
+ * mail in the same window (headers only, never a body, and nothing is added to
+ * the inbox list), and every send through miel records its recipients.
+ * `times_contacted` counts distinct sends, which is the ranking.
+ */
+export const contacts = pgTable(
+  "contacts",
+  {
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    // Lowercased: an address is case-insensitive, and one person is one row.
+    email: text("email").notNull(),
+    name: text("name"),
+    timesContacted: integer("times_contacted").notNull().default(1),
+    lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }).notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.accountId, t.email] }),
+    byAccountLast: index("contacts_account_last").on(t.accountId, t.lastContactedAt),
+  }),
+);

@@ -138,6 +138,7 @@ describe("the connected accounts", () => {
       id: "33333333-3333-4333-8333-333333333333",
       email: "another@example.com",
       displayName: null,
+      nickname: null,
       avatarUrl: null,
       createdAt: new Date("2026-02-01T00:00:00.000Z"),
       lastSyncedAt: new Date("2026-03-01T00:00:00.000Z"),

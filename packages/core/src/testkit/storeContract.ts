@@ -23,7 +23,15 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Effect, type Layer } from "effect";
 import { endOfDayUtc } from "../promoExpiry";
-import { PromoStore, SecretStore, SettingsStore } from "../stores/contracts";
+import {
+  ContactStore,
+  MessageStore,
+  OutboxStore,
+  PromoStore,
+  SecretStore,
+  SettingsStore,
+  type NewScheduledSend,
+} from "../stores/contracts";
 
 /** Every key and name this suite writes starts with it. */
 export const CONTRACT_KEY_PREFIX = "storecontract.";
@@ -619,6 +627,541 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       const ref = await world.message({ accountId, internalDate: IN_WINDOW });
 
       expect(await run(PromoStore.use((svc) => svc.removeUnsavedForMessage(ref)))).toBe(0);
+    });
+  });
+}
+
+/**
+ * The world the mailbox's newer operations need (nicknames, snoozes): a
+ * `MessageStore` and an account with a message in it, created the way that
+ * adapter stores them.
+ */
+export interface MailboxWorld {
+  readonly layer: Layer.Layer<MessageStore>;
+  readonly account: () => Promise<{ id: string; email: string }>;
+  readonly message: (args: {
+    accountId: string;
+    internalDate: Date;
+    isArchived?: boolean;
+  }) => Promise<{ accountId: string; gmailMessageId: string; gmailThreadId: string }>;
+}
+
+/**
+ * Nicknames and snoozes on the {@link MessageStore}. A snooze is joined onto the
+ * list by thread, which is the part a Map and a SQL join could disagree on: the
+ * Snoozed view, and the Done view that must not show a snoozed thread.
+ */
+export function mailboxSnoozeContract(label: string, worldFor: () => Promise<MailboxWorld>): void {
+  describe(`${label} satisfies the MessageStore nickname and snooze contract`, () => {
+    let world: MailboxWorld;
+    let accountId: string;
+    let run = <A>(eff: Effect.Effect<A, never, MessageStore>): Promise<A> =>
+      Effect.runPromise(Effect.provide(eff, world.layer));
+
+    beforeEach(async () => {
+      world = await worldFor();
+      ({ id: accountId } = await world.account());
+      run = (eff) => Effect.runPromise(Effect.provide(eff, world.layer));
+    });
+
+    const WAKE = new Date("2026-06-20T08:00:00.000Z");
+
+    test("a nickname is set, read back on the account, and cleared with null", async () => {
+      expect(
+        await run(MessageStore.use((s) => s.setNickname({ id: accountId, nickname: "Pro" }))),
+      ).toBe(1);
+      expect((await run(MessageStore.use((s) => s.accountById(accountId))))?.nickname).toBe("Pro");
+      await run(MessageStore.use((s) => s.setNickname({ id: accountId, nickname: null })));
+      expect((await run(MessageStore.use((s) => s.accountById(accountId))))?.nickname).toBeNull();
+    });
+
+    test("naming an unknown account sets nothing", async () => {
+      expect(
+        await run(
+          MessageStore.use((s) =>
+            s.setNickname({ id: "00000000-0000-4000-8000-000000000000", nickname: "x" }),
+          ),
+        ),
+      ).toBe(0);
+    });
+
+    test("a snoozed thread is listed as snoozed, and not in Done", async () => {
+      const m = await world.message({ accountId, internalDate: IN_WINDOW, isArchived: true });
+      const done = await world.message({ accountId, internalDate: IN_WINDOW, isArchived: true });
+      await run(MessageStore.use((s) => s.snooze({ ...m, wakeAt: WAKE })));
+
+      const snoozed = await run(
+        MessageStore.use((s) => s.list({ accountId, snoozedOnly: true, limit: 50 })),
+      );
+      expect(snoozed.map((r) => r.gmailMessageId)).toEqual([m.gmailMessageId]);
+      expect(snoozed[0].snoozedUntil?.toISOString()).toBe(WAKE.toISOString());
+
+      const doneView = await run(
+        MessageStore.use((s) => s.list({ accountId, archivedOnly: true, limit: 50 })),
+      );
+      expect(doneView.map((r) => r.gmailMessageId)).toEqual([done.gmailMessageId]);
+      expect(doneView[0].snoozedUntil).toBeNull();
+
+      const detail = await run(MessageStore.use((s) => s.detail(m)));
+      expect(detail?.snoozedUntil?.toISOString()).toBe(WAKE.toISOString());
+    });
+
+    test("snoozing a snoozed thread again moves its wake time rather than adding a row", async () => {
+      const m = await world.message({ accountId, internalDate: IN_WINDOW, isArchived: true });
+      const later = new Date("2026-06-21T08:00:00.000Z");
+      await run(MessageStore.use((s) => s.snooze({ ...m, wakeAt: WAKE })));
+      await run(MessageStore.use((s) => s.snooze({ ...m, wakeAt: later })));
+
+      const rows = await run(
+        MessageStore.use((s) => s.list({ accountId, snoozedOnly: true, limit: 50 })),
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].snoozedUntil?.toISOString()).toBe(later.toISOString());
+    });
+
+    test("due snoozes are the ones whose wake time has come, soonest first, with the email", async () => {
+      const early = await world.message({ accountId, internalDate: IN_WINDOW, isArchived: true });
+      const late = await world.message({ accountId, internalDate: IN_WINDOW, isArchived: true });
+      const future = await world.message({ accountId, internalDate: IN_WINDOW, isArchived: true });
+      await run(
+        MessageStore.use((s) => s.snooze({ ...late, wakeAt: new Date("2026-06-20T09:00:00Z") })),
+      );
+      await run(
+        MessageStore.use((s) => s.snooze({ ...early, wakeAt: new Date("2026-06-20T07:00:00Z") })),
+      );
+      await run(
+        MessageStore.use((s) => s.snooze({ ...future, wakeAt: new Date("2030-01-01T00:00:00Z") })),
+      );
+
+      const due = (
+        await run(
+          MessageStore.use((s) =>
+            s.dueSnoozes({ now: new Date("2026-06-20T10:00:00Z"), limit: 1000 }),
+          ),
+        )
+      ).filter((d) => d.accountId === accountId);
+      expect(due.map((d) => d.gmailThreadId)).toEqual([early.gmailThreadId, late.gmailThreadId]);
+      expect(due[0].accountEmail).toContain("@");
+    });
+
+    test("an unsnooze reports the row it took, and the thread is no longer snoozed", async () => {
+      const m = await world.message({ accountId, internalDate: IN_WINDOW, isArchived: true });
+      await run(MessageStore.use((s) => s.snooze({ ...m, wakeAt: WAKE })));
+      expect(await run(MessageStore.use((s) => s.unsnooze(m)))).toBe(1);
+      expect(await run(MessageStore.use((s) => s.unsnooze(m)))).toBe(0);
+      expect((await run(MessageStore.use((s) => s.detail(m))))?.snoozedUntil).toBeNull();
+    });
+  });
+}
+
+/** The outbox's world: a store and an account its rows belong to. */
+export interface AccountWorld<S> {
+  readonly layer: Layer.Layer<S>;
+  readonly account: () => Promise<{ id: string; email: string }>;
+}
+
+/** Run the {@link OutboxStore} contract against `worldFor()`, called once per test. */
+export function outboxStoreContract(
+  label: string,
+  worldFor: () => Promise<AccountWorld<OutboxStore>>,
+): void {
+  describe(`${label} satisfies the OutboxStore contract`, () => {
+    let world: AccountWorld<OutboxStore>;
+    let accountId: string;
+    let run = <A>(eff: Effect.Effect<A, never, OutboxStore>): Promise<A> =>
+      Effect.runPromise(Effect.provide(eff, world.layer));
+
+    beforeEach(async () => {
+      world = await worldFor();
+      ({ id: accountId } = await world.account());
+      run = (eff) => Effect.runPromise(Effect.provide(eff, world.layer));
+    });
+
+    const BYTES = new Uint8Array([0, 1, 2, 250, 255, 10, 13]);
+    const scheduledRow = (over?: Partial<NewScheduledSend>): NewScheduledSend => ({
+      accountId,
+      kind: "new",
+      sourceGmailMessageId: null,
+      payload: { to: ["claire@example.com"], subject: "Dinner", body: "9pm?" },
+      messageIdHeader: `<${crypto.randomUUID()}@miel>`,
+      sendAt: new Date("2026-06-20T08:00:00.000Z"),
+      ...over,
+    });
+
+    test("an upload is answered without its bytes, and read back with them byte for byte", async () => {
+      const stored = await run(
+        OutboxStore.use((s) =>
+          s.putUpload({
+            accountId,
+            filename: "Quote µ.pdf",
+            mimeType: "application/pdf",
+            data: BYTES,
+          }),
+        ),
+      );
+      expect(stored.size).toBe(BYTES.byteLength);
+      expect("data" in stored).toBe(false);
+
+      const [read] = await run(
+        OutboxStore.use((s) => s.uploadsByIds({ accountId, ids: [stored.id] })),
+      );
+      expect(read.filename).toBe("Quote µ.pdf");
+      expect([...read.data]).toEqual([...BYTES]);
+    });
+
+    test("another account cannot read or remove an upload", async () => {
+      const other = await world.account();
+      const stored = await run(
+        OutboxStore.use((s) =>
+          s.putUpload({ accountId, filename: "a", mimeType: "text/plain", data: BYTES }),
+        ),
+      );
+      expect(
+        await run(
+          OutboxStore.use((s) => s.uploadsByIds({ accountId: other.id, ids: [stored.id] })),
+        ),
+      ).toEqual([]);
+      expect(
+        await run(OutboxStore.use((s) => s.removeUpload({ accountId: other.id, id: stored.id }))),
+      ).toBe(0);
+      expect(await run(OutboxStore.use((s) => s.removeUpload({ accountId, id: stored.id })))).toBe(
+        1,
+      );
+    });
+
+    test("the sweep keeps an upload a pending scheduled send still names", async () => {
+      const kept = await run(
+        OutboxStore.use((s) =>
+          s.putUpload({ accountId, filename: "k", mimeType: "text/plain", data: BYTES }),
+        ),
+      );
+      const swept = await run(
+        OutboxStore.use((s) =>
+          s.putUpload({ accountId, filename: "s", mimeType: "text/plain", data: BYTES }),
+        ),
+      );
+      await run(
+        OutboxStore.use((s) =>
+          s.schedule(
+            scheduledRow({
+              payload: { to: ["a@b.c"], subject: "", body: "x", uploadIds: [kept.id] },
+            }),
+          ),
+        ),
+      );
+      await run(OutboxStore.use((s) => s.sweepUploads(new Date(Date.now() + 60_000))));
+
+      const left = await run(
+        OutboxStore.use((s) => s.uploadsByIds({ accountId, ids: [kept.id, swept.id] })),
+      );
+      expect(left.map((u) => u.id)).toEqual([kept.id]);
+    });
+
+    test("a scheduled send starts pending, and cancelling it only works while pending", async () => {
+      const row = await run(OutboxStore.use((s) => s.schedule(scheduledRow())));
+      expect(row.status).toBe("pending");
+      expect(row.attempts).toBe(0);
+      expect(row.payload).toEqual({ to: ["claire@example.com"], subject: "Dinner", body: "9pm?" });
+
+      expect(await run(OutboxStore.use((s) => s.cancelScheduled(row.id)))).toBe(1);
+      expect(await run(OutboxStore.use((s) => s.cancelScheduled(row.id)))).toBe(0);
+      expect((await run(OutboxStore.use((s) => s.scheduledById(row.id))))?.status).toBe(
+        "cancelled",
+      );
+    });
+
+    test("only due pending rows are claimed, once, and a claim counts an attempt", async () => {
+      const due = await run(OutboxStore.use((s) => s.schedule(scheduledRow())));
+      const later = await run(
+        OutboxStore.use((s) =>
+          s.schedule(scheduledRow({ sendAt: new Date("2030-01-01T00:00:00Z") })),
+        ),
+      );
+      const now = new Date("2026-06-20T09:00:00.000Z");
+      const claim = () =>
+        run(OutboxStore.use((s) => s.claimDue({ now, staleBefore: new Date(0), limit: 1000 })));
+
+      const first = (await claim()).filter((r) => r.id === due.id || r.id === later.id);
+      expect(first.map((r) => r.id)).toEqual([due.id]);
+      expect(first[0]).toMatchObject({ status: "sending", attempts: 1 });
+      expect(first[0].claimedAt?.toISOString()).toBe(now.toISOString());
+
+      const second = (await claim()).filter((r) => r.id === due.id);
+      expect(second).toEqual([]);
+    });
+
+    test("a send left in flight past the grace period is claimed again", async () => {
+      const row = await run(OutboxStore.use((s) => s.schedule(scheduledRow())));
+      const t1 = new Date("2026-06-20T09:00:00.000Z");
+      await run(
+        OutboxStore.use((s) => s.claimDue({ now: t1, staleBefore: new Date(0), limit: 1000 })),
+      );
+
+      const t2 = new Date("2026-06-20T09:20:00.000Z");
+      const again = (
+        await run(
+          OutboxStore.use((s) =>
+            s.claimDue({ now: t2, staleBefore: new Date("2026-06-20T09:10:00.000Z"), limit: 1000 }),
+          ),
+        )
+      ).filter((r) => r.id === row.id);
+      expect(again).toHaveLength(1);
+      expect(again[0].attempts).toBe(2);
+    });
+
+    test("finishing records sent, failed or a retry, and only from sending", async () => {
+      const a = await run(OutboxStore.use((s) => s.schedule(scheduledRow())));
+      const b = await run(OutboxStore.use((s) => s.schedule(scheduledRow())));
+      const c = await run(OutboxStore.use((s) => s.schedule(scheduledRow())));
+      const now = new Date("2026-06-20T09:00:00.000Z");
+      await run(OutboxStore.use((s) => s.claimDue({ now, staleBefore: new Date(0), limit: 1000 })));
+
+      await run(
+        OutboxStore.use((s) =>
+          s.finishScheduled({
+            id: a.id,
+            outcome: { kind: "sent", sentAt: now, sentMessageId: "m1", threadId: "t1" },
+          }),
+        ),
+      );
+      await run(
+        OutboxStore.use((s) =>
+          s.finishScheduled({ id: b.id, outcome: { kind: "failed", error: "Invalid To header" } }),
+        ),
+      );
+      const retryAt = new Date("2026-06-20T09:05:00.000Z");
+      await run(
+        OutboxStore.use((s) =>
+          s.finishScheduled({
+            id: c.id,
+            outcome: { kind: "retry", sendAt: retryAt, error: "timeout" },
+          }),
+        ),
+      );
+
+      const [ra, rb, rc] = await Promise.all(
+        [a, b, c].map((r) => run(OutboxStore.use((s) => s.scheduledById(r.id)))),
+      );
+      expect(ra).toMatchObject({ status: "sent", sentMessageId: "m1", threadId: "t1" });
+      expect(rb).toMatchObject({ status: "failed", error: "Invalid To header" });
+      expect(rc).toMatchObject({ status: "pending", error: "timeout" });
+      expect(rc?.sendAt.toISOString()).toBe(retryAt.toISOString());
+
+      // A sent row is not sending any more, so a late second finish changes nothing.
+      await run(
+        OutboxStore.use((s) =>
+          s.finishScheduled({ id: a.id, outcome: { kind: "failed", error: "late" } }),
+        ),
+      );
+      expect((await run(OutboxStore.use((s) => s.scheduledById(a.id))))?.status).toBe("sent");
+    });
+
+    test("rescheduling moves a pending or failed send and clears its error", async () => {
+      const row = await run(OutboxStore.use((s) => s.schedule(scheduledRow())));
+      await run(
+        OutboxStore.use((s) =>
+          s.claimDue({
+            now: new Date("2026-06-20T09:00:00Z"),
+            staleBefore: new Date(0),
+            limit: 1000,
+          }),
+        ),
+      );
+      await run(
+        OutboxStore.use((s) =>
+          s.finishScheduled({ id: row.id, outcome: { kind: "failed", error: "x" } }),
+        ),
+      );
+
+      const at = new Date("2026-07-01T08:00:00.000Z");
+      expect(await run(OutboxStore.use((s) => s.reschedule({ id: row.id, sendAt: at })))).toBe(1);
+      const moved = await run(OutboxStore.use((s) => s.scheduledById(row.id)));
+      expect(moved).toMatchObject({ status: "pending", error: null, attempts: 0 });
+      expect(moved?.sendAt.toISOString()).toBe(at.toISOString());
+
+      await run(OutboxStore.use((s) => s.cancelScheduled(row.id)));
+      expect(await run(OutboxStore.use((s) => s.reschedule({ id: row.id, sendAt: at })))).toBe(0);
+    });
+
+    test("the list is one account's rows in the named states, soonest first", async () => {
+      const late = await run(
+        OutboxStore.use((s) =>
+          s.schedule(scheduledRow({ sendAt: new Date("2026-06-22T08:00:00Z") })),
+        ),
+      );
+      const soon = await run(
+        OutboxStore.use((s) =>
+          s.schedule(scheduledRow({ sendAt: new Date("2026-06-21T08:00:00Z") })),
+        ),
+      );
+      const gone = await run(OutboxStore.use((s) => s.schedule(scheduledRow())));
+      await run(OutboxStore.use((s) => s.cancelScheduled(gone.id)));
+
+      const rows = await run(
+        OutboxStore.use((s) => s.scheduledList({ accountId, statuses: ["pending"] })),
+      );
+      expect(rows.map((r) => r.id)).toEqual([soon.id, late.id]);
+    });
+  });
+}
+
+const at = (iso: string) => new Date(iso);
+
+/** Run the {@link ContactStore} contract against `worldFor()`, called once per test. */
+export function contactStoreContract(
+  label: string,
+  worldFor: () => Promise<AccountWorld<ContactStore>>,
+): void {
+  describe(`${label} satisfies the ContactStore contract`, () => {
+    let world: AccountWorld<ContactStore>;
+    let accountId: string;
+    let run = <A>(eff: Effect.Effect<A, never, ContactStore>): Promise<A> =>
+      Effect.runPromise(Effect.provide(eff, world.layer));
+
+    beforeEach(async () => {
+      world = await worldFor();
+      ({ id: accountId } = await world.account());
+      run = (eff) => Effect.runPromise(Effect.provide(eff, world.layer));
+    });
+
+    test("one person is one row, whatever the case of the address", async () => {
+      await run(
+        ContactStore.use((s) =>
+          s.record([
+            {
+              accountId,
+              email: "Claire@Example.com",
+              name: null,
+              contactedAt: at("2026-06-01T10:00:00Z"),
+            },
+            {
+              accountId,
+              email: "claire@example.com",
+              name: "Claire Martin",
+              contactedAt: at("2026-06-02T10:00:00Z"),
+            },
+          ]),
+        ),
+      );
+      const rows = await run(
+        ContactStore.use((s) => s.search({ accountId, query: "", limit: 10 })),
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ email: "claire@example.com", name: "Claire Martin" });
+    });
+
+    test("a newer sighting counts; the same send seen again does not", async () => {
+      const sighting = {
+        accountId,
+        email: "a@example.com",
+        name: null,
+        contactedAt: at("2026-06-01T10:00:00Z"),
+      };
+      await run(ContactStore.use((s) => s.record([sighting])));
+      await run(ContactStore.use((s) => s.record([sighting])));
+      await run(
+        ContactStore.use((s) =>
+          s.record([{ ...sighting, contactedAt: at("2026-06-03T10:00:00Z") }]),
+        ),
+      );
+
+      const [row] = await run(
+        ContactStore.use((s) => s.search({ accountId, query: "a@", limit: 10 })),
+      );
+      expect(row.timesContacted).toBe(2);
+      expect(row.lastContactedAt.toISOString()).toBe("2026-06-03T10:00:00.000Z");
+    });
+
+    test("search matches address or name, case-insensitively, most contacted first", async () => {
+      await run(
+        ContactStore.use((s) =>
+          s.record([
+            {
+              accountId,
+              email: "claire.martin@example.com",
+              name: "Claire Martin",
+              contactedAt: at("2026-06-01T10:00:00Z"),
+            },
+            {
+              accountId,
+              email: "clarisse@example.org",
+              name: null,
+              contactedAt: at("2026-06-05T10:00:00Z"),
+            },
+            {
+              accountId,
+              email: "bob@example.com",
+              name: "Bob",
+              contactedAt: at("2026-06-05T10:00:00Z"),
+            },
+          ]),
+        ),
+      );
+      await run(
+        ContactStore.use((s) =>
+          s.record([
+            {
+              accountId,
+              email: "claire.martin@example.com",
+              name: null,
+              contactedAt: at("2026-06-02T10:00:00Z"),
+            },
+          ]),
+        ),
+      );
+
+      const hits = await run(
+        ContactStore.use((s) => s.search({ accountId, query: "CLA", limit: 10 })),
+      );
+      expect(hits.map((h) => h.email)).toEqual([
+        "claire.martin@example.com",
+        "clarisse@example.org",
+      ]);
+      const byName = await run(
+        ContactStore.use((s) => s.search({ accountId, query: "martin", limit: 10 })),
+      );
+      expect(byName.map((h) => h.email)).toEqual(["claire.martin@example.com"]);
+      const capped = await run(
+        ContactStore.use((s) => s.search({ accountId, query: "", limit: 1 })),
+      );
+      expect(capped).toHaveLength(1);
+    });
+
+    test("a percent sign in the query is a character, not a wildcard", async () => {
+      await run(
+        ContactStore.use((s) =>
+          s.record([
+            {
+              accountId,
+              email: "x@example.com",
+              name: null,
+              contactedAt: at("2026-06-01T10:00:00Z"),
+            },
+          ]),
+        ),
+      );
+      expect(
+        await run(ContactStore.use((s) => s.search({ accountId, query: "%", limit: 10 }))),
+      ).toEqual([]);
+    });
+
+    test("accounts do not see each other's contacts", async () => {
+      const other = await world.account();
+      await run(
+        ContactStore.use((s) =>
+          s.record([
+            {
+              accountId,
+              email: "x@example.com",
+              name: null,
+              contactedAt: at("2026-06-01T10:00:00Z"),
+            },
+          ]),
+        ),
+      );
+      expect(
+        await run(ContactStore.use((s) => s.search({ accountId: other.id, query: "", limit: 10 }))),
+      ).toEqual([]);
     });
   });
 }

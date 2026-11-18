@@ -14,30 +14,53 @@
  * expected to branch on.
  */
 import { Effect, Layer } from "effect";
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { getDb } from "../db/client";
 import {
   accounts,
   appSettings,
+  composeUploads,
+  contacts,
   encryptedSecrets,
   labels,
   messageAttachments,
   messageLabels,
   messages,
   promoCodes,
+  scheduledSends,
+  snoozes,
   triages,
 } from "../db/schema";
 import { runPromiseRethrow } from "../util/effect";
 import {
+  ContactStore,
   LabelStore,
   MessageStore,
+  OutboxStore,
   PromoStore,
   SecretStore,
   SettingsStore,
   TriageStore,
+  type ContactStoreImpl,
   type LabelStoreImpl,
   type MessageRef,
+  type OutboxStoreImpl,
   type MessageStoreImpl,
   type PromoStoreImpl,
   type SecretStoreImpl,
@@ -135,6 +158,7 @@ const ACCOUNT_COLUMNS = {
   id: accounts.id,
   email: accounts.email,
   displayName: accounts.displayName,
+  nickname: accounts.nickname,
   avatarUrl: accounts.avatarUrl,
   createdAt: accounts.createdAt,
   lastSyncedAt: accounts.lastSyncedAt,
@@ -149,6 +173,13 @@ const LABEL_COLUMNS = {
   colorBg: labels.colorBg,
   colorFg: labels.colorFg,
 };
+
+/** A message's conversation's snooze, if it has one — joined by thread. */
+const snoozedThread = snoozes;
+const snoozedThreadJoin = and(
+  eq(snoozes.accountId, messages.accountId),
+  eq(snoozes.gmailThreadId, messages.gmailThreadId),
+);
 
 const messagesImpl: MessageStoreImpl = {
   list: (filter) =>
@@ -171,8 +202,13 @@ const messagesImpl: MessageStoreImpl = {
       if (filter.accountId) {
         conditions.push(eq(messages.accountId, filter.accountId));
       }
-      if (filter.archivedOnly) {
+      if (filter.snoozedOnly) {
+        conditions.push(isNotNull(snoozes.wakeAt));
+      } else if (filter.archivedOnly) {
+        // Done is archived and not snoozed: a snoozed thread is archived in
+        // Gmail too, and it belongs to the Snoozed view.
         conditions.push(eq(messages.isArchived, true));
+        conditions.push(isNull(snoozes.wakeAt));
       } else if (!filter.includeArchived) {
         conditions.push(eq(messages.isArchived, false));
       }
@@ -214,6 +250,7 @@ const messagesImpl: MessageStoreImpl = {
           isTrashed: messages.isTrashed,
           priority: latestTriagePerMsg.priority,
           triageId: latestTriagePerMsg.triageId,
+          snoozedUntil: snoozes.wakeAt,
         })
         .from(messages)
         .innerJoin(accounts, eq(messages.accountId, accounts.id))
@@ -224,6 +261,7 @@ const messagesImpl: MessageStoreImpl = {
             eq(latestTriagePerMsg.gmailMessageId, messages.gmailMessageId),
           ),
         )
+        .leftJoin(snoozedThread, snoozedThreadJoin)
         .$dynamic();
 
       if (filter.labelId) {
@@ -266,9 +304,11 @@ const messagesImpl: MessageStoreImpl = {
             isArchived: messages.isArchived,
             isTrashed: messages.isTrashed,
             rawHeaders: messages.rawHeaders,
+            snoozedUntil: snoozes.wakeAt,
           })
           .from(messages)
           .innerJoin(accounts, eq(messages.accountId, accounts.id))
+          .leftJoin(snoozedThread, snoozedThreadJoin)
           .where(
             and(
               eq(messages.accountId, ref.accountId),
@@ -417,6 +457,61 @@ const messagesImpl: MessageStoreImpl = {
         db.select(ACCOUNT_COLUMNS).from(accounts).where(eq(accounts.email, email)).limit(1),
       );
       return rows.length > 0 ? rows[0] : null;
+    }),
+
+  setNickname: ({ id, nickname }) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const rows = yield* Effect.promise(() =>
+        db.update(accounts).set({ nickname }).where(eq(accounts.id, id)).returning({
+          id: accounts.id,
+        }),
+      );
+      return rows.length;
+    }),
+
+  snooze: (row) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      yield* Effect.promise(() =>
+        db
+          .insert(snoozes)
+          .values(row)
+          .onConflictDoUpdate({
+            target: [snoozes.accountId, snoozes.gmailThreadId],
+            set: { gmailMessageId: row.gmailMessageId, wakeAt: row.wakeAt, snoozedAt: new Date() },
+          }),
+      );
+    }),
+
+  unsnooze: ({ accountId, gmailThreadId }) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const rows = yield* Effect.promise(() =>
+        db
+          .delete(snoozes)
+          .where(and(eq(snoozes.accountId, accountId), eq(snoozes.gmailThreadId, gmailThreadId)))
+          .returning({ accountId: snoozes.accountId }),
+      );
+      return rows.length;
+    }),
+
+  dueSnoozes: ({ now, limit }) =>
+    Effect.promise(() => {
+      const { db } = getDb();
+      return db
+        .select({
+          accountId: snoozes.accountId,
+          accountEmail: accounts.email,
+          gmailThreadId: snoozes.gmailThreadId,
+          gmailMessageId: snoozes.gmailMessageId,
+          wakeAt: snoozes.wakeAt,
+        })
+        .from(snoozes)
+        .innerJoin(accounts, eq(accounts.id, snoozes.accountId))
+        .where(lte(snoozes.wakeAt, now))
+        .orderBy(asc(snoozes.wakeAt))
+        .limit(limit);
     }),
 };
 
@@ -705,12 +800,276 @@ const promosImpl: PromoStoreImpl = {
     }),
 };
 
+const UPLOAD_COLUMNS = {
+  id: composeUploads.id,
+  accountId: composeUploads.accountId,
+  filename: composeUploads.filename,
+  mimeType: composeUploads.mimeType,
+  size: composeUploads.size,
+  createdAt: composeUploads.createdAt,
+};
+
+const SCHEDULED_COLUMNS = {
+  id: scheduledSends.id,
+  accountId: scheduledSends.accountId,
+  kind: scheduledSends.kind,
+  sourceGmailMessageId: scheduledSends.sourceGmailMessageId,
+  payload: scheduledSends.payload,
+  messageIdHeader: scheduledSends.messageIdHeader,
+  sendAt: scheduledSends.sendAt,
+  status: scheduledSends.status,
+  attempts: scheduledSends.attempts,
+  claimedAt: scheduledSends.claimedAt,
+  sentAt: scheduledSends.sentAt,
+  sentMessageId: scheduledSends.sentMessageId,
+  threadId: scheduledSends.threadId,
+  error: scheduledSends.error,
+  createdAt: scheduledSends.createdAt,
+};
+
+const outboxImpl: OutboxStoreImpl = {
+  putUpload: (row) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const [stored] = yield* Effect.promise(() =>
+        db
+          .insert(composeUploads)
+          .values({ ...row, size: row.data.byteLength })
+          .returning(UPLOAD_COLUMNS),
+      );
+      return stored;
+    }),
+
+  uploadsByIds: ({ accountId, ids }) =>
+    Effect.gen(function* () {
+      if (ids.length === 0) return [];
+      const { db } = getDb();
+      return yield* Effect.promise(() =>
+        db
+          .select({ ...UPLOAD_COLUMNS, data: composeUploads.data })
+          .from(composeUploads)
+          .where(
+            and(eq(composeUploads.accountId, accountId), inArray(composeUploads.id, [...ids])),
+          ),
+      );
+    }),
+
+  removeUpload: ({ accountId, id }) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const rows = yield* Effect.promise(() =>
+        db
+          .delete(composeUploads)
+          .where(and(eq(composeUploads.accountId, accountId), eq(composeUploads.id, id)))
+          .returning({ id: composeUploads.id }),
+      );
+      return rows.length;
+    }),
+
+  // An upload a send that has not gone out yet still names is kept, whatever
+  // its age: that send will need the bytes when it fires.
+  sweepUploads: (createdBefore) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const rows = yield* Effect.promise(() =>
+        db
+          .delete(composeUploads)
+          .where(
+            and(
+              lt(composeUploads.createdAt, createdBefore),
+              sql`${composeUploads.id}::text NOT IN (
+                SELECT jsonb_array_elements_text(coalesce(${scheduledSends.payload} -> 'uploadIds', '[]'::jsonb))
+                FROM ${scheduledSends}
+                WHERE ${scheduledSends.status} IN ('pending', 'sending')
+              )`,
+            ),
+          )
+          .returning({ id: composeUploads.id }),
+      );
+      return rows.length;
+    }),
+
+  schedule: (row) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const [stored] = yield* Effect.promise(() =>
+        db.insert(scheduledSends).values(row).returning(SCHEDULED_COLUMNS),
+      );
+      return stored;
+    }),
+
+  scheduledById: (id) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const rows = yield* Effect.promise(() =>
+        db.select(SCHEDULED_COLUMNS).from(scheduledSends).where(eq(scheduledSends.id, id)).limit(1),
+      );
+      return rows[0] ?? null;
+    }),
+
+  scheduledList: ({ accountId, statuses }) =>
+    Effect.gen(function* () {
+      if (statuses.length === 0) return [];
+      const { db } = getDb();
+      const conditions: SQL[] = [inArray(scheduledSends.status, [...statuses])];
+      if (accountId) conditions.push(eq(scheduledSends.accountId, accountId));
+      return yield* Effect.promise(() =>
+        db
+          .select(SCHEDULED_COLUMNS)
+          .from(scheduledSends)
+          .where(and(...conditions))
+          .orderBy(asc(scheduledSends.sendAt), asc(scheduledSends.createdAt)),
+      );
+    }),
+
+  cancelScheduled: (id) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const rows = yield* Effect.promise(() =>
+        db
+          .update(scheduledSends)
+          .set({ status: "cancelled" })
+          .where(and(eq(scheduledSends.id, id), eq(scheduledSends.status, "pending")))
+          .returning({ id: scheduledSends.id }),
+      );
+      return rows.length;
+    }),
+
+  reschedule: ({ id, sendAt }) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const rows = yield* Effect.promise(() =>
+        db
+          .update(scheduledSends)
+          .set({ status: "pending", sendAt, error: null, attempts: 0, claimedAt: null })
+          .where(
+            and(eq(scheduledSends.id, id), inArray(scheduledSends.status, ["pending", "failed"])),
+          )
+          .returning({ id: scheduledSends.id }),
+      );
+      return rows.length;
+    }),
+
+  // One statement: the subquery locks the rows it picks (skipping any another
+  // claimer holds) and the update moves them to `sending`, so a row is handed
+  // to one caller however many ticks race for it.
+  claimDue: ({ now, staleBefore, limit }) =>
+    Effect.promise(() => {
+      const { db } = getDb();
+      const due = db
+        .select({ id: scheduledSends.id })
+        .from(scheduledSends)
+        .where(
+          or(
+            and(eq(scheduledSends.status, "pending"), lte(scheduledSends.sendAt, now)),
+            and(eq(scheduledSends.status, "sending"), lt(scheduledSends.claimedAt, staleBefore)),
+          ),
+        )
+        .orderBy(asc(scheduledSends.sendAt))
+        .limit(limit)
+        .for("update", { skipLocked: true });
+      return db
+        .update(scheduledSends)
+        .set({
+          status: "sending",
+          claimedAt: now,
+          attempts: sql`${scheduledSends.attempts} + 1`,
+        })
+        .where(inArray(scheduledSends.id, due))
+        .returning(SCHEDULED_COLUMNS);
+    }),
+
+  finishScheduled: ({ id, outcome }) =>
+    Effect.gen(function* () {
+      const { db } = getDb();
+      const set =
+        outcome.kind === "sent"
+          ? {
+              status: "sent" as const,
+              sentAt: outcome.sentAt,
+              sentMessageId: outcome.sentMessageId,
+              threadId: outcome.threadId,
+              error: null,
+            }
+          : outcome.kind === "failed"
+            ? { status: "failed" as const, error: outcome.error }
+            : { status: "pending" as const, sendAt: outcome.sendAt, error: outcome.error };
+      yield* Effect.promise(() =>
+        db
+          .update(scheduledSends)
+          .set(set)
+          .where(and(eq(scheduledSends.id, id), eq(scheduledSends.status, "sending"))),
+      );
+    }),
+};
+
+const contactsImpl: ContactStoreImpl = {
+  record: (rows) =>
+    Effect.gen(function* () {
+      if (rows.length === 0) return;
+      const { db } = getDb();
+      // One sighting per address per call, the newest: a batch naming the same
+      // person twice must not upsert one row twice in a single statement.
+      const newest = new Map<string, (typeof rows)[number]>();
+      for (const row of rows) {
+        const key = `${row.accountId}|${row.email.toLowerCase()}`;
+        const seen = newest.get(key);
+        if (!seen || row.contactedAt > seen.contactedAt) newest.set(key, row);
+      }
+      const values = [...newest.values()].map((row) => ({
+        accountId: row.accountId,
+        email: row.email.toLowerCase(),
+        name: row.name,
+        timesContacted: 1,
+        lastContactedAt: row.contactedAt,
+      }));
+      yield* Effect.promise(() =>
+        db
+          .insert(contacts)
+          .values(values)
+          .onConflictDoUpdate({
+            target: [contacts.accountId, contacts.email],
+            set: {
+              timesContacted: sql`CASE WHEN excluded.last_contacted_at > ${contacts.lastContactedAt} THEN ${contacts.timesContacted} + 1 ELSE ${contacts.timesContacted} END`,
+              lastContactedAt: sql`GREATEST(${contacts.lastContactedAt}, excluded.last_contacted_at)`,
+              name: sql`COALESCE(${contacts.name}, excluded.name)`,
+            },
+          }),
+      );
+    }),
+
+  search: ({ accountId, query, limit }) =>
+    Effect.promise(() => {
+      const { db } = getDb();
+      const q = query.trim();
+      const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      const conditions: SQL[] = [eq(contacts.accountId, accountId)];
+      if (q.length > 0) {
+        conditions.push(or(ilike(contacts.email, pattern), ilike(contacts.name, pattern))!);
+      }
+      return db
+        .select({
+          accountId: contacts.accountId,
+          email: contacts.email,
+          name: contacts.name,
+          timesContacted: contacts.timesContacted,
+          lastContactedAt: contacts.lastContactedAt,
+        })
+        .from(contacts)
+        .where(and(...conditions))
+        .orderBy(desc(contacts.timesContacted), desc(contacts.lastContactedAt), asc(contacts.email))
+        .limit(limit);
+    }),
+};
+
 export const SettingsStoreLive = Layer.succeed(SettingsStore, settingsImpl);
 export const SecretStoreLive = Layer.succeed(SecretStore, secretsImpl);
 export const MessageStoreLive = Layer.succeed(MessageStore, messagesImpl);
 export const TriageStoreLive = Layer.succeed(TriageStore, triagesImpl);
 export const LabelStoreLive = Layer.succeed(LabelStore, labelsImpl);
 export const PromoStoreLive = Layer.succeed(PromoStore, promosImpl);
+export const OutboxStoreLive = Layer.succeed(OutboxStore, outboxImpl);
+export const ContactStoreLive = Layer.succeed(ContactStore, contactsImpl);
 
 /** Every store, for the boundary that runs a storage-touching effect. */
 export const StoresLive = Layer.mergeAll(
@@ -720,6 +1079,8 @@ export const StoresLive = Layer.mergeAll(
   TriageStoreLive,
   LabelStoreLive,
   PromoStoreLive,
+  OutboxStoreLive,
+  ContactStoreLive,
 );
 
 /**

@@ -11,6 +11,7 @@ import {
   TriageStore,
   type MessageLabelRow,
   type MessageRef,
+  type StoredAccount,
 } from "../stores/contracts";
 import { runWithStores } from "../stores/postgres";
 import { ccFromHeaders, replyAllCc } from "./replyRecipients";
@@ -35,6 +36,8 @@ export interface ListedMessage {
   internalDate: string;
   isArchived: boolean;
   isTrashed: boolean;
+  /** When its conversation wakes (ISO), if it is snoozed; null otherwise. */
+  snoozedUntil: string | null;
   priority: "high" | "medium" | "low" | null;
   triageId: string | null;
   labels: {
@@ -56,6 +59,8 @@ export interface ListMessagesArgs {
   includeArchived?: boolean;
   /** The Done view: archived mail only (Gmail's archive — there is no other flag). */
   archivedOnly?: boolean;
+  /** The Snoozed view: snoozed conversations only (and so not in Done). */
+  snoozedOnly?: boolean;
   includeTrashed?: boolean;
   includeRemoved?: boolean;
   internalDateFrom?: string;
@@ -129,6 +134,7 @@ export const listMessagesEffect = (
         priority: args.priority,
         includeArchived: args.includeArchived,
         archivedOnly: args.archivedOnly,
+        snoozedOnly: args.snoozedOnly,
         includeTrashed: args.includeTrashed,
         includeRemoved: args.includeRemoved,
         internalDateFrom: args.internalDateFrom ? new Date(args.internalDateFrom) : undefined,
@@ -189,6 +195,7 @@ export const listMessagesEffect = (
         internalDate: r.internalDate.toISOString(),
         isArchived: r.isArchived,
         isTrashed: r.isTrashed,
+        snoozedUntil: r.snoozedUntil ? r.snoozedUntil.toISOString() : null,
         priority: r.priority,
         triageId: r.triageId,
         labels: labelsByMsg.get(key) ?? [],
@@ -222,6 +229,8 @@ export interface MessageDetail {
   internalDate: string;
   isArchived: boolean;
   isTrashed: boolean;
+  /** When its conversation wakes (ISO), if it is snoozed; null otherwise. */
+  snoozedUntil: string | null;
   rawHeaders: Record<string, string> | null;
   labels: {
     id: string;
@@ -282,6 +291,7 @@ export const getMessageDetailEffect = (
       internalDate: m.internalDate.toISOString(),
       isArchived: m.isArchived,
       isTrashed: m.isTrashed,
+      snoozedUntil: m.snoozedUntil ? m.snoozedUntil.toISOString() : null,
       rawHeaders: m.rawHeaders,
       labels: labelRows.map(listedLabel),
       attachments: attachmentRows.map((a) => ({
@@ -299,22 +309,18 @@ export interface AccountSummary {
   id: string;
   email: string;
   displayName: string | null;
+  /** The user's own name for the mailbox; null means show `displayName`. */
+  nickname: string | null;
   avatarUrl: string | null;
   createdAt: string;
   lastSyncedAt: string | null;
 }
 
-const accountSummary = (r: {
-  id: string;
-  email: string;
-  displayName: string | null;
-  avatarUrl: string | null;
-  createdAt: Date;
-  lastSyncedAt: Date | null;
-}): AccountSummary => ({
+const accountSummary = (r: StoredAccount): AccountSummary => ({
   id: r.id,
   email: r.email,
   displayName: r.displayName,
+  nickname: r.nickname,
   avatarUrl: r.avatarUrl,
   createdAt: r.createdAt.toISOString(),
   lastSyncedAt: r.lastSyncedAt ? r.lastSyncedAt.toISOString() : null,
@@ -333,6 +339,28 @@ export const getAccountByIdEffect = (
     MessageStore.use((svc) => svc.accountById(id)),
     (row) => (row ? accountSummary(row) : null),
   );
+
+/** The longest nickname kept; the switcher has one line for it. */
+export const MAX_NICKNAME_LENGTH = 60;
+
+/**
+ * Rename a mailbox, for this install only — Gmail is not told. Trimmed, and an
+ * empty name clears the nickname so the switcher falls back to the Google
+ * display name. Answers the account as it now reads, or null for an unknown id.
+ */
+export const setAccountNicknameEffect = (args: {
+  accountId: string;
+  nickname: string | null;
+}): Effect.Effect<AccountSummary | null, never, MessageStore> =>
+  Effect.gen(function* () {
+    const trimmed = args.nickname?.trim() ?? "";
+    const nickname = trimmed.length > 0 ? trimmed.slice(0, MAX_NICKNAME_LENGTH) : null;
+    const updated = yield* MessageStore.use((svc) =>
+      svc.setNickname({ id: args.accountId, nickname }),
+    );
+    if (updated === 0) return null;
+    return yield* getAccountByIdEffect(args.accountId);
+  });
 
 export const setMessagePriorityEffect = (args: {
   accountId: string;
@@ -368,6 +396,13 @@ export async function listAccounts(): Promise<AccountSummary[]> {
 
 export async function getAccountById(id: string): Promise<AccountSummary | null> {
   return runWithStores(getAccountByIdEffect(id));
+}
+
+export async function setAccountNickname(args: {
+  accountId: string;
+  nickname: string | null;
+}): Promise<AccountSummary | null> {
+  return runWithStores(setAccountNicknameEffect(args));
 }
 
 export async function setMessagePriority(args: {

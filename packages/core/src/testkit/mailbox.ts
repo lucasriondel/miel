@@ -22,6 +22,7 @@ import {
   type MessageStoreImpl,
   type PromoFields,
   type PromoStoreImpl,
+  type SnoozeRow,
   type StoredAccount,
   type StoredAttachment,
   type StoredLabel,
@@ -70,6 +71,8 @@ export interface MailboxData {
    * out of the inbox.
    */
   promos: StoredPromoCode[];
+  /** Snoozed conversations, keyed by thread — joined onto the list like Postgres does. */
+  snoozes: SnoozeRow[];
 }
 
 /**
@@ -121,6 +124,7 @@ export interface MailboxSeed {
   attachments?: AttachmentSeed[];
   triages?: TriageSeed[];
   promos?: PromoSeed[];
+  snoozes?: SnoozeRow[];
 }
 
 const at = (value: Date | string | undefined, fallback: Date): Date =>
@@ -130,6 +134,7 @@ const EPOCH = new Date("2026-01-01T00:00:00.000Z");
 
 const account = (seed: AccountSeed): StoredAccount => ({
   displayName: null,
+  nickname: null,
   avatarUrl: null,
   lastSyncedAt: null,
   ...seed,
@@ -240,6 +245,7 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
     attachments: (seed?.attachments ?? []).map(attachment),
     triages: (seed?.triages ?? []).map(triage),
     promos: (seed?.promos ?? []).map(promo),
+    snoozes: [...(seed?.snoozes ?? [])],
     offline: false,
     // Filled in below; the writer and the impls close over `data` so a test can
     // keep adding rows after the stores are built.
@@ -284,14 +290,20 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
       .filter((t) => sameRef(t, ref))
       .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 
+  /** The snooze on a message's conversation, the way the list joins it. */
+  const snoozeOf = (m: { accountId: string; gmailThreadId: string }) =>
+    data.snoozes.find((z) => z.accountId === m.accountId && z.gmailThreadId === m.gmailThreadId);
+
   const messageStore: MessageStoreImpl = {
     list: (filter) =>
       answer(() =>
         data.messages
           .filter((m) => {
             if (filter.accountId && m.accountId !== filter.accountId) return false;
-            if (filter.archivedOnly) {
-              if (!m.isArchived) return false;
+            if (filter.snoozedOnly) {
+              if (!snoozeOf(m)) return false;
+            } else if (filter.archivedOnly) {
+              if (!m.isArchived || snoozeOf(m)) return false;
             } else if (!filter.includeArchived && m.isArchived) return false;
             if (!filter.includeTrashed && m.isTrashed) return false;
             if (!filter.includeRemoved && m.removedAt !== null) return false;
@@ -335,6 +347,7 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
               isTrashed: m.isTrashed,
               priority: latest?.priority ?? null,
               triageId: latest?.id ?? null,
+              snoozedUntil: snoozeOf(m)?.wakeAt ?? null,
             };
           }),
       ),
@@ -360,6 +373,7 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
           isArchived: m.isArchived,
           isTrashed: m.isTrashed,
           rawHeaders: m.rawHeaders,
+          snoozedUntil: snoozeOf(m)?.wakeAt ?? null,
         };
       }),
 
@@ -445,6 +459,43 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
     accountById: (id) => answer(() => data.accounts.find((a) => a.id === id) ?? null),
 
     accountByEmail: (email) => answer(() => data.accounts.find((a) => a.email === email) ?? null),
+
+    setNickname: ({ id, nickname }) =>
+      answer(() => {
+        const row = data.accounts.find((a) => a.id === id);
+        if (!row) return 0;
+        row.nickname = nickname;
+        return 1;
+      }),
+
+    snooze: (row) =>
+      answer(() => {
+        const existing = snoozeOf(row);
+        if (existing) Object.assign(existing, row);
+        else data.snoozes.push({ ...row });
+      }),
+
+    unsnooze: (ref) =>
+      answer(() => {
+        const existing = snoozeOf(ref);
+        if (!existing) return 0;
+        data.snoozes.splice(data.snoozes.indexOf(existing), 1);
+        return 1;
+      }),
+
+    // Inner join on the account, as Postgres does: a snooze whose account is
+    // gone has gone with it.
+    dueSnoozes: ({ now, limit }) =>
+      answer(() =>
+        data.snoozes
+          .filter((z) => z.wakeAt <= now)
+          .toSorted((a, b) => a.wakeAt.getTime() - b.wakeAt.getTime())
+          .flatMap((z) => {
+            const email = emailOf(z.accountId);
+            return email === undefined ? [] : [{ ...z, accountEmail: email }];
+          })
+          .slice(0, limit),
+      ),
   };
 
   const triageStore: TriageStoreImpl = {

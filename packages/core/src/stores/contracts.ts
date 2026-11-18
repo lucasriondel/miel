@@ -32,6 +32,7 @@
  * of its surface.
  */
 import { Context, Effect } from "effect";
+import type { ScheduledSendPayload } from "../db/schema";
 import type { PriorityT } from "../schemas/triage";
 
 /**
@@ -101,6 +102,8 @@ export interface StoredAccount {
   id: string;
   email: string;
   displayName: string | null;
+  /** The user's own name for the mailbox; null means the Google display name. */
+  nickname: string | null;
   avatarUrl: string | null;
   createdAt: Date;
   lastSyncedAt: Date | null;
@@ -129,6 +132,12 @@ export interface MessageListFilter {
    * for, exactly as they do from the inbox.
    */
   archivedOnly?: boolean;
+  /**
+   * Only snoozed conversations — the Snoozed view. A snoozed thread is archived
+   * in Gmail, so it is *also* excluded from the Done view: `archivedOnly` means
+   * archived and not snoozed. Wins over both flags above.
+   */
+  snoozedOnly?: boolean;
   includeTrashed?: boolean;
   includeRemoved?: boolean;
   internalDateFrom?: Date;
@@ -155,6 +164,8 @@ export interface ListedMessageRow {
   /** From the newest triage of this message; null when it has none. */
   priority: PriorityT | null;
   triageId: string | null;
+  /** When its conversation wakes, if it is snoozed; null otherwise. */
+  snoozedUntil: Date | null;
 }
 
 /** The detail read model: the same message with its body and headers. */
@@ -174,6 +185,8 @@ export interface StoredMessage {
   isArchived: boolean;
   isTrashed: boolean;
   rawHeaders: Record<string, string> | null;
+  /** When its conversation wakes, if it is snoozed; null otherwise. */
+  snoozedUntil: Date | null;
 }
 
 /** A label attached to a message, with the label's own columns joined on. */
@@ -232,6 +245,30 @@ export interface MessageStoreImpl {
   readonly accounts: () => Effect.Effect<StoredAccount[]>;
   readonly accountById: (id: string) => Effect.Effect<StoredAccount | null>;
   readonly accountByEmail: (email: string) => Effect.Effect<StoredAccount | null>;
+  /** Set (or, with null, clear) an account's nickname; answers how many rows (0 or 1). */
+  readonly setNickname: (args: { id: string; nickname: string | null }) => Effect.Effect<number>;
+  /**
+   * Snooze a conversation until `wakeAt`. Upsert on `(accountId, gmailThreadId)`:
+   * snoozing a snoozed thread again moves its wake time.
+   */
+  readonly snooze: (row: SnoozeRow) => Effect.Effect<void>;
+  /** Drop a thread's snooze; answers how many rows went (0 or 1). */
+  readonly unsnooze: (args: { accountId: string; gmailThreadId: string }) => Effect.Effect<number>;
+  /** The snoozes due at `now`, soonest first, each with its account's email. */
+  readonly dueSnoozes: (args: { now: Date; limit: number }) => Effect.Effect<DueSnooze[]>;
+}
+
+/** A snoozed conversation: the thread, the message the user snoozed, and when it wakes. */
+export interface SnoozeRow {
+  accountId: string;
+  gmailThreadId: string;
+  gmailMessageId: string;
+  wakeAt: Date;
+}
+
+/** A snooze the wake loop is about to act on — Gmail is addressed by email. */
+export interface DueSnooze extends SnoozeRow {
+  accountEmail: string;
 }
 
 export class MessageStore extends Context.Service<MessageStore, MessageStoreImpl>()(
@@ -482,6 +519,160 @@ export interface PromoStoreImpl {
 
 export class PromoStore extends Context.Service<PromoStore, PromoStoreImpl>()("PromoStore") {}
 
+/* ------------------------------------------------------------------------- *
+ * The outbox: staged uploads and scheduled sends
+ *
+ * One store for two tables because they share one rule: an upload a scheduled
+ * send still names must outlive the sweep that drops every other upload a day
+ * after it arrived. Splitting them would put that join in a service.
+ * ------------------------------------------------------------------------- */
+
+/** An uploaded attachment, without its bytes — what a listing or an upload answers. */
+export interface StoredUpload {
+  id: string;
+  accountId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  createdAt: Date;
+}
+
+/** The same upload with its bytes, for the send that spends it. */
+export interface UploadWithData extends StoredUpload {
+  data: Uint8Array;
+}
+
+export type ScheduledSendKind = "new" | "reply" | "forward";
+export type ScheduledSendStatus = "pending" | "sending" | "sent" | "failed" | "cancelled";
+
+/** A scheduled send before it has an id. */
+export interface NewScheduledSend {
+  accountId: string;
+  kind: ScheduledSendKind;
+  sourceGmailMessageId: string | null;
+  payload: ScheduledSendPayload;
+  messageIdHeader: string;
+  sendAt: Date;
+}
+
+export interface StoredScheduledSend extends NewScheduledSend {
+  id: string;
+  status: ScheduledSendStatus;
+  attempts: number;
+  claimedAt: Date | null;
+  sentAt: Date | null;
+  sentMessageId: string | null;
+  threadId: string | null;
+  error: string | null;
+  createdAt: Date;
+}
+
+/** How a claimed send ended — the three ways out of `sending`. */
+export type ScheduledSendOutcome =
+  | { kind: "sent"; sentAt: Date; sentMessageId: string; threadId: string }
+  | { kind: "failed"; error: string }
+  /** Back to `pending` at a later time, with the error that sent it there. */
+  | { kind: "retry"; sendAt: Date; error: string };
+
+export interface OutboxStoreImpl {
+  readonly putUpload: (row: {
+    accountId: string;
+    filename: string;
+    mimeType: string;
+    data: Uint8Array;
+  }) => Effect.Effect<StoredUpload>;
+  /** The named uploads that belong to the account, with their bytes; others are absent. */
+  readonly uploadsByIds: (args: {
+    accountId: string;
+    ids: readonly string[];
+  }) => Effect.Effect<UploadWithData[]>;
+  /** Drop one of the account's uploads; answers how many went (0 or 1). */
+  readonly removeUpload: (args: { accountId: string; id: string }) => Effect.Effect<number>;
+  /**
+   * Drop every upload created before `createdBefore` that no pending or
+   * in-flight scheduled send names; answers how many went.
+   */
+  readonly sweepUploads: (createdBefore: Date) => Effect.Effect<number>;
+
+  readonly schedule: (row: NewScheduledSend) => Effect.Effect<StoredScheduledSend>;
+  readonly scheduledById: (id: string) => Effect.Effect<StoredScheduledSend | null>;
+  /** The account's (or every account's) sends in the given states, soonest first. */
+  readonly scheduledList: (args: {
+    accountId?: string;
+    statuses: readonly ScheduledSendStatus[];
+  }) => Effect.Effect<StoredScheduledSend[]>;
+  /** `pending` → `cancelled`; answers 1 when it moved, 0 when it was not pending. */
+  readonly cancelScheduled: (id: string) => Effect.Effect<number>;
+  /**
+   * A new time for a `pending` or `failed` send, which becomes `pending` with its
+   * error and attempts cleared; answers 1 when it moved, 0 otherwise.
+   */
+  readonly reschedule: (args: { id: string; sendAt: Date }) => Effect.Effect<number>;
+  /**
+   * Claim what is due, atomically: `pending` rows with `sendAt <= now`, and
+   * `sending` rows claimed before `staleBefore` (a process that died mid-send).
+   * Each becomes `sending` with `claimedAt = now` and one more attempt. A row is
+   * handed to at most one caller.
+   */
+  readonly claimDue: (args: {
+    now: Date;
+    staleBefore: Date;
+    limit: number;
+  }) => Effect.Effect<StoredScheduledSend[]>;
+  /** Record how a claimed (`sending`) send ended. */
+  readonly finishScheduled: (args: {
+    id: string;
+    outcome: ScheduledSendOutcome;
+  }) => Effect.Effect<void>;
+}
+
+export class OutboxStore extends Context.Service<OutboxStore, OutboxStoreImpl>()("OutboxStore") {}
+
+/* ------------------------------------------------------------------------- *
+ * Contacts — the address suggestions' source
+ * ------------------------------------------------------------------------- */
+
+export interface StoredContact {
+  accountId: string;
+  /** Lowercased. */
+  email: string;
+  name: string | null;
+  timesContacted: number;
+  lastContactedAt: Date;
+}
+
+export interface ContactSighting {
+  accountId: string;
+  email: string;
+  name: string | null;
+  /** When the mail that named them was sent. */
+  contactedAt: Date;
+}
+
+export interface ContactStoreImpl {
+  /**
+   * Record that the account wrote to these people. Upsert on
+   * `(accountId, lower(email))`: a sighting newer than the stored one counts one
+   * more contact and moves `lastContactedAt`; an older or equal one counts
+   * nothing (it is the same send seen again). A name fills a missing one.
+   */
+  readonly record: (rows: readonly ContactSighting[]) => Effect.Effect<void>;
+  /**
+   * The account's contacts whose address or name contains `query`
+   * (case-insensitive; empty matches everyone), most contacted first, then most
+   * recent.
+   */
+  readonly search: (args: {
+    accountId: string;
+    query: string;
+    limit: number;
+  }) => Effect.Effect<StoredContact[]>;
+}
+
+export class ContactStore extends Context.Service<ContactStore, ContactStoreImpl>()(
+  "ContactStore",
+) {}
+
 /** The `R` of anything that reaches storage through the seam. */
 export type Stores =
   | SettingsStore
@@ -489,4 +680,6 @@ export type Stores =
   | MessageStore
   | TriageStore
   | LabelStore
-  | PromoStore;
+  | PromoStore
+  | OutboxStore
+  | ContactStore;
