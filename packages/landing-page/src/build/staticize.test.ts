@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { findExternalReferences, staticizeHtml } from "./staticize";
+import { ANALYTICS_SCRIPT_SRC, UMAMI_DOMAINS, UMAMI_WEBSITE_ID } from "../analytics";
+import { findExternalReferences, isAllowedScript, staticizeHtml } from "./staticize";
+
+const ANALYTICS_TAG = `<script src="${ANALYTICS_SCRIPT_SRC}" defer="" data-website-id="${UMAMI_WEBSITE_ID}" data-domains="${UMAMI_DOMAINS}"></script>`;
 
 describe("staticizeHtml", () => {
   test("drops module scripts emitted by the client build", () => {
@@ -10,6 +13,22 @@ describe("staticizeHtml", () => {
   test("drops inline scripts, including hydration payloads", () => {
     const html = `<html><head><script>window.__TSS__={a:1}</script></head><body>hi</body></html>`;
     expect(staticizeHtml(html)).toBe(`<html><head></head><body>hi</body></html>`);
+  });
+
+  test("keeps the analytics tag and drops every other script beside it", () => {
+    const html = `<html><head>${ANALYTICS_TAG}<script>window.__TSS__={a:1}</script></head><body>hi<script type="module" src="/client.js"></script></body></html>`;
+    expect(staticizeHtml(html)).toBe(`<html><head>${ANALYTICS_TAG}</head><body>hi</body></html>`);
+  });
+
+  test("drops a script that only looks like the analytics tag", () => {
+    const lookalikes = [
+      `<script src="${ANALYTICS_SCRIPT_SRC}?v=2"></script>`,
+      `<script src="https://stats.example.com/script.js"></script>`,
+      `<script src="${ANALYTICS_SCRIPT_SRC}">alert(1)</script>`,
+    ];
+    for (const tag of lookalikes) {
+      expect(staticizeHtml(`<head>${tag}</head>`)).toBe(`<head></head>`);
+    }
   });
 
   test("drops modulepreload and preload links", () => {
@@ -62,6 +81,13 @@ describe("findExternalReferences", () => {
     ]);
   });
 
+  test("does not report the analytics tag, and reports any other script", () => {
+    expect(findExternalReferences(ANALYTICS_TAG)).toEqual([]);
+    expect(findExternalReferences(`${ANALYTICS_TAG}<script src="/app.js"></script>`)).toEqual([
+      "/app.js",
+    ]);
+  });
+
   test("reports inline scripts too, since they need JavaScript to run", () => {
     expect(findExternalReferences(`<script>alert(1)</script>`)).toEqual(["<inline script>"]);
   });
@@ -87,5 +113,17 @@ describe("findExternalReferences", () => {
   test("ignores data: URIs, which the browser never fetches", () => {
     const html = `<style>body{background:url(data:image/gif;base64,R0lGOD)}</style>`;
     expect(findExternalReferences(html)).toEqual([]);
+  });
+});
+
+describe("isAllowedScript", () => {
+  test("accepts only an empty script with the exact analytics src", () => {
+    expect(isAllowedScript(ANALYTICS_TAG)).toBe(true);
+    expect(isAllowedScript(`<script src='${ANALYTICS_SCRIPT_SRC}'></script>`)).toBe(true);
+    expect(isAllowedScript(`<script src="${ANALYTICS_SCRIPT_SRC}">x()</script>`)).toBe(false);
+    expect(isAllowedScript(`<script src="${ANALYTICS_SCRIPT_SRC.toUpperCase()}"></script>`)).toBe(
+      false,
+    );
+    expect(isAllowedScript(`<script>${ANALYTICS_SCRIPT_SRC}</script>`)).toBe(false);
   });
 });

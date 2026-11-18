@@ -1,6 +1,7 @@
 /**
  * Post-build verification: each prerendered page carries its whole text as raw
- * HTML, readable with JavaScript disabled.
+ * HTML, readable with JavaScript disabled. The one script it may carry is the
+ * analytics tag (`src/analytics.ts`), which no copy depends on.
  *
  * This is the property that motivated prerendering in the first place. A
  * regression to client-only rendering — a hydration script and an empty mount
@@ -24,6 +25,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { ANALYTICS_SCRIPT_SRC, UMAMI_DOMAINS, UMAMI_WEBSITE_ID } from "../analytics";
 import { findExternalReferences } from "./staticize";
 import { GUIDE_SECTIONS, allGuideText } from "../content/guide";
 import { allLegalText, type LegalPage } from "../content/legal";
@@ -83,12 +85,27 @@ const DOCUMENT_MARKUP = [
   "<style>",
   "prefers-color-scheme: dark",
   "color-scheme: light dark",
+  // The visit counter, configured for this site (see `src/analytics.ts`).
+  `data-website-id="${UMAMI_WEBSITE_ID}"`,
+  `data-domains="${UMAMI_DOMAINS}"`,
 ];
 
 const DOCUMENT_COUNTS: ElementCount[] = [
   { what: "top-level heading", pattern: /<h1[\s>]/g, expected: 1 },
   { what: "document title", pattern: /<title>/g, expected: 1 },
+  // Exactly one script, and it is the analytics tag: findExternalReferences
+  // reports any other, and these two counts catch a missing or doubled tag.
+  { what: "script", pattern: /<script\b/gi, expected: 1 },
+  {
+    what: "analytics script",
+    pattern: new RegExp(`<script\\b[^>]*\\bsrc="${escapeRegExp(ANALYTICS_SCRIPT_SRC)}"`, "g"),
+    expected: 1,
+  },
 ];
+
+function escapeRegExp(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 /** The pair of attributes that give a section an accessible name. */
 function namedSection(id: string): string[] {

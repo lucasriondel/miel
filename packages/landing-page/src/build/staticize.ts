@@ -1,12 +1,17 @@
 /**
  * Turns a prerendered TanStack Start page into a fully self-contained document:
- * no scripts at all, and no subresource the browser has to fetch.
+ * no scripts but the analytics tag, and no subresource the browser has to fetch.
  *
  * Two reasons this exists rather than trusting the framework output. The page
  * must read completely with JavaScript disabled, and it must not reference any
  * asset that could end up on the wrong side of the Cloudflare Access boundary
  * once it is served from the app's nginx root.
+ *
+ * The one exception is the visit counter (`src/analytics.ts`): an empty
+ * `<script>` whose `src` is exactly `ANALYTICS_SCRIPT_SRC` survives, and is not
+ * reported as an external reference. The page reads the same without it.
  */
+import { ANALYTICS_SCRIPT_SRC } from "../analytics";
 
 /** Resolves a href emitted by the build to its file contents, or null if absent. */
 export type AssetReader = (url: string) => string | null;
@@ -27,6 +32,15 @@ function attr(tag: string, name: string): string | undefined {
   return match[2] ?? match[3] ?? match[4];
 }
 
+/**
+ * The analytics tag and nothing else: an exact `src` match, and no inline body
+ * that could carry code of its own.
+ */
+export function isAllowedScript(tag: string): boolean {
+  const body = /^<script\b[^>]*>([\s\S]*?)<\/script\s*>$/i.exec(tag)?.[1] ?? "";
+  return attr(tag, "src") === ANALYTICS_SCRIPT_SRC && body.trim() === "";
+}
+
 /** rel values whose only purpose is to make the browser fetch something. */
 function isFetchingRel(rel: string | undefined): boolean {
   if (!rel) return false;
@@ -36,7 +50,7 @@ function isFetchingRel(rel: string | undefined): boolean {
 }
 
 export function staticizeHtml(html: string, readAsset: AssetReader = () => null): string {
-  const withoutScripts = html.replace(SCRIPT_RE, "");
+  const withoutScripts = html.replace(SCRIPT_RE, (tag) => (isAllowedScript(tag) ? tag : ""));
 
   return withoutScripts.replace(LINK_RE, (tag) => {
     const rel = attr(tag, "rel");
@@ -74,7 +88,8 @@ function cssReferences(css: string): string[] {
 
 /**
  * Every reference in the document that would make a browser fetch something, or
- * run JavaScript. An empty result is the property the built page must hold.
+ * run JavaScript, other than the analytics tag. An empty result is the property
+ * the built page must hold.
  *
  * Inlined CSS counts: a `@font-face` or `background: url(...)` inside a `<style>`
  * element is just as external as a `<link>`, and inlining the stylesheet is what
@@ -85,6 +100,7 @@ export function findExternalReferences(html: string): string[] {
   const refs: string[] = [];
 
   for (const tag of html.match(SCRIPT_RE) ?? []) {
+    if (isAllowedScript(tag)) continue;
     refs.push(attr(tag, "src") ?? "<inline script>");
   }
   for (const tag of html.match(LINK_RE) ?? []) {

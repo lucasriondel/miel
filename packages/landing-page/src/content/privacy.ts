@@ -90,7 +90,7 @@ export const PRIVACY: LegalPage = {
       body: [
         "Google, necessarily: Miel talks to the Gmail API on your behalf to fetch mail, change labels, archive or trash threads, send the replies you approve, and read or create filters. That traffic goes to Google under the permissions you granted, which are listed in full on the homepage.",
         "One optional integration exists: if — and only if — you configure it, an attachment you explicitly choose to send can be relayed to a separate document-filing service of mine. It is off unless both of its environment variables are set, it never fires on its own, and it moves nothing but the one file you picked.",
-        "Nothing else. Miel has no analytics, no error-reporting service, no advertising, and no telemetry of any kind. These public pages set no cookies and run no JavaScript at all.",
+        "Nothing else. Miel itself has no analytics, no error-reporting service, no advertising, and no telemetry of any kind. These public pages set no cookies and run one script: a cookieless visit counter, Umami, self-hosted at stats.gousse.cool.",
       ],
     },
     {

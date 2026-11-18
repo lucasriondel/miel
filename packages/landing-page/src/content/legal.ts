@@ -40,7 +40,7 @@ export type LegalPage = {
  * together and a reader comparing them should not have to wonder why the dates
  * differ.
  */
-export const LEGAL_LAST_UPDATED = "10 August 2026";
+export const LEGAL_LAST_UPDATED = "9 November 2026";
 
 /** Every string on a legal page, joined — the seam the copy tests assert on. */
 export function allLegalText(page: LegalPage): string {

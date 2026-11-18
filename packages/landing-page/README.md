@@ -15,7 +15,7 @@ the AI-provider disclosure, the legal pages from the footer and the wordmark.
 
 The homepage's own sections — motivation, installation, how to contribute — are
 navigated by a side menu (`SideMenu.tsx`) styled as the app's sidebar. It is
-plain `#anchor` links, since the page ships no JavaScript: there is no scroll
+plain `#anchor` links, since the page runs no JavaScript of its own: there is no scroll
 spy, and `section:target` is the only active state, which is the honest one. On
 a narrow viewport it collapses from a sticky column into a row of pills that
 scrolls inside itself rather than widening the page. The copy lives in
@@ -110,14 +110,26 @@ bun run build
    `dist/client`, alongside a client bundle for hydration.
 2. `scripts/staticize.ts` rewrites each page into `dist/public`, dropping the
    hydration scripts and inlining anything the browser would otherwise fetch. It
-   throws if a page still references an external asset afterwards.
+   throws if a page still references an external asset afterwards. The one
+   script it keeps is the visit counter — see below.
 3. `scripts/verify-prerendered.ts` reads the three built files back and checks
    each against its contract in `src/build/verifyPrerendered.ts`. The build fails
    if a page stopped carrying its own text.
 
 `dist/public` is what gets copied into the nginx document root. Every file in it
 renders completely with JavaScript disabled and references no external
-stylesheet, font, image, or script — verifiable with `grep` on the built HTML.
+stylesheet, font, image, or script but one — verifiable with `grep` on the built
+HTML.
+
+The exception is the visit counter: one `<script defer>` loading Umami from
+`https://stats.gousse.cool/script.js`, self-hosted and cookieless, declared in
+the root route's `head()` from `src/analytics.ts`. Staticize keeps an empty
+script whose `src` is exactly that URL and strips every other one, and the
+output check requires each page to carry exactly that one script, with the
+site's `data-website-id` and `data-domains`. Nothing on the page depends on it,
+so the page reads the same with it blocked. The privacy policy discloses it;
+keep that sentence true if the tag changes. The app at `/app` carries no
+tracker.
 The images the homepage shows are inline `data:` URIs, which the browser never
 fetches; see the images section above.
 

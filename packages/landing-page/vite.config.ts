@@ -5,7 +5,8 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 /**
  * TanStack Start, prerendered rather than served: `vite build` writes plain HTML
  * for every page in `pages` into `dist/client`, and `scripts/staticize.ts` then
- * strips the hydration scripts so the output needs no JavaScript at runtime.
+ * strips the hydration scripts so the output needs no JavaScript at runtime (the
+ * Umami visit counter in `src/analytics.ts` is the one script it keeps).
  *
  * Dev takes port 5200 from the shared registry (~/dev/PORTS.md) with strict-port,
  * so a clash fails loudly instead of drifting.
