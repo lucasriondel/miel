@@ -91,3 +91,12 @@ export function buildRangeQuery(range: DateRange): string {
   // for our weekly window and avoid TZ drift on the server.
   return `after:${toGmailDate(from)} before:${toGmailDate(to)} -in:sent -in:trash`;
 }
+
+/**
+ * The same window over the account's sent mail: the sync's own query with its
+ * `-in:sent` turned into `in:sent`. The contacts harvest reads it; the inbox
+ * search never does.
+ */
+export function sentQueryFor(query: string): string {
+  return query.replace(/(^|\s)-in:sent(?=\s|$)/, "$1in:sent");
+}

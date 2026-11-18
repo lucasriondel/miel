@@ -19,7 +19,12 @@
 import { REPLY_BODY_TRUNCATION } from "../claudeUsage";
 import { getEnv } from "../env";
 import type { PromoExtractInputT } from "../schemas/promo";
-import type { NewMailGenInputT, ReplyGenInputT, ReplyTaskInputT } from "../schemas/reply";
+import type {
+  NewMailGenInputT,
+  PreviousDraftT,
+  ReplyGenInputT,
+  ReplyTaskInputT,
+} from "../schemas/reply";
 import type { TriageInputT } from "../schemas/triage";
 
 /** Everything both triage variants say, in order, minus the closing messages. */
@@ -132,6 +137,21 @@ export function buildReplyPrompt(input: ReplyTaskInputT): string {
   return "body" in input ? buildAnswerPrompt(input) : buildNewMailPrompt(input);
 }
 
+/**
+ * The refinement paragraph: the draft the compose window holds, which the
+ * instruction is applied to. Empty when there is nothing to refine, so a first
+ * draft's prompt is what it always was.
+ */
+function previousDraftLines(draft: PreviousDraftT | undefined): string[] {
+  if (!draft) return [];
+  return [
+    "",
+    "Current draft (revise this draft according to the instruction; keep what the instruction does not ask to change):",
+    `Subject: ${draft.subject ?? ""}`,
+    draft.body,
+  ];
+}
+
 function buildNewMailPrompt(input: NewMailGenInputT): string {
   return [
     "You draft a new email — it answers no earlier message. Return strict JSON matching the schema: { subject, body }.",
@@ -142,6 +162,7 @@ function buildNewMailPrompt(input: NewMailGenInputT): string {
     "",
     "User instruction for the email:",
     input.userInstruction,
+    ...previousDraftLines(input.previousDraft),
     "",
     "Guidelines:",
     "- Subject: keep the subject so far when there is one; otherwise write a short, specific subject.",
@@ -162,6 +183,7 @@ function buildAnswerPrompt(input: ReplyGenInputT): string {
     "",
     "User instruction for the reply:",
     input.userInstruction,
+    ...previousDraftLines(input.previousDraft),
     "",
     "Guidelines:",
     "- Subject: keep the original subject prefixed with 'Re: ' unless one is already present.",

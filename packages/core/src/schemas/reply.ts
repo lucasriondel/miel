@@ -1,6 +1,18 @@
 import { Schema } from "effect";
 import { z } from "zod";
 
+/**
+ * The draft a refinement edits ("Shorter", "Warmer", "In French"): the compose
+ * window's current subject and body. The user's own text — or the model's last
+ * answer they kept — never a received message, so carrying it does not make a
+ * call body-bearing. Absent drafts from scratch.
+ */
+export const PreviousDraft = z.object({
+  subject: z.string().nullable(),
+  body: z.string(),
+});
+export type PreviousDraftT = z.infer<typeof PreviousDraft>;
+
 /** Drafting an answer to a stored message: the original, inlined (truncated). */
 export const ReplyGenInput = z.object({
   from: z.string(),
@@ -8,6 +20,7 @@ export const ReplyGenInput = z.object({
   subject: z.string().nullable(),
   body: z.string(),
   userInstruction: z.string(),
+  previousDraft: PreviousDraft.optional(),
 });
 export type ReplyGenInputT = z.infer<typeof ReplyGenInput>;
 
@@ -27,6 +40,7 @@ export const NewMailGenInput = z.object({
   to: z.array(z.string()),
   subject: z.string().nullable(),
   userInstruction: z.string(),
+  previousDraft: PreviousDraft.optional(),
 });
 export type NewMailGenInputT = z.infer<typeof NewMailGenInput>;
 
