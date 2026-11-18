@@ -10,14 +10,16 @@
  * tracker.
  */
 
+import { SITE_HOST } from "./deploy/topology";
+
 /** The only script source the built pages may reference. */
 export const ANALYTICS_SCRIPT_SRC = "https://stats.gousse.cool/script.js";
 
-/** The miel.gousse.cool website in the Umami instance. */
+/** The reference deployment's website in the Umami instance. */
 export const UMAMI_WEBSITE_ID = "c5d95460-2c91-4bfb-b4cf-46b74e457ba5";
 
 /** Umami ignores page views from any other host, such as a local preview. */
-export const UMAMI_DOMAINS = "miel.gousse.cool";
+export const UMAMI_DOMAINS = SITE_HOST;
 
 /** The tag as the root route's `head()` declares it. */
 export const ANALYTICS_SCRIPT = {
