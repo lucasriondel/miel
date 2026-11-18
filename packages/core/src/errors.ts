@@ -76,9 +76,17 @@ export class GmailParseError extends Data.TaggedError("GmailParseError")<{
   readonly cause: unknown;
 }> {}
 
-/** `users.messages.send` (reply) specifically failed. */
+/**
+ * `users.messages.send` (a reply or a new message) specifically failed.
+ *
+ * `detail` is Gmail's own reason ("Invalid To header"), read off the response
+ * and scrubbed of anything token-shaped at construction (`gmailRefusalDetail`),
+ * so the boundary can pass it on: a send the user watched fail is owed the
+ * reason, and a tagged error's `message` is empty.
+ */
 export class GmailSendError extends Data.TaggedError("GmailSendError")<{
   readonly cause: unknown;
+  readonly detail?: string;
 }> {}
 
 /** `users.labels.create` failed (includes the "label already exists" case). */

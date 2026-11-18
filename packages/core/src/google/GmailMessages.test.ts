@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Option } from "effect";
 import type { OAuth2Client } from "google-auth-library";
 import { runExit, expectFailureTag, expectSuccess } from "../testkit/runExit";
 import { GmailMessages, GoogleAuth, type GoogleAuthImpl, type SendReplyInput } from "./contracts";
@@ -125,6 +125,48 @@ describe("GmailMessages", () => {
     };
     const exit = await run(Effect.flatMap(GmailMessages, (s) => s.send(ref, sendInput)));
     expectFailureTag(exit, "GmailSendError");
+  });
+
+  // The thread is what a "View in Gmail" link needs, so the send answers it.
+  test("send answers the thread Gmail filed the message in", async () => {
+    messagesSendImpl = async () => ({ data: { id: "sent1", threadId: "t0" } });
+    const exit = await run(Effect.flatMap(GmailMessages, (s) => s.send(ref, sendInput)));
+    expect(expectSuccess(exit)).toEqual({ messageId: "sent1", threadId: "t0" });
+  });
+
+  // A new message names no thread; Gmail starts one and answers its id.
+  test("a new message is sent with no threadId and no threading headers", async () => {
+    let sent: { requestBody?: { raw?: string; threadId?: string } } = {};
+    messagesSendImpl = async (args) => {
+      sent = args as typeof sent;
+      return { data: { id: "new1", threadId: "fresh-thread" } };
+    };
+    const exit = await run(
+      Effect.flatMap(GmailMessages, (s) =>
+        s.send(ref, { to: ["x@y.z"], bcc: ["hidden@y.z"], subject: "Hello", body: "Hi" }),
+      ),
+    );
+    expect(expectSuccess(exit)).toEqual({ messageId: "new1", threadId: "fresh-thread" });
+    expect(sent.requestBody).not.toHaveProperty("threadId");
+    const raw = Buffer.from(sent.requestBody?.raw ?? "", "base64url").toString("utf8");
+    expect(raw).not.toContain("In-Reply-To:");
+    expect(raw).toContain("Bcc: hidden@y.z");
+  });
+
+  // A send the user watched fail is owed Gmail's reason, which a tagged
+  // error's empty `message` would otherwise swallow.
+  test("a refused send carries Gmail's reason as its detail", async () => {
+    messagesSendImpl = async () => {
+      throw {
+        code: 400,
+        message: "Request failed with status code 400",
+        response: { data: { error: { message: "Invalid To header" } } },
+      };
+    };
+    const exit = await run(Effect.flatMap(GmailMessages, (s) => s.send(ref, sendInput)));
+    expectFailureTag(exit, "GmailSendError");
+    const err = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+    expect(Option.getOrUndefined(err)).toMatchObject({ detail: "Invalid To header" });
   });
 
   test("getAttachment returns base64url-decoded bytes", async () => {

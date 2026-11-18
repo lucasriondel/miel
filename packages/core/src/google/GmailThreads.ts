@@ -2,7 +2,11 @@
  * `GmailThreads` — trash / archive against `users.threads.modify`.
  *
  * Trash = add TRASH + remove INBOX; archive = remove INBOX. Matches the old gog
- * `thread modify` argv semantics exactly.
+ * `thread modify` argv semantics exactly. The two undos are the same calls read
+ * backwards — unarchive adds INBOX, untrash removes TRASH and adds INBOX — so a
+ * round trip leaves the thread's labels where they started. Untrash is a modify
+ * rather than `threads.untrash` for that reason: the REST untrash only lifts
+ * TRASH, and the INBOX miel's trash took away would stay gone.
  */
 import { Effect, Layer } from "effect";
 import { google } from "googleapis";
@@ -39,6 +43,8 @@ function modify(
 const impl: GmailThreadsImpl = {
   trash: (ref, threadId) => modify(ref, threadId, "threads.trash", ["TRASH"], ["INBOX"]),
   archive: (ref, threadId) => modify(ref, threadId, "threads.archive", [], ["INBOX"]),
+  unarchive: (ref, threadId) => modify(ref, threadId, "threads.unarchive", ["INBOX"], []),
+  untrash: (ref, threadId) => modify(ref, threadId, "threads.untrash", ["INBOX"], ["TRASH"]),
 };
 
 export const GmailThreadsLive = Layer.succeed(GmailThreads, impl);

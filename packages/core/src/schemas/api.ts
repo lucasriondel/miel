@@ -45,6 +45,14 @@ export const ListMessagesQuery = z.object({
   limit: z.coerce.number().int().positive().max(200).default(50),
   cursor: z.string().optional(),
   includeArchived: z.coerce.boolean().default(false),
+  // The Done view: archived mail only. Parsed from the literal rather than
+  // coerced, because `z.coerce.boolean()` reads the string "false" as true —
+  // and a Done view that answered when asked not to would be the inbox's
+  // opposite. Absent is false.
+  archivedOnly: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
   includeTrashed: z.coerce.boolean().default(false),
   includeRemoved: z.coerce.boolean().default(false),
   internalDateFrom: z.string().datetime().optional(),
@@ -150,8 +158,70 @@ export const SendReplyRequest = z.object({
   // wants the reply addressed by the server.
   to: z.array(z.string().min(1)).min(1).optional(),
   cc: z.array(z.string().min(1)).optional(),
+  // A header and nothing more: Gmail delivers to it and strips it.
+  bcc: z.array(z.string().min(1)).optional(),
+  // Reply to everyone. Only decides the default Cc — a Cc the client names
+  // still wins — so a client that prefilled the Cc chips can omit it.
+  replyAll: z.boolean().optional(),
+  // The compose window's autosaved draft, deleted once the reply is sent.
+  draftId: z.string().min(1).optional(),
 });
 export type SendReplyRequestT = z.infer<typeof SendReplyRequest>;
+
+/**
+ * Sending a message that answers nothing — the compose window opened from the
+ * sidebar. Unlike a reply there is no stored message to default the recipients
+ * from, so To is required and must name someone. The subject may be empty, as
+ * Gmail allows; the body may not, for the reason a reply's may not.
+ */
+export const SendMessageRequest = z.object({
+  accountId: z.string().uuid(),
+  to: z.array(z.string().min(1)).min(1),
+  cc: z.array(z.string().min(1)).optional(),
+  bcc: z.array(z.string().min(1)).optional(),
+  subject: z.string(),
+  body: z.string().min(1),
+  draftId: z.string().min(1).optional(),
+});
+export type SendMessageRequestT = z.infer<typeof SendMessageRequest>;
+
+/**
+ * Asking the model to draft a new message: the reply task with no message
+ * behind it. `to` and `subject` are what the user has typed so far, as hints.
+ */
+export const GenerateMessageRequest = z.object({
+  accountId: z.string().uuid(),
+  prompt: z.string().min(1),
+  to: z.array(z.string()).optional(),
+  subject: z.string().optional(),
+});
+export type GenerateMessageRequestT = z.infer<typeof GenerateMessageRequest>;
+
+/**
+ * The compose window's autosave. No `draftId` creates a Gmail draft; naming
+ * one replaces it, so saving on every pause never piles up copies. Every field
+ * of the mail may still be empty — a draft is what is unfinished.
+ */
+export const SaveDraftRequest = z.object({
+  accountId: z.string().uuid(),
+  draftId: z.string().min(1).optional(),
+  // A reply's draft names the message it answers, so Gmail files it in that
+  // thread. Gmail's own id, not ours.
+  replyToGmailMessageId: z.string().min(1).optional(),
+  to: z.array(z.string()).default([]),
+  cc: z.array(z.string()).optional(),
+  bcc: z.array(z.string()).optional(),
+  subject: z.string().default(""),
+  body: z.string().default(""),
+});
+export type SaveDraftRequestT = z.infer<typeof SaveDraftRequest>;
+
+/** Discarding a draft: both halves are in the path, a DELETE has no body. */
+export const DraftParams = z.object({
+  accountId: z.string().uuid(),
+  draftId: z.string().min(1),
+});
+export type DraftParamsT = z.infer<typeof DraftParams>;
 
 export const SetMessageReadRequest = z.object({
   read: z.boolean(),
@@ -193,7 +263,9 @@ const batchMessageActionTarget = {
 export const BatchMessageActionRequest = z.discriminatedUnion("action", [
   z.object({
     ...batchMessageActionTarget,
-    action: z.enum(["read", "unread", "archive", "trash"]),
+    // The two undos ride the same door, so a section-level archive or trash
+    // can be taken back as one request.
+    action: z.enum(["read", "unread", "archive", "trash", "unarchive", "untrash"]),
   }),
   z.object({
     ...batchMessageActionTarget,

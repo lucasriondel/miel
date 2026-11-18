@@ -13,6 +13,7 @@ import {
   type MessageRef,
 } from "../stores/contracts";
 import { runWithStores } from "../stores/postgres";
+import { ccFromHeaders, replyAllCc } from "./replyRecipients";
 
 export interface ListedAttachment {
   attachmentId: string;
@@ -53,6 +54,8 @@ export interface ListMessagesArgs {
   limit: number;
   cursor?: string;
   includeArchived?: boolean;
+  /** The Done view: archived mail only (Gmail's archive — there is no other flag). */
+  archivedOnly?: boolean;
   includeTrashed?: boolean;
   includeRemoved?: boolean;
   internalDateFrom?: string;
@@ -125,6 +128,7 @@ export const listMessagesEffect = (
         labelId: args.labelId,
         priority: args.priority,
         includeArchived: args.includeArchived,
+        archivedOnly: args.archivedOnly,
         includeTrashed: args.includeTrashed,
         includeRemoved: args.includeRemoved,
         internalDateFrom: args.internalDateFrom ? new Date(args.internalDateFrom) : undefined,
@@ -203,6 +207,14 @@ export interface MessageDetail {
   fromEmail: string;
   fromName: string | null;
   toEmails: string[];
+  /** The original's Cc, parsed off `rawHeaders` — there is no column for it. */
+  ccEmails: string[];
+  /**
+   * Who reply-all copies by default: the other participants, minus this
+   * account and minus the sender being answered. Empty means reply-all would
+   * reach nobody a plain reply does not, so a client can hide the choice.
+   */
+  replyAllCc: string[];
   subject: string | null;
   snippet: string | null;
   bodyText: string | null;
@@ -251,6 +263,8 @@ export const getMessageDetailEffect = (
       createdAt: t.createdAt.toISOString(),
     }));
 
+    const ccEmails = ccFromHeaders(m.rawHeaders);
+
     return {
       accountId: m.accountId,
       accountEmail: m.accountEmail,
@@ -259,6 +273,8 @@ export const getMessageDetailEffect = (
       fromEmail: m.fromEmail,
       fromName: m.fromName,
       toEmails: m.toEmails,
+      ccEmails,
+      replyAllCc: replyAllCc({ ...m, ccEmails }, m.accountEmail),
       subject: m.subject,
       snippet: m.snippet,
       bodyText: m.bodyText,

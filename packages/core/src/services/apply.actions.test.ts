@@ -14,6 +14,8 @@ import {
   batchModifyMessagesEffect,
   setMessageReadEffect,
   trashMessageEffect,
+  unarchiveMessageEffect,
+  untrashMessageEffect,
 } from "./apply";
 
 const ACCOUNT = "11111111-1111-4111-8111-111111111111";
@@ -100,6 +102,69 @@ describe("trashMessageEffect", () => {
     expect(messageRow("m3").isTrashed).toBe(false);
     // Trashing is not archiving; the other flag stays where it was.
     expect(messageRow("m1").isArchived).toBe(false);
+  });
+});
+
+// The Undo behind "Archived · Undo" and "Moved to trash · Undo", and the way a
+// message leaves the Done view: each action read backwards, in the same order —
+// Gmail first, then the same thread-wide local write with the flag cleared.
+describe("unarchiveMessageEffect", () => {
+  test("puts the thread back in Gmail's inbox and clears the flag thread-wide", async () => {
+    for (const id of ["m1", "m2", "m3"]) messageRow(id).isArchived = true;
+
+    const result = await stores.run(
+      unarchiveMessageEffect({ accountId: ACCOUNT, gmailMessageId: "m2", gmail: gmail.adapter }),
+    );
+
+    expect(result).toEqual({ ok: true, threadId: "thread-a" });
+    expect(gmail.unarchived).toEqual([{ account: "me@example.com", threadId: "thread-a" }]);
+    expect(messageRow("m1").isArchived).toBe(false);
+    expect(messageRow("m2").isArchived).toBe(false);
+    expect(messageRow("m3").isArchived).toBe(true);
+  });
+
+  test("leaves the message archived when Gmail refuses", async () => {
+    messageRow("m1").isArchived = true;
+    gmail.fails = new Error("gmail said no");
+
+    const exit = await runExit(
+      stores.provide(
+        unarchiveMessageEffect({ accountId: ACCOUNT, gmailMessageId: "m1", gmail: gmail.adapter }),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(messageRow("m1").isArchived).toBe(true);
+  });
+});
+
+describe("untrashMessageEffect", () => {
+  test("restores the thread to the inbox, clearing trash and archive both", async () => {
+    // Archived first, then trashed: untrash puts INBOX back, so it is in the
+    // inbox again rather than in Done.
+    Object.assign(messageRow("m1"), { isTrashed: true, isArchived: true });
+    Object.assign(messageRow("m2"), { isTrashed: true });
+
+    const result = await stores.run(
+      untrashMessageEffect({ accountId: ACCOUNT, gmailMessageId: "m1", gmail: gmail.adapter }),
+    );
+
+    expect(result).toEqual({ ok: true, threadId: "thread-a" });
+    expect(gmail.untrashed).toEqual([{ account: "me@example.com", threadId: "thread-a" }]);
+    for (const id of ["m1", "m2"]) {
+      expect(messageRow(id)).toMatchObject({ isTrashed: false, isArchived: false });
+    }
+  });
+
+  test("refuses a message that is not stored, asking Gmail nothing", async () => {
+    const exit = await runExit(
+      stores.provide(
+        untrashMessageEffect({ accountId: ACCOUNT, gmailMessageId: "nope", gmail: gmail.adapter }),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(gmail.untrashed).toEqual([]);
   });
 });
 
@@ -225,6 +290,42 @@ describe("batchModifyMessagesEffect", () => {
 
     expect(gmail.modifications[0]).toMatchObject({ add: ["TRASH"], remove: ["INBOX"] });
     expect(messageRow("m1").isTrashed).toBe(true);
+  });
+
+  // The section-level Undo: the same two writes as a selection's archive and
+  // trash, read backwards.
+  test("unarchiving a selection adds INBOX back and clears each archive flag", async () => {
+    for (const id of ["m1", "m3"]) messageRow(id).isArchived = true;
+
+    await stores.run(
+      batchModifyMessagesEffect({
+        accountId: ACCOUNT,
+        gmailMessageIds: ["m1", "m3"],
+        action: "unarchive",
+        gmail: gmail.adapter,
+      }),
+    );
+
+    expect(gmail.modifications[0]).toMatchObject({ add: ["INBOX"], remove: undefined });
+    expect(attachedTo("m1")).toEqual(["label-inbox"]);
+    expect(messageRow("m1").isArchived).toBe(false);
+    expect(messageRow("m3").isArchived).toBe(false);
+  });
+
+  test("untrashing a selection lifts TRASH, adds INBOX and clears the flags", async () => {
+    Object.assign(messageRow("m1"), { isTrashed: true, isArchived: true });
+
+    await stores.run(
+      batchModifyMessagesEffect({
+        accountId: ACCOUNT,
+        gmailMessageIds: ["m1"],
+        action: "untrash",
+        gmail: gmail.adapter,
+      }),
+    );
+
+    expect(gmail.modifications[0]).toMatchObject({ add: ["INBOX"], remove: ["TRASH"] });
+    expect(messageRow("m1")).toMatchObject({ isTrashed: false, isArchived: false });
   });
 
   test("marking a selection read drops UNREAD and leaves the flags alone", async () => {

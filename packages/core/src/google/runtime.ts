@@ -20,6 +20,7 @@ import {
   GmailModify,
   GmailProfile,
   GmailThreads,
+  GmailDrafts,
   type AccountProfile,
   type TokenGrant,
 } from "./contracts";
@@ -34,6 +35,7 @@ type AppServices =
   | GmailLabels
   | GmailFilters
   | GmailThreads
+  | GmailDrafts
   | GmailModify
   | GmailProfile
   | Claude;

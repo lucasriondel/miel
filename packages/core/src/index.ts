@@ -36,6 +36,7 @@ export {
   GmailLabels,
   GmailFilters,
   GmailThreads,
+  GmailDrafts,
   GmailModify,
   GmailProfile,
   refKey,
@@ -46,6 +47,8 @@ export type {
   SearchHit as GmailSearchHit,
   SendResult as GmailSendResult,
   SendReplyInput,
+  SendMessageInput,
+  SavedDraft as GmailSavedDraft,
   FilterSpec,
   TokenGrant,
 } from "./google/contracts";
@@ -195,6 +198,8 @@ export {
   applyLabels,
   archiveMessage,
   trashMessage,
+  unarchiveMessage,
+  untrashMessage,
   setMessageRead,
   batchModifyMessages,
 } from "./services/apply";
@@ -256,13 +261,19 @@ export type {
   SavePromoArgs,
   SavePromoResult,
 } from "./services/promoCodes";
-export { generateReply, sendReply } from "./services/reply";
+export { generateNewMessage, generateReply, sendNewMessage, sendReply } from "./services/reply";
 export type {
+  GenerateNewMessageArgs,
   GenerateReplyArgs,
   GenerateReplyResult,
+  SendMessageResult,
+  SendNewMessageArgs,
   SendReplyArgs,
   SendReplyResult,
 } from "./services/reply";
+// The compose window's autosave into Gmail drafts.
+export { deleteDraft, saveDraft } from "./services/drafts";
+export type { SaveDraftArgs, SaveDraftResult } from "./services/drafts";
 export {
   downloadAttachment,
   downloadAttachmentEffect,
@@ -356,6 +367,8 @@ export {
   applyLabelsEffect,
   archiveMessageEffect,
   trashMessageEffect,
+  unarchiveMessageEffect,
+  untrashMessageEffect,
   setMessageReadEffect,
   batchModifyMessagesEffect,
 } from "./services/apply";
@@ -366,7 +379,13 @@ export {
   getAccountByIdEffect,
   setMessagePriorityEffect,
 } from "./services/messages";
-export { generateReplyEffect, sendReplyEffect } from "./services/reply";
+export {
+  generateNewMessageEffect,
+  generateReplyEffect,
+  sendNewMessageEffect,
+  sendReplyEffect,
+} from "./services/reply";
+export { deleteDraftEffect, saveDraftEffect } from "./services/drafts";
 export {
   fetchAndTriageEffect,
   syncAllEffect,

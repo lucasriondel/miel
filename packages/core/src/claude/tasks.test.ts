@@ -23,7 +23,7 @@ const { hostedJsonSchema } = await import("./hosted");
 import { BODY_BEARING_TASKS } from "../claudeUsage";
 import { MODEL_TASKS, type ModelTask } from "../providerModels";
 import type { PromoExtractInputT } from "../schemas/promo";
-import type { ReplyGenInputT } from "../schemas/reply";
+import type { NewMailGenInputT, ReplyGenInputT } from "../schemas/reply";
 import type { TriageInputT } from "../schemas/triage";
 
 const TRIAGE: TriageInputT = {
@@ -146,6 +146,29 @@ describe("the task table", () => {
     expect(inlinesBody.toSorted()).toEqual(
       BODY_BEARING_TASKS.map((entry) => entry.task).toSorted(),
     );
+  });
+
+  // Drafting a new mail is the reply task with no message behind it, so it is
+  // held to the same rules as the reply row — one prompt for both transports,
+  // no local API — and it inlines no received body, which is why the published
+  // body-bearing list does not move for it.
+  test("a new mail drafted on the reply task inlines no body and names no local API", () => {
+    const NEW_MAIL: NewMailGenInputT = {
+      sender: "user@example.com",
+      to: ["claire@example.com"],
+      subject: null,
+      userInstruction: "Push dinner to 9, I'll book.",
+    };
+    const spec = claudeTaskSpec("reply");
+    const cli = spec.cliPrompt(NEW_MAIL);
+
+    expect(cli).toBe(spec.hostedPrompt(NEW_MAIL));
+    expect(cli).toContain("Push dinner to 9, I'll book.");
+    expect(cli).toContain("claire@example.com");
+    expect(cli).not.toContain("Original body");
+    expect(cli).not.toContain("curl");
+    expect(cli).not.toContain("localhost");
+    expect(cli).not.toContain(process.env.API_SECRET);
   });
 
   test("each task asks the hosted transport for its own output in its own words", () => {

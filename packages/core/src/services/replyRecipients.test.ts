@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { defaultReplyTo, resolveReplyRecipients } from "./replyRecipients";
+import {
+  ccFromHeaders,
+  defaultReplyTo,
+  replyAllCc,
+  resolveReplyRecipients,
+} from "./replyRecipients";
 
 // Who a reply is addressed to used to be entirely the server's business: the
 // stored message decided, and the UI had no To field at all. The compose window
@@ -64,5 +69,71 @@ describe("resolveReplyRecipients", () => {
     expect(resolveReplyRecipients(message, { to: ["   "] })).toEqual({
       to: ["sender@example.com"],
     });
+  });
+});
+
+// Reply-all: the sender is answered in To, the other participants are copied,
+// and the account replying is never one of them.
+describe("replyAllCc", () => {
+  const thread = {
+    fromEmail: "claire@example.com",
+    toEmails: ["me@example.com", "bob@example.com"],
+    ccEmails: ["Carol@example.com", "claire@example.com"],
+  };
+
+  test("copies the original's other recipients, minus me and the sender", () => {
+    expect(replyAllCc(thread, "ME@example.com")).toEqual(["bob@example.com", "Carol@example.com"]);
+  });
+
+  test("leaves out whoever the reply's To already names", () => {
+    expect(replyAllCc(thread, "me@example.com", ["bob@example.com"])).toEqual([
+      "Carol@example.com",
+      "claire@example.com",
+    ]);
+  });
+
+  test("is nobody for a two-person exchange", () => {
+    expect(replyAllCc(message, "me@example.com")).toEqual([]);
+  });
+});
+
+describe("ccFromHeaders", () => {
+  test("parses the stored Cc header, whatever its case", () => {
+    expect(ccFromHeaders({ cc: "Bob <bob@example.com>, carol@example.com" })).toEqual([
+      "bob@example.com",
+      "carol@example.com",
+    ]);
+    expect(ccFromHeaders({ Cc: "bob@example.com" })).toEqual(["bob@example.com"]);
+  });
+
+  test("is empty with no header, or no headers at all", () => {
+    expect(ccFromHeaders({ to: "x@y.z" })).toEqual([]);
+    expect(ccFromHeaders(null)).toEqual([]);
+  });
+});
+
+describe("resolveReplyRecipients, reply-all and Bcc", () => {
+  const thread = { ...message, ccEmails: ["carol@example.com"] };
+
+  test("reply-all with no Cc typed copies the other participants", () => {
+    expect(resolveReplyRecipients(thread, { replyAll: true }, "me@example.com")).toEqual({
+      to: ["sender@example.com"],
+      cc: ["carol@example.com"],
+    });
+  });
+
+  test("a typed Cc still wins over reply-all's default", () => {
+    expect(
+      resolveReplyRecipients(thread, { replyAll: true, cc: ["x@y.z"] }, "me@example.com").cc,
+    ).toEqual(["x@y.z"]);
+  });
+
+  test("a plain reply copies nobody, even when the original had a Cc", () => {
+    expect(resolveReplyRecipients(thread, {}, "me@example.com").cc).toBeUndefined();
+  });
+
+  test("carries a cleaned Bcc, and omits it when there is none", () => {
+    expect(resolveReplyRecipients(message, { bcc: [" b@c.d ", "B@C.D"] }).bcc).toEqual(["b@c.d"]);
+    expect(resolveReplyRecipients(message, { bcc: [] }).bcc).toBeUndefined();
   });
 });

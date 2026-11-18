@@ -9,7 +9,7 @@
  * Methods no message action uses throw rather than answering emptily: a suite
  * that reaches one has strayed out of the flow it is describing.
  */
-import type { GmailDataAdapter } from "../google/gmailAdapter";
+import type { GmailDataAdapter, OutgoingMessage } from "../google/gmailAdapter";
 import type { GogLabelT } from "../schemas/gmail";
 
 export interface ModifyCall {
@@ -24,14 +24,33 @@ export interface ThreadCall {
   threadId: string;
 }
 
+/** A send as the adapter was asked for it; `replyToMessageId` marks a reply. */
+export interface SendCall extends OutgoingMessage {
+  account: string;
+  replyToMessageId?: string;
+}
+
+export interface DraftCall extends OutgoingMessage {
+  account: string;
+  draftId?: string;
+  replyToMessageId?: string;
+}
+
 export interface RecordingGmail {
   readonly adapter: GmailDataAdapter;
   /** Every `batchModifyLabels`, in order. */
   readonly modifications: ModifyCall[];
   readonly archived: ThreadCall[];
   readonly trashed: ThreadCall[];
+  readonly unarchived: ThreadCall[];
+  readonly untrashed: ThreadCall[];
   /** Every label Gmail was asked to create, in order. */
   readonly createdLabels: string[];
+  /** Every send, reply or new, in order. Each answers `sent-<n>` in `thread-<n>`. */
+  readonly sent: SendCall[];
+  /** Every draft save; a new one answers `draft-<n>`. */
+  readonly savedDrafts: DraftCall[];
+  readonly deletedDrafts: { account: string; draftId: string }[];
   /** Set to fail the next Gmail call the way a rejected request does. */
   fails: Error | null;
 }
@@ -48,7 +67,12 @@ export function makeRecordingGmail(options?: {
     modifications: [] as ModifyCall[],
     archived: [] as ThreadCall[],
     trashed: [] as ThreadCall[],
+    unarchived: [] as ThreadCall[],
+    untrashed: [] as ThreadCall[],
     createdLabels: [] as string[],
+    sent: [] as SendCall[],
+    savedDrafts: [] as DraftCall[],
+    deletedDrafts: [] as { account: string; draftId: string }[],
     fails: null as Error | null,
   };
 
@@ -69,6 +93,14 @@ export function makeRecordingGmail(options?: {
       await orFail();
       recording.trashed.push(o);
     },
+    unarchiveThread: async (o) => {
+      await orFail();
+      recording.unarchived.push(o);
+    },
+    untrashThread: async (o) => {
+      await orFail();
+      recording.untrashed.push(o);
+    },
     createLabel: async (o) => {
       await orFail();
       recording.createdLabels.push(o.name);
@@ -86,7 +118,28 @@ export function makeRecordingGmail(options?: {
     },
     searchMessages: unused("searchMessages"),
     getMessage: unused("getMessage"),
-    sendReply: unused("sendReply"),
+    sendReply: async (o) => {
+      await orFail();
+      recording.sent.push(o);
+      const n = recording.sent.length;
+      return { messageId: `sent-${n}`, threadId: `thread-of-${o.replyToMessageId}` };
+    },
+    sendNew: async (o) => {
+      await orFail();
+      recording.sent.push(o);
+      const n = recording.sent.length;
+      return { messageId: `sent-${n}`, threadId: `thread-${n}` };
+    },
+    saveDraft: async (o) => {
+      await orFail();
+      recording.savedDrafts.push(o);
+      const draftId = o.draftId ?? `draft-${recording.savedDrafts.length}`;
+      return { draftId, messageId: `draft-msg-${recording.savedDrafts.length}`, threadId: "t" };
+    },
+    deleteDraft: async (o) => {
+      await orFail();
+      recording.deletedDrafts.push(o);
+    },
     listFilters: unused("listFilters"),
     createFilter: unused("createFilter"),
     deleteFilter: unused("deleteFilter"),

@@ -122,6 +122,13 @@ export interface MessageListFilter {
   labelId?: string;
   priority?: PriorityT;
   includeArchived?: boolean;
+  /**
+   * Only the archived ones — the Done view. "Done" is Gmail's archive, not a
+   * flag of miel's, so this is the other side of the inbox's own filter. It
+   * wins over `includeArchived`; trashed and removed mail stay out unless asked
+   * for, exactly as they do from the inbox.
+   */
+  archivedOnly?: boolean;
   includeTrashed?: boolean;
   includeRemoved?: boolean;
   internalDateFrom?: Date;
@@ -388,6 +395,24 @@ export interface PromoCodeWithAccount extends StoredPromoCode {
 }
 
 /**
+ * The mail an unsaved detection came from, as the suggestions read joins it:
+ * metadata only, never a body. A suggestion has no copy of its mail (that is
+ * written at save time), but its mail is still in the inbox — the read's own
+ * rule — so the join can name it, which is what a "To review" card shows.
+ */
+export interface PromoMailSummary {
+  subject: string | null;
+  fromName: string | null;
+  fromEmail: string;
+  internalDate: Date;
+}
+
+/** An unsaved detection, with the mail it was read out of. */
+export interface SuggestedPromoCode extends PromoCodeWithAccount {
+  mail: PromoMailSummary;
+}
+
+/**
  * The suggestions read: unsaved detections whose mail is still in the inbox.
  *
  * Every field is optional, and which are named is what tells the two callers
@@ -417,9 +442,10 @@ export interface PromoStoreImpl {
   /**
    * The unsaved detections, newest mail first — an account's window, or every
    * account's when the filter names neither. Each row names its own mailbox,
-   * for the reason a saved one does: the global read shows it as a column.
+   * for the reason a saved one does: the global read shows it as a column —
+   * and its mail's subject, sender and date, which the join already has.
    */
-  readonly unsaved: (filter: PromoSuggestionFilter) => Effect.Effect<PromoCodeWithAccount[]>;
+  readonly unsaved: (filter: PromoSuggestionFilter) => Effect.Effect<SuggestedPromoCode[]>;
   /**
    * Every saved row, every account, newest saved first — the page is global,
    * because which mailbox a code arrived in is trivia at a checkout. Each row

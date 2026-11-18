@@ -7,7 +7,7 @@
 // reached only through the store seam (#136) — `MessageStore` and `LabelStore` —
 // so what is left here is the ordering and the label-id scoping.
 import { Effect } from "effect";
-import { LabelStore, MessageStore } from "../stores/contracts";
+import { LabelStore, MessageStore, type MessageFlags } from "../stores/contracts";
 import { runWithStores } from "../stores/postgres";
 import { createGmailAdapter, type GmailDataAdapter } from "../google/gmailAdapter";
 import { createDebug } from "../util/debug";
@@ -173,9 +173,9 @@ const threadActionEffect = (
     gmail?: GmailDataAdapter;
   },
   action: {
-    name: "archiveMessage" | "trashMessage";
+    name: "archiveMessage" | "trashMessage" | "unarchiveMessage" | "untrashMessage";
     inGmail: (gmail: GmailDataAdapter, o: { account: string; threadId: string }) => Promise<void>;
-    flags: { isArchived: true } | { isTrashed: true };
+    flags: MessageFlags;
   },
 ): Effect.Effect<{ ok: true; threadId: string }, Error, MessageStore> =>
   Effect.gen(function* () {
@@ -224,7 +224,50 @@ export const trashMessageEffect = (args: {
     flags: { isTrashed: true },
   });
 
-export type BatchMessageAction = "read" | "unread" | "archive" | "trash" | "label";
+/**
+ * The undos of the two above, for the toast's Undo and the Done view.
+ *
+ * Each is its action read backwards, at the same two places: Gmail first (INBOX
+ * back on; for untrash, TRASH off too), then the same thread-wide local write
+ * with the flag cleared. Untrash clears `isArchived` as well, because the thread
+ * it answers now carries INBOX — a message that was archived before it was
+ * trashed comes back to the inbox, which is where Gmail puts it.
+ *
+ * "Done" is Gmail's archive and nothing else, so unarchive is also how a message
+ * leaves the Done view: there is no third flag.
+ */
+export const unarchiveMessageEffect = (args: {
+  accountId?: string;
+  accountEmail?: string;
+  gmailMessageId: string;
+  gmail?: GmailDataAdapter;
+}): Effect.Effect<{ ok: true; threadId: string }, Error, MessageStore> =>
+  threadActionEffect(args, {
+    name: "unarchiveMessage",
+    inGmail: (gmail, o) => gmail.unarchiveThread(o),
+    flags: { isArchived: false },
+  });
+
+export const untrashMessageEffect = (args: {
+  accountId?: string;
+  accountEmail?: string;
+  gmailMessageId: string;
+  gmail?: GmailDataAdapter;
+}): Effect.Effect<{ ok: true; threadId: string }, Error, MessageStore> =>
+  threadActionEffect(args, {
+    name: "untrashMessage",
+    inGmail: (gmail, o) => gmail.untrashThread(o),
+    flags: { isTrashed: false, isArchived: false },
+  });
+
+export type BatchMessageAction =
+  | "read"
+  | "unread"
+  | "archive"
+  | "trash"
+  | "unarchive"
+  | "untrash"
+  | "label";
 
 /** The four flag actions; everything that is a label delta and nothing else. */
 type FlagBatchAction = Exclude<BatchMessageAction, "label">;
@@ -270,6 +313,10 @@ export function gmailLabelDeltasForBatchAction(resolved: ResolvedBatchAction): {
       return { add: [], remove: ["INBOX"] };
     case "trash":
       return { add: ["TRASH"], remove: ["INBOX"] };
+    case "unarchive":
+      return { add: ["INBOX"], remove: [] };
+    case "untrash":
+      return { add: ["INBOX"], remove: ["TRASH"] };
     case "label":
       return { add: [resolved.gmailLabelId], remove: [] };
   }
@@ -299,6 +346,21 @@ const resolveBatchActionEffect = (
         }
         return { action: "label", gmailLabelId: label.gmailLabelId } as const;
       });
+
+/**
+ * The local flags each batch action writes, beside its Gmail label delta. The
+ * undos clear what their actions set — and untrash clears archive too, for the
+ * reason `untrashMessageEffect` does. Read, unread and label touch no flag.
+ */
+const BATCH_FLAGS: Record<BatchMessageAction, MessageFlags | null> = {
+  read: null,
+  unread: null,
+  label: null,
+  archive: { isArchived: true },
+  trash: { isTrashed: true },
+  unarchive: { isArchived: false },
+  untrash: { isTrashed: false, isArchived: false },
+};
 
 export const batchModifyMessagesEffect = (
   args: {
@@ -366,12 +428,13 @@ export const batchModifyMessagesEffect = (
       }),
     );
 
-    if (args.action === "archive" || args.action === "trash") {
+    const flags = BATCH_FLAGS[args.action];
+    if (flags) {
       yield* MessageStore.use((svc) =>
         svc.setFlagsForMessages({
           accountId: ctx.accountId,
           gmailMessageIds: args.gmailMessageIds,
-          flags: args.action === "archive" ? { isArchived: true } : { isTrashed: true },
+          flags,
         }),
       );
     }
@@ -462,6 +525,24 @@ export async function trashMessage(args: {
   gmail?: GmailDataAdapter;
 }): Promise<{ ok: true; threadId: string }> {
   return runWithStores(trashMessageEffect(args));
+}
+
+export async function unarchiveMessage(args: {
+  accountId?: string;
+  accountEmail?: string;
+  gmailMessageId: string;
+  gmail?: GmailDataAdapter;
+}): Promise<{ ok: true; threadId: string }> {
+  return runWithStores(unarchiveMessageEffect(args));
+}
+
+export async function untrashMessage(args: {
+  accountId?: string;
+  accountEmail?: string;
+  gmailMessageId: string;
+  gmail?: GmailDataAdapter;
+}): Promise<{ ok: true; threadId: string }> {
+  return runWithStores(untrashMessageEffect(args));
 }
 
 export async function batchModifyMessages(

@@ -290,7 +290,9 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
         data.messages
           .filter((m) => {
             if (filter.accountId && m.accountId !== filter.accountId) return false;
-            if (!filter.includeArchived && m.isArchived) return false;
+            if (filter.archivedOnly) {
+              if (!m.isArchived) return false;
+            } else if (!filter.includeArchived && m.isArchived) return false;
             if (!filter.includeTrashed && m.isTrashed) return false;
             if (!filter.includeRemoved && m.removedAt !== null) return false;
             if (filter.internalDateFrom && m.internalDate < filter.internalDateFrom) return false;
@@ -548,7 +550,16 @@ export function makeFakeMailbox(seed?: MailboxSeed): FakeMailbox {
             if (!owner) return [];
             return [
               {
-                promo: { ...copyOf(p), accountEmail: owner.email },
+                promo: {
+                  ...copyOf(p),
+                  accountEmail: owner.email,
+                  mail: {
+                    subject: mail.subject,
+                    fromName: mail.fromName,
+                    fromEmail: mail.fromEmail,
+                    internalDate: mail.internalDate,
+                  },
+                },
                 internalDate: mail.internalDate,
               },
             ];

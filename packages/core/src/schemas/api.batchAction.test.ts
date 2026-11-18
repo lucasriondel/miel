@@ -12,8 +12,8 @@ const LABEL = "22222222-2222-4222-8222-222222222222";
 const TARGET = { accountId: ACCOUNT, gmailMessageIds: ["m1", "m2"] };
 
 describe("BatchMessageActionRequest", () => {
-  test("takes the four flag actions with nothing else", () => {
-    for (const action of ["read", "unread", "archive", "trash"] as const) {
+  test("takes the flag actions, and their two undos, with nothing else", () => {
+    for (const action of ["read", "unread", "archive", "trash", "unarchive", "untrash"] as const) {
       expect(BatchMessageActionRequest.parse({ ...TARGET, action })).toEqual({ ...TARGET, action });
     }
   });

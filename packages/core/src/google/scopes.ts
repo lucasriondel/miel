@@ -8,9 +8,10 @@
  * Same shape as `appBasePath.ts`: one fact, no dependencies, several importers.
  *
  * Minimal scope set covering every Gmail operation miel performs:
- * - `gmail.modify`  → search, get, batchModify, thread trash/archive, label CRUD
+ * - `gmail.modify`  → search, get, batchModify, thread trash/archive and their
+ *                     undos, label CRUD, drafts (the compose autosave)
  *                     (a superset of readonly + labels, so those aren't needed)
- * - `gmail.send`    → reply send
+ * - `gmail.send`    → sending a reply or a new message
  * - `gmail.settings.basic` → filters list/create
  * - `userinfo.{profile,email}` → display name, avatar, canonical account email
  */

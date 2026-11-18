@@ -379,6 +379,21 @@ export function promoStoreContract(label: string, worldFor: () => Promise<PromoW
       expect(rows.find((r) => r.id === mine.id)?.accountEmail).toBe(accountEmail);
     });
 
+    // A "To review" card shows the mail a detection came from. The suggestion
+    // has no copy of it — that is the save's — but its mail is in the inbox by
+    // this read's own rule, so the join names it, metadata only.
+    test("names the mail each suggestion came from, without taking a copy", async () => {
+      const row = await extract();
+
+      const [suggested] = (await suggestions()).filter((r) => r.id === row.id);
+      expect(suggested.mail.internalDate.toISOString()).toBe(IN_WINDOW.toISOString());
+      expect(typeof suggested.mail.fromEmail).toBe("string");
+      expect(suggested).not.toHaveProperty("mail.bodyHtml");
+      // The copy columns are still the save's to write.
+      expect(suggested.subject).toBeNull();
+      expect(suggested.internalDate).toBeNull();
+    });
+
     test("stops suggesting a detection whose message left the inbox", async () => {
       const trashed = await extract({ isTrashed: true });
 

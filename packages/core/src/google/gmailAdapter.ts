@@ -11,6 +11,7 @@
  * flow now.
  */
 import {
+  GmailDrafts,
   GmailFilters,
   GmailLabels,
   GmailMessages,
@@ -27,6 +28,22 @@ export interface SearchHit {
 }
 export interface SendResult {
   messageId: string;
+  /** The thread the sent message is in — what a "View in Gmail" link needs. */
+  threadId: string;
+}
+export interface SavedDraft {
+  draftId: string;
+  messageId: string;
+  threadId: string;
+}
+
+/** What every outgoing message carries, reply or not. */
+export interface OutgoingMessage {
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  body: string;
 }
 export interface AttachmentBytes {
   data: Uint8Array;
@@ -58,14 +75,21 @@ export interface GmailDataAdapter {
   }): Promise<void>;
   trashThread(o: { account: string; threadId: string }): Promise<void>;
   archiveThread(o: { account: string; threadId: string }): Promise<void>;
-  sendReply(o: {
-    account: string;
-    to: string[];
-    cc?: string[];
-    subject: string;
-    body: string;
-    replyToMessageId: string;
-  }): Promise<SendResult>;
+  unarchiveThread(o: { account: string; threadId: string }): Promise<void>;
+  untrashThread(o: { account: string; threadId: string }): Promise<void>;
+  sendReply(
+    o: OutgoingMessage & { account: string; replyToMessageId: string },
+  ): Promise<SendResult>;
+  /** A message that answers nothing: no thread, no threading headers. */
+  sendNew(o: OutgoingMessage & { account: string }): Promise<SendResult>;
+  /**
+   * Create a draft, or replace the one `draftId` names. A reply draft names the
+   * message it answers, and is threaded the way the send would be.
+   */
+  saveDraft(
+    o: OutgoingMessage & { account: string; draftId?: string; replyToMessageId?: string },
+  ): Promise<SavedDraft>;
+  deleteDraft(o: { account: string; draftId: string }): Promise<void>;
   listFilters(o: { account: string }): Promise<GogFilterT[]>;
   createFilter(o: {
     account: string;
@@ -88,6 +112,15 @@ export interface GmailDataAdapter {
 
 const ref = (account: string): AccountRef => ({ email: account });
 
+/** The address lists, subject and body, without the adapter's `account`. */
+const outgoing = (o: OutgoingMessage): OutgoingMessage => ({
+  to: o.to,
+  cc: o.cc,
+  bcc: o.bcc,
+  subject: o.subject,
+  body: o.body,
+});
+
 export function createGmailAdapter(): GmailDataAdapter {
   return {
     searchMessages: (o) =>
@@ -103,6 +136,10 @@ export function createGmailAdapter(): GmailDataAdapter {
       runWithApp(GmailThreads.use((svc) => svc.trash(ref(o.account), o.threadId))),
     archiveThread: (o) =>
       runWithApp(GmailThreads.use((svc) => svc.archive(ref(o.account), o.threadId))),
+    unarchiveThread: (o) =>
+      runWithApp(GmailThreads.use((svc) => svc.unarchive(ref(o.account), o.threadId))),
+    untrashThread: (o) =>
+      runWithApp(GmailThreads.use((svc) => svc.untrash(ref(o.account), o.threadId))),
     // Fetch the original first for its threadId + Message-ID header so the
     // reply threads correctly, then send.
     sendReply: async (o) => {
@@ -110,10 +147,7 @@ export function createGmailAdapter(): GmailDataAdapter {
       return runWithApp(
         GmailMessages.use((svc) =>
           svc.send(ref(o.account), {
-            to: o.to,
-            cc: o.cc,
-            subject: o.subject,
-            body: o.body,
+            ...outgoing(o),
             replyToMessageId: o.replyToMessageId,
             threadId: original.threadId,
             inReplyToHeader: messageIdHeader(original),
@@ -121,6 +155,31 @@ export function createGmailAdapter(): GmailDataAdapter {
         ),
       );
     },
+    sendNew: (o) => runWithApp(GmailMessages.use((svc) => svc.send(ref(o.account), outgoing(o)))),
+    saveDraft: async (o) => {
+      const replyTo = o.replyToMessageId;
+      const original = replyTo
+        ? await runWithApp(threadingFor(ref(o.account), replyTo))
+        : undefined;
+      return runWithApp(
+        GmailDrafts.use((svc) =>
+          svc.save(ref(o.account), {
+            draftId: o.draftId,
+            message: {
+              ...outgoing(o),
+              ...(original
+                ? {
+                    replyToMessageId: replyTo,
+                    threadId: original.threadId,
+                    inReplyToHeader: messageIdHeader(original),
+                  }
+                : {}),
+            },
+          }),
+        ),
+      );
+    },
+    deleteDraft: (o) => runWithApp(GmailDrafts.use((svc) => svc.delete(ref(o.account), o.draftId))),
     listFilters: (o) => runWithApp(GmailFilters.use((svc) => svc.list(ref(o.account)))),
     createFilter: (o) =>
       runWithApp(

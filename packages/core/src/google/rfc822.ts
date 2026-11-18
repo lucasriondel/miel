@@ -13,6 +13,12 @@ export interface Rfc822Input {
   to: string[];
   /** Carbon-copy addresses, editable from the compose window (#96). */
   cc?: string[];
+  /**
+   * Blind copy. Written as a header in the raw message, which is how Gmail's
+   * send endpoint is told about it: Gmail delivers to these addresses and strips
+   * the header from what every recipient receives.
+   */
+  bcc?: string[];
   /** Subject (caller should already have prefixed "Re: " when replying). */
   subject: string;
   /** Plain-text body. */
@@ -37,13 +43,14 @@ function base64url(s: string): string {
     .replace(/=+$/, "");
 }
 
-/** Construct the base64url `raw` value for a (reply) message. */
+/** Construct the base64url `raw` value for a reply or a new message. */
 export function buildRawMessage(input: Rfc822Input): string {
   const headers: string[] = [
     `To: ${input.to.join(", ")}`,
     // An empty Cc header is not the same as no Cc header — some servers reject
     // it — so the line only exists when there is an address on it.
     ...(input.cc && input.cc.length > 0 ? [`Cc: ${input.cc.join(", ")}`] : []),
+    ...(input.bcc && input.bcc.length > 0 ? [`Bcc: ${input.bcc.join(", ")}`] : []),
     `Subject: ${encodeHeader(input.subject)}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',

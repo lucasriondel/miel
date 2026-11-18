@@ -171,7 +171,9 @@ const messagesImpl: MessageStoreImpl = {
       if (filter.accountId) {
         conditions.push(eq(messages.accountId, filter.accountId));
       }
-      if (!filter.includeArchived) {
+      if (filter.archivedOnly) {
+        conditions.push(eq(messages.isArchived, true));
+      } else if (!filter.includeArchived) {
         conditions.push(eq(messages.isArchived, false));
       }
       if (!filter.includeTrashed) {
@@ -611,7 +613,16 @@ const promosImpl: PromoStoreImpl = {
       }
       return yield* Effect.promise(() =>
         db
-          .select({ ...PROMO_COLUMNS, accountEmail: accounts.email })
+          .select({
+            ...PROMO_COLUMNS,
+            accountEmail: accounts.email,
+            mail: {
+              subject: messages.subject,
+              fromName: messages.fromName,
+              fromEmail: messages.fromEmail,
+              internalDate: messages.internalDate,
+            },
+          })
           .from(promoCodes)
           .innerJoin(
             messages,

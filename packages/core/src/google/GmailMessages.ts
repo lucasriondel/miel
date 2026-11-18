@@ -4,14 +4,15 @@
  * `search` → `messages.list(q)`; `get` → `messages.get(format=full)` whose
  * response IS the `payload` tree the existing `GogMessageRaw` schema models, so
  * downstream body/attachment extraction (`util/gmailPayload`) works unchanged;
- * `send` → `messages.send(raw, threadId)` for in-thread replies.
+ * `send` → `messages.send(raw, threadId)` for in-thread replies, or
+ * `messages.send(raw)` with no thread for a new message.
  */
 import { Effect, Layer } from "effect";
 import { google } from "googleapis";
 import { GmailParseError, GmailSendError } from "../errors";
 import { GogMessageRaw } from "../schemas/gmail";
 import { createDebug } from "../util/debug";
-import { toGmailError } from "./gmailErrors";
+import { gmailRefusalDetail, toGmailError } from "./gmailErrors";
 import { buildRawMessage } from "./rfc822";
 import {
   GmailMessages,
@@ -76,6 +77,7 @@ const impl: GmailMessagesImpl = {
       const raw = buildRawMessage({
         to: msg.to,
         cc: msg.cc,
+        bcc: msg.bcc,
         subject: msg.subject,
         body: msg.body,
         inReplyTo: msg.inReplyToHeader,
@@ -84,11 +86,15 @@ const impl: GmailMessagesImpl = {
         try: () =>
           gmail.users.messages.send({
             userId: "me",
-            requestBody: { raw, threadId: msg.threadId },
+            // No threadId is a new message: Gmail starts a thread for it.
+            requestBody: msg.threadId ? { raw, threadId: msg.threadId } : { raw },
           }),
-        catch: (cause) => new GmailSendError({ cause }),
+        catch: (cause) => new GmailSendError({ cause, detail: gmailRefusalDetail(cause) }),
       });
-      const result: SendResult = { messageId: res.data.id ?? "" };
+      const result: SendResult = {
+        messageId: res.data.id ?? "",
+        threadId: res.data.threadId ?? msg.threadId ?? "",
+      };
       debug("send done", { ref: key, sentMessageId: result.messageId });
       return result;
     }),

@@ -74,6 +74,21 @@ describe("buildRawMessage", () => {
     }
   });
 
+  // Bcc travels as a header in `raw`; Gmail delivers to it and strips it from
+  // what the recipients see, so the header is the whole of the mechanism.
+  test("carries a Bcc header when the caller supplies one, and none otherwise", () => {
+    const withBcc = decode(
+      buildRawMessage({ to: ["a@b.c"], bcc: ["d@e.f"], subject: "hi", body: "hey" }),
+    );
+    const [headerBlock] = withBcc.split("\r\n\r\n");
+    expect(headerBlock).toContain("Bcc: d@e.f");
+
+    for (const bcc of [undefined, []]) {
+      const message = decode(buildRawMessage({ to: ["a@b.c"], bcc, subject: "hi", body: "hey" }));
+      expect(message).not.toContain("Bcc:");
+    }
+  });
+
   test("RFC 2047 encodes a non-ASCII subject", () => {
     const subject = "Re: café ☕";
     const raw = buildRawMessage({

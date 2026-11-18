@@ -53,8 +53,16 @@ const page = (stores: TestStores, now = NOW): Promise<SavedPromosPage> =>
 const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
 
 describe("what a saved promo carries", () => {
-  test("the promo's own fields, and the mailbox it arrived in", async () => {
-    const stores = seed([saved("p1")]);
+  test("the promo's own fields, the mailbox it arrived in, and when it was saved", async () => {
+    const stores = seed([
+      saved("p1", {
+        subject: "Weekend sale",
+        fromName: "Zara",
+        fromEmail: "news@zara.example",
+        internalDate: "2026-08-30T08:00:00.000Z",
+        bodyHtml: "<p>never listed</p>",
+      }),
+    ]);
 
     const { active } = await page(stores);
 
@@ -69,6 +77,12 @@ describe("what a saved promo carries", () => {
         terms: "orders over £50",
         expiresAt: expiring("2026-12-24").toISOString(),
         merchant: "Zara",
+        // The reader's "Saved Oct 27", and the copy's short fields — never a body.
+        savedAt: "2026-09-01T09:00:00.000Z",
+        subject: "Weekend sale",
+        fromName: "Zara",
+        fromEmail: "news@zara.example",
+        internalDate: "2026-08-30T08:00:00.000Z",
       },
     ]);
   });
