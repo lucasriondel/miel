@@ -7,9 +7,10 @@ import {
 /**
  * The redirect URI this page would expect Google to send the browser back to:
  * the API's callback path on the API address the app was built with, resolved
- * against this page's origin. A suggestion, not the server's own setting — the
- * server never reports `GOOGLE_REDIRECT_URI` — which is why the step tells the
- * reader to register *and* set it.
+ * against this page's origin — `<server URL>/api/auth/google/callback` for the
+ * same-origin deployment. A suggestion for a server with no client yet; once
+ * one is in effect, its own redirect URI is what the form starts from
+ * (`defaultRedirectUri`).
  */
 export function suggestedRedirectUri(apiBase: string, origin: string): string {
   return new URL(`${apiBase}${GOOGLE_OAUTH_CALLBACK_PATH}`, origin).href;

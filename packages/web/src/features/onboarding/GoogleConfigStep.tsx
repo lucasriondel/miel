@@ -1,46 +1,46 @@
+import type { GoogleOAuthConfigStatus } from "../../api/types";
 import { apiBase } from "../../config";
-import { GateButton } from "./GateButton";
+import { GoogleClientForm } from "../google-oauth/GoogleClientForm";
+import { defaultRedirectUri } from "../google-oauth/googleClientDraft";
+import { EnvAlternativeFootnote } from "./EnvAlternativeFootnote";
 import { GateIntro } from "./GateIntro";
 import { GoogleOAuthSteps } from "./GoogleOAuthSteps";
-import { MissingEnvList } from "./MissingEnvList";
-import { RedirectUriField } from "./RedirectUriField";
 import { SetupPromptCard } from "./SetupPromptCard";
-import { googleSetupPrompt, suggestedRedirectUri } from "./setupPrompt";
+import { googleSetupPrompt } from "./setupPrompt";
 
 interface Props {
   titleId: string;
   descriptionId: string;
-  /** The `GOOGLE_*` variable names the server reports as unset. */
-  missing: readonly string[];
+  /** What the server reports: no client yet, or the one it had. */
+  status: GoogleOAuthConfigStatus;
   /** A re-check of the server's configuration is in flight. */
   checking: boolean;
   onCheckAgain: () => void;
 }
 
 /**
- * The Google step (#120): the server has no Google OAuth client, so there is no
- * consent URL to send anyone to and the connect step after it would offer a
- * button that can only fail.
+ * The Google step (#120, A15): the server has no Google OAuth client, so there
+ * is no consent URL to send anyone to and the connect step after it would offer
+ * a button that can only fail.
  *
- * Its work happens outside the app. The redesign draws a form that saves the
- * client id and secret; miel keeps them as environment variables read by the
- * API process, so there is nothing to paste here: naming what is missing,
- * saying where the values come from and where to put them is the whole of what
- * the browser can do. The step clears when the API is restarted with them set,
- * which "Check again" (or the gate's next refetch) notices.
+ * The client is pasted here and saved in miel; the save writes the status into
+ * the gate's cache, which is what moves the gate on, and the client takes
+ * effect on the next sign-in with nothing restarted. The server's `.env` is
+ * still read as the fallback, which the footnote names for an operator who
+ * would rather keep it there.
  *
- * Which is why the walkthrough is here in full (#138) — as the design's setup
- * prompt for an assistant, and as the ordered list {@link GoogleOAuthSteps}
- * the README and the public guide read from core.
+ * The walkthrough is here in full (#138) — as the design's setup prompt for an
+ * assistant, and as the ordered list {@link GoogleOAuthSteps} the README and
+ * the public guide read from core.
  */
 export const GoogleConfigStep = ({
   titleId,
   descriptionId,
-  missing,
+  status,
   checking,
   onCheckAgain,
 }: Props) => {
-  const redirectUri = suggestedRedirectUri(apiBase, window.location.origin);
+  const redirectUri = defaultRedirectUri(status, apiBase, window.location.origin);
   return (
     <>
       <GateIntro
@@ -48,15 +48,12 @@ export const GoogleConfigStep = ({
         descriptionId={descriptionId}
         title="Create a Google OAuth client"
       >
-        miel signs into Gmail with your own Google client, and this server has not been given one
-        yet. Create it, put its values in the <code className="font-mono">.env</code> file at the
-        root of the deployment, then restart the API.
+        miel signs into Gmail with your own Google client. Have an assistant walk you through
+        creating one, then paste its values below.
       </GateIntro>
       <SetupPromptCard prompt={googleSetupPrompt(redirectUri)} />
-      <RedirectUriField uri={redirectUri} />
-      <div className="mt-5 w-full text-left">
-        <div className="mb-2 text-[13px] font-semibold text-gousse-ink">Missing on the server</div>
-        <MissingEnvList names={missing} />
+      <div className="mt-5 w-full">
+        <GoogleClientForm status={status} variant="gate" />
       </div>
       <details className="group mt-5 w-full text-left">
         <summary className="cursor-pointer text-[13px] font-semibold text-gousse-ink marker:text-gousse-muted">
@@ -66,14 +63,7 @@ export const GoogleConfigStep = ({
           <GoogleOAuthSteps />
         </div>
       </details>
-      <GateButton
-        className="mt-6 w-full"
-        onClick={onCheckAgain}
-        pending={checking}
-        pendingLabel="Checking…"
-      >
-        I've restarted the API — check again
-      </GateButton>
+      <EnvAlternativeFootnote checking={checking} onCheckAgain={onCheckAgain} />
     </>
   );
 };

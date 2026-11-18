@@ -19,6 +19,7 @@ import type {
   GoogleOAuthConfigStatus,
   ModelSettings,
 } from "../../api/types";
+import { NO_GOOGLE_CLIENT, googleOAuthStatus } from "../../api/googleOAuthStatus.fixture";
 
 /**
  * The one seam stubbed: the api client, which is where this render would leave
@@ -62,16 +63,14 @@ mock.module("../../api/client", () => ({
 const { OnboardingGate } = await import("./OnboardingGate");
 const { queryKeys } = await import("../../api/queries");
 
-const CONFIGURED: GoogleOAuthConfigStatus = { configured: true, missing: [] };
-const UNCONFIGURED: GoogleOAuthConfigStatus = {
-  configured: false,
-  missing: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
-};
+const CONFIGURED: GoogleOAuthConfigStatus = googleOAuthStatus();
+const UNCONFIGURED: GoogleOAuthConfigStatus = NO_GOOGLE_CLIENT;
 
 const ACCOUNT: Account = {
   id: "acc-1",
   email: "you@example.com",
   displayName: "You",
+  nickname: null,
   avatarUrl: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   lastSyncedAt: null,
@@ -165,11 +164,11 @@ describe("which step the gate opens on", () => {
     renderGate(AT_CONFIG_STEP);
 
     expect(title()).toBe("Create a Google OAuth client");
-    // The server's own list of names, not a fixed three guessed here.
-    const missing = within(dialog().getByRole("list", { name: "Missing variables" }));
-    expect(missing.getByText("GOOGLE_CLIENT_ID")).toBeDefined();
-    expect(missing.getByText("GOOGLE_CLIENT_SECRET")).toBeDefined();
-    expect(missing.queryByText("GOOGLE_REDIRECT_URI")).toBeNull();
+    // The client is pasted in the step itself (A15), not set on the server.
+    expect(dialog().getByLabelText("Client ID")).toBeDefined();
+    expect(dialog().getByLabelText("Client secret")).toBeDefined();
+    expect(dialog().getByLabelText("Redirect URI")).toBeDefined();
+    expect(dialog().getByRole("button", { name: "Save and continue" })).toBeDefined();
   });
 
   test("asks for a mailbox once the server can sign someone in", () => {
@@ -263,12 +262,13 @@ describe("no way past it", () => {
     }
   });
 
-  test("the config step asks for nothing — those variables are the server's own", () => {
+  test("the config step's only way on is saving a client", () => {
     renderGate(AT_CONFIG_STEP);
 
-    // Nothing to paste: the work happens outside the app, so naming what is
-    // missing, a prompt to copy and a re-check are all the browser can offer.
-    expect(dialog().queryAllByRole("textbox")).toHaveLength(0);
+    // The client is pasted here (A15), and the one button that moves the gate
+    // is the save — pressable only once there is something to save.
+    const save = dialog().getByRole<HTMLButtonElement>("button", { name: "Save and continue" });
+    expect(save.disabled).toBe(true);
   });
 });
 

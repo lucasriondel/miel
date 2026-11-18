@@ -24,6 +24,7 @@ import type {
   ModelSettings,
 } from "../../api/types";
 import { OnboardingGate } from "./OnboardingGate";
+import { googleOAuthStatus } from "../../api/googleOAuthStatus.fixture";
 
 const CONSENT_URL = "https://accounts.google.com/o/oauth2/v2/auth?state=abc";
 
@@ -58,11 +59,12 @@ afterEach(() => {
   window.location.href = startedAt;
 });
 
-const CONFIGURED: GoogleOAuthConfigStatus = { configured: true, missing: [] };
+const CONFIGURED: GoogleOAuthConfigStatus = googleOAuthStatus();
 const ACCOUNT: Account = {
   id: "acc-1",
   email: "you@example.com",
   displayName: "You",
+  nickname: null,
   avatarUrl: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   lastSyncedAt: null,

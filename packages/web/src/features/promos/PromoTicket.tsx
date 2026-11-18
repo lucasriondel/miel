@@ -6,6 +6,7 @@ import { PromoMonogram } from "./PromoMonogram";
 import { promoMerchant, shopDomain } from "./promoPresentation";
 import { PromoTicketDetail } from "./PromoTicketDetail";
 import { savedDayLabel } from "./promoDates";
+import { useMailboxName } from "./useMailboxName";
 import { NO_EXPIRY_LABEL } from "./promoExpiryLabel";
 
 interface Props {
@@ -37,9 +38,10 @@ const VALID_UNTIL = new Intl.DateTimeFormat(undefined, {
 export const PromoTicket = ({ promo, now, expired }: Props) => {
   const merchant = promoMerchant(promo);
   const shop = shopDomain(promo.fromEmail);
+  const mailbox = useMailboxName(promo.accountEmail);
   const provenance = promo.savedAt
-    ? `Saved ${savedDayLabel(promo.savedAt, now)} · ${promo.accountEmail}`
-    : `Not saved yet · ${promo.accountEmail}`;
+    ? `Saved ${savedDayLabel(promo.savedAt, now)} · ${mailbox}`
+    : `Not saved yet · ${mailbox}`;
 
   return (
     <section

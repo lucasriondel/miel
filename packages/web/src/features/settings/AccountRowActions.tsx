@@ -6,13 +6,17 @@ interface Props {
   /** Confirm state lives with the list, so only one row can be armed at a time. */
   confirming: boolean;
   pending: boolean;
+  /** The name line is open for renaming, so Rename is not offered again. */
+  renaming: boolean;
+  onRename: () => void;
   onRequestConfirm: () => void;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
 /**
- * The remove affordance for one connected account: a Remove button that swaps
+ * The row's two actions: Rename, which opens the name line for a nickname, and
+ * the remove affordance for one connected account — a Remove button that swaps
  * into an inline confirm in place, mirroring `FilterRowActions`. Removing an
  * account drops every message, label and triage synced for it, so the confirm
  * step is required rather than optional.
@@ -22,6 +26,8 @@ interface Props {
 export const AccountRowActions = ({
   confirming,
   pending,
+  renaming,
+  onRename,
   onRequestConfirm,
   onCancel,
   onConfirm,
@@ -37,9 +43,16 @@ export const AccountRowActions = ({
 
   if (!confirming) {
     return (
-      <AppButton aria-label="Remove account" onClick={onRequestConfirm}>
-        Remove
-      </AppButton>
+      <>
+        {renaming ? null : (
+          <AppButton tone="ghost" aria-label="Rename mailbox" onClick={onRename}>
+            Rename
+          </AppButton>
+        )}
+        <AppButton aria-label="Remove account" onClick={onRequestConfirm}>
+          Remove
+        </AppButton>
+      </>
     );
   }
 

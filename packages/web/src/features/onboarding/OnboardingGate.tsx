@@ -51,7 +51,7 @@ interface Props {
  * what says whether that failure was the server's address or its secret.
  */
 export const OnboardingGate = ({ error, onRetry }: Props) => {
-  // Environment, not a setting: the three GOOGLE_* variables the API reads.
+  // The Google client: saved in the app, or the server's GOOGLE_* fallback.
   const googleConfig = useGoogleOAuthConfig();
   const serverCheck = useServerCheck(googleConfig.isError);
   const server = googleConfig.isError ? serverCheck : ANSWERING;
@@ -93,7 +93,7 @@ export const OnboardingGate = ({ error, onRetry }: Props) => {
         <GoogleConfigStep
           titleId={TITLE_ID}
           descriptionId={DESCRIPTION_ID}
-          missing={googleConfig.data.missing}
+          status={googleConfig.data}
           checking={googleConfig.isFetching}
           onCheckAgain={checkAgain}
         />
