@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { replySubject, replyToLine, replyWindowTitle } from "./replyDefaults";
+import {
+  forwardBody,
+  forwardSubject,
+  replySubject,
+  replyToLine,
+  replyWindowTitle,
+} from "./replyDefaults";
 import type { MessageDetail } from "../../api/types";
 
 // What the compose window is prefilled with when it opens on a message (#96).
@@ -46,5 +52,32 @@ describe("replyWindowTitle", () => {
   test("falls back to the copy the rest of the app uses for an empty subject", () => {
     expect(replyWindowTitle(null)).toBe("(no subject)");
     expect(replyWindowTitle("  ")).toBe("(no subject)");
+  });
+});
+
+describe("forwarding", () => {
+  test("prefixes Fwd: once", () => {
+    expect(forwardSubject("Lunch?")).toBe("Fwd: Lunch?");
+    expect(forwardSubject("Fwd: Lunch?")).toBe("Fwd: Lunch?");
+    expect(forwardSubject(null)).toBe("Fwd:");
+  });
+
+  test("quotes the original as text under the header block, and owns up to attachments", () => {
+    const body = forwardBody({
+      fromEmail: "db@bahn.de",
+      fromName: "Deutsche Bahn",
+      internalDate: "2026-10-27T09:14:00.000Z",
+      subject: "Your journey",
+      toEmails: ["you@example.com"],
+      bodyText: "ICE 9551 departs 08:16.",
+      snippet: null,
+      attachments: [{ attachmentId: "a", filename: "t.pdf", mimeType: "application/pdf", size: 1 }],
+    });
+    expect(body.startsWith("\n\n---------- Forwarded message ---------\n")).toBe(true);
+    expect(body).toContain("From: Deutsche Bahn <db@bahn.de>");
+    expect(body).toContain("Subject: Your journey");
+    expect(body).toContain("To: you@example.com");
+    expect(body).toContain("ICE 9551 departs 08:16.");
+    expect(body).toContain("(1 attachment(s) not included)");
   });
 });

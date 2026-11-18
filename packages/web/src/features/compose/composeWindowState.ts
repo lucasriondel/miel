@@ -24,6 +24,11 @@ export interface ComposeDraftState {
   isBusy: boolean;
   /** The Gmail id of the sent reply, once a send has succeeded. */
   sentMessageId: string | null;
+  /**
+   * A new mail that has been addressed or given a subject. A reply's recipients
+   * and subject are its prefill and do not count; a new mail's are typed.
+   */
+  addressed?: boolean;
 }
 
 /**
@@ -36,7 +41,8 @@ export const hasUnsentWork = (state: ComposeDraftState): boolean =>
   state.body.trim().length > 0 ||
   state.hasDraft ||
   state.isBusy ||
-  state.sentMessageId !== null;
+  state.sentMessageId !== null ||
+  state.addressed === true;
 
 /**
  * `intent` is what the user asked for — a pill click opens, the title bar's
