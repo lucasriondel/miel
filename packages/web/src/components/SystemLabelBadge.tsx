@@ -12,8 +12,13 @@ export const SystemLabelBadge = ({ name }: Props) => {
   if (!meta) return null;
   const { Icon, label, className, iconClassName, iconOnly } = meta;
   return (
-    <Badge variant="system" className={className} title={label} aria-label={label}>
-      <Icon className={iconClassName ?? "h-3.5 w-3.5"} aria-hidden />
+    <Badge
+      variant="system"
+      className={`h-5 gap-1 px-2 py-0 text-[11px] font-semibold shadow-none sm:px-2 sm:py-0 ${className}`}
+      title={label}
+      aria-label={label}
+    >
+      <Icon className={iconClassName ?? "h-3 w-3"} aria-hidden />
       {iconOnly ? (
         <span className="sr-only">{label}</span>
       ) : (

@@ -6,11 +6,12 @@
  * has to land on a URL that still has them.
  *
  * These are pure functions over the query string so the rule lives in one
- * place: only these three params travel, and nothing else does. A connect
+ * place: only these four params travel (`mailbox=done` is the Done view), and
+ * nothing else does. A connect
  * outcome (`?connected=…`) riding along would re-toast on arrival and again on
  * the way back.
  */
-const INBOX_SCOPE_PARAMS = ["view", "range", "label"] as const;
+const INBOX_SCOPE_PARAMS = ["view", "range", "label", "mailbox"] as const;
 
 /** `search` reduced to the inbox's scope, in a canonical order (or ""). */
 export function inboxSearch(search: string): string {

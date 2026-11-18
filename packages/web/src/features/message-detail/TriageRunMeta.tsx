@@ -12,7 +12,7 @@ interface Props {
  * on the timestamp so a re-render can't jitter its width (DESIGN.md §4).
  */
 export const TriageRunMeta = ({ createdAt, model, className }: Props) => (
-  <p className={cn("text-xs font-medium text-gousse-muted", className)}>
+  <p className={cn("text-xs text-gousse-muted", className)}>
     <time dateTime={createdAt} className="tabular-nums">
       {format(new Date(createdAt), "PPpp")}
     </time>

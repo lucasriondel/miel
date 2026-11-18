@@ -158,3 +158,68 @@ describe("the fallthrough", () => {
     expect(await res.json()).toEqual({ error: "internal_error", message: "something else broke" });
   });
 });
+
+// A send Gmail refused: the reason is what the composer's "Gmail refused the
+// message: …" line shows, and it lives in `detail` for the reason the hosted
+// one does.
+describe("GmailSendError", () => {
+  test("passes Gmail's reason through as the message, at a gateway status", async () => {
+    const res = await raise(
+      new core.errors.GmailSendError({ cause: new Error("400"), detail: "Invalid To header" }),
+    );
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "gmail_error", message: "Invalid To header" });
+  });
+
+  test("still answers gmail_error when there is no reason to give", async () => {
+    const res = await raise(new core.errors.GmailSendError({ cause: new Error("boom") }));
+
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe("gmail_error");
+  });
+});
+
+describe("ComposeRefusedError", () => {
+  test.each([
+    ["attachment_too_large", 413],
+    ["upload_not_found", 404],
+    ["message_not_found", 404],
+    ["scheduled_not_editable", 409],
+    ["send_as_not_allowed", 400],
+    ["time_in_past", 400],
+  ] as const)(
+    "%s answers %d with the reason as the error and the sentence as the message",
+    async (reason, status) => {
+      const res = await raise(new core.errors.ComposeRefusedError({ reason, message: "Why." }));
+      expect(res.status).toBe(status);
+      expect(await res.json()).toEqual({ error: reason, message: "Why." });
+    },
+  );
+});
+
+describe("GenerationCancelledError", () => {
+  test("is a 409 the client can tell from a failure", async () => {
+    const res = await raise(new core.errors.GenerationCancelledError({ requestId: "r-1" }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("generation_cancelled");
+  });
+});
+
+describe("InvalidGoogleOAuthConfigError", () => {
+  test("names the field and the reason", async () => {
+    const res = await raise(
+      new core.errors.InvalidGoogleOAuthConfigError({
+        field: "redirectUri",
+        reason: "wrong_callback_path",
+        message: "The redirect URI must end in /auth/google/callback.",
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: "invalid_google_oauth_config",
+      field: "redirectUri",
+      reason: "wrong_callback_path",
+    });
+  });
+});

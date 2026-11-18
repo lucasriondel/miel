@@ -12,6 +12,8 @@ export interface CredentialCopy {
   placeholder: string;
   /** Where to get one, since the tile has a single line to say it in. */
   source: string;
+  /** The page `source` names, when it is a page — the editor links to it. */
+  sourceUrl?: string;
 }
 
 /**
@@ -41,6 +43,7 @@ export const CREDENTIAL_COPY: Record<Provider, CredentialCopy> = {
     fieldLabel: `${PROVIDER_LABELS.anthropic} API key`,
     placeholder: "sk-ant-…",
     source: "console.anthropic.com",
+    sourceUrl: "https://console.anthropic.com",
   },
   google: {
     kind: "API key",
@@ -48,6 +51,7 @@ export const CREDENTIAL_COPY: Record<Provider, CredentialCopy> = {
     fieldLabel: `${PROVIDER_LABELS.google} API key`,
     placeholder: "AIza…",
     source: "aistudio.google.com",
+    sourceUrl: "https://aistudio.google.com",
   },
   openai: {
     kind: "API key",
@@ -55,5 +59,6 @@ export const CREDENTIAL_COPY: Record<Provider, CredentialCopy> = {
     fieldLabel: `${PROVIDER_LABELS.openai} API key`,
     placeholder: "sk-…",
     source: "platform.openai.com",
+    sourceUrl: "https://platform.openai.com",
   },
 };

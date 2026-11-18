@@ -1,19 +1,22 @@
 import { useEffect, useRef } from "react";
-import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { Spinner } from "@/components/ui/spinner";
 
 interface Props {
   /** Confirm state lives with the list, so only one row can be armed at a time. */
   confirming: boolean;
   pending: boolean;
+  /** The name line is open for renaming, so Rename is not offered again. */
+  renaming: boolean;
+  onRename: () => void;
   onRequestConfirm: () => void;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
 /**
- * The remove affordance for one connected account: a trash button that swaps
+ * The row's two actions: Rename, which opens the name line for a nickname, and
+ * the remove affordance for one connected account — a Remove button that swaps
  * into an inline confirm in place, mirroring `FilterRowActions`. Removing an
  * account drops every message, label and triage synced for it, so the confirm
  * step is required rather than optional.
@@ -23,6 +26,8 @@ interface Props {
 export const AccountRowActions = ({
   confirming,
   pending,
+  renaming,
+  onRename,
   onRequestConfirm,
   onCancel,
   onConfirm,
@@ -38,15 +43,16 @@ export const AccountRowActions = ({
 
   if (!confirming) {
     return (
-      <button
-        type="button"
-        aria-label="Remove account"
-        title="Remove account"
-        onClick={onRequestConfirm}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gousse-muted transition-[transform,background-color,color] active:scale-[0.96] hover:bg-gousse-high/10 hover:text-gousse-high"
-      >
-        <Trash2 className="h-4 w-4" aria-hidden />
-      </button>
+      <>
+        {renaming ? null : (
+          <AppButton tone="ghost" aria-label="Rename mailbox" onClick={onRename}>
+            Rename
+          </AppButton>
+        )}
+        <AppButton aria-label="Remove account" onClick={onRequestConfirm}>
+          Remove
+        </AppButton>
+      </>
     );
   }
 
@@ -67,13 +73,13 @@ export const AccountRowActions = ({
       }}
     >
       <span className="text-xs text-gousse-muted">Remove this account?</span>
-      <Button variant="danger" onClick={onConfirm} disabled={pending}>
-        {pending ? <Spinner /> : null}
+      <AppButton tone="danger" onClick={onConfirm} disabled={pending}>
+        {pending ? <Spinner size={12} /> : null}
         Remove
-      </Button>
-      <Button variant="ghost" onClick={onCancel} disabled={pending}>
+      </AppButton>
+      <AppButton tone="ghost" onClick={onCancel} disabled={pending}>
         Cancel
-      </Button>
+      </AppButton>
     </div>
   );
 };

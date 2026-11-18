@@ -10,6 +10,8 @@ export interface SyncRunResult {
   fetched: number;
   triaged: number;
   filtersSynced: number;
+  /** Promo codes the extraction found in this run's new mail — "3 codes to review". */
+  promosFound: number;
   errors: string[];
 }
 

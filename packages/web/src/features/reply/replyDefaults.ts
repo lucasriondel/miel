@@ -28,3 +28,21 @@ export const replySubject = (subject: string | null): string => {
 /** The title bar's line: the subject being answered, or the empty-subject copy. */
 export const replyWindowTitle = (subject: string | null): string =>
   subject?.trim() || "(no subject)";
+
+/** `Fwd:` once, never twice, the way {@link replySubject} treats `Re:`. */
+export const forwardSubject = (subject: string | null): string => {
+  const trimmed = subject?.trim() ?? "";
+  if (trimmed.length === 0) return "Fwd:";
+  return /^(fwd?|tr):/i.test(trimmed) ? trimmed : `Fwd: ${trimmed}`;
+};
+
+/**
+ * The names the chips can show for a reply's prefilled addresses: the sender's
+ * display name is the one the stored message knows.
+ */
+export const knownNames = (
+  message: Pick<MessageDetail, "fromEmail" | "fromName">,
+): Record<string, string> =>
+  message.fromName && message.fromEmail
+    ? { [message.fromEmail.toLowerCase()]: message.fromName }
+    : {};

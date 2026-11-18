@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { AppButton } from "../../components/AppButton";
+import { iconButtonClass, iconButtonIconClass } from "../../components/iconButton";
 import { useDeleteSavedPromo } from "../../api/mutations";
 
 interface Props {
@@ -40,9 +41,9 @@ export const DeletePromoButton = ({ promoId }: Props) => {
         aria-label="Delete promo code"
         title="Delete promo code"
         onClick={() => setConfirming(true)}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-gousse-muted transition-[transform,background-color,color] hover:bg-gousse-high/10 hover:text-gousse-high active:scale-[0.96]"
+        className={iconButtonClass({ danger: true })}
       >
-        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+        <Trash2 className={iconButtonIconClass()} aria-hidden />
       </button>
     );
   }
@@ -63,17 +64,23 @@ export const DeletePromoButton = ({ promoId }: Props) => {
       }}
     >
       <span className="text-xs text-gousse-muted">Delete this code?</span>
-      <Button
-        variant="danger"
+      <AppButton
+        tone="danger"
+        size="sm"
         onClick={() => remove.mutate({ promoId })}
         disabled={remove.isPending}
       >
-        {remove.isPending ? <Spinner /> : null}
+        {remove.isPending ? <Spinner size={14} /> : null}
         Delete
-      </Button>
-      <Button variant="ghost" onClick={() => setConfirming(false)} disabled={remove.isPending}>
+      </AppButton>
+      <AppButton
+        tone="ghost"
+        size="sm"
+        onClick={() => setConfirming(false)}
+        disabled={remove.isPending}
+      >
         Cancel
-      </Button>
+      </AppButton>
     </div>
   );
 };

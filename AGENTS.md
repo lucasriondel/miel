@@ -71,18 +71,22 @@ bun run src/index.ts sync --since 7d        # fetch + triage
 
 ## Environment
 
-`.env` at repo root is the single source of truth — loaded by `bun run --env-file=../../.env` (api/cli) and by Vite via `envDir: '../..'`. See `.env.example`. Required keys: `DATABASE_URL`, `CLAUDE_BIN`, `API_SECRET`, `API_PORT`, `WEB_PORT`, `VITE_API_BASE`, `VITE_API_SECRET`, plus the Google OAuth set (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`) and `TOKEN_ENCRYPTION_KEY` (required in prod). No AI credential is an env var — not a vendor key and, since the fallback was dropped, not `CLAUDE_CODE_OAUTH_TOKEN` either; setting one does nothing, because nothing reads it. `VITE_API_SECRET` must match `API_SECRET` (web sends it as a bearer token).
+`.env` at repo root is the single source of truth — loaded by `bun run --env-file=../../.env` (api/cli) and by Vite via `envDir: '../..'`. See `.env.example`. Required keys: `DATABASE_URL`, `CLAUDE_BIN`, `API_SECRET`, `API_PORT`, `WEB_PORT`, `VITE_API_BASE`, `VITE_API_SECRET`, and `TOKEN_ENCRYPTION_KEY` (required in prod). The Google OAuth set (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`) is optional everywhere: the client is entered in the app and stored in Postgres, and these are only the fallback for an install with none saved (see *The Google OAuth client entered in the app*). No AI credential is an env var — not a vendor key and, since the fallback was dropped, not `CLAUDE_CODE_OAUTH_TOKEN` either; setting one does nothing, because nothing reads it. `VITE_API_SECRET` must match `API_SECRET` (web sends it as a bearer token).
 
 Env is parsed/validated once via `getEnv()` in `packages/core/src/env.ts`.
 
 How an operator *gets* the three Google values is one walkthrough rather than
-three (#138). `packages/core/src/googleOAuthSetup.ts` is a leaf module beside
+three (#138); where they *go* is the app's own Google step, and the last step of
+that walkthrough says so (with `.env` as the alternative). `packages/core/src/googleOAuthSetup.ts` is a leaf module beside
 `claudeUsage.ts` — the ordered steps as data, plus the callback path the API
 route mounts and the dev redirect URI `env.ts` defaults to, so what the
 documents tell someone to register is what an unconfigured server actually
-sends Google. Two surfaces render that list: the onboarding gate's first step
-(`GoogleOAuthSteps.tsx`, the one screen a fresh install reaches before it can
-do anything) and the landing page's installation guide, whose `GuideStep` gained
+sends Google. Two surfaces render that list: the onboarding gate's Google step
+(`GoogleOAuthSteps.tsx`, inside the step a fresh install reaches before it can
+do anything — the gate is Server · Google · Mailbox · AI triage, and the Server
+step only speaks when the API cannot be reached or refuses the bearer, read
+with `GET /auth/check` after a failed config read) and the landing page's
+installation guide, whose `GuideStep` gained
 a `substeps` field for it. The README is the third and the only one allowed to
 restate them, in Markdown of its own; `contributorDocs.test.ts` checks its
 section against the same list. Console labels, the consent screen's mode and a
@@ -98,14 +102,18 @@ than editing source (#99).
 
 ## Data model (high level)
 
-- `accounts` — connected Gmail accounts (email, profile, encrypted OAuth `refresh_token`, granted scopes, `connected_at`).
+- `accounts` — connected Gmail accounts (email, profile, encrypted OAuth `refresh_token`, granted scopes, `connected_at`), and `nickname` — the user's own name for the mailbox ("Lucas — Pro"), null meaning the Google display name.
 - `labels` — Gmail labels per account (synced).
 - `messages` — fetched Gmail messages (PK: `accountId + gmailMessageId`). Bodies stored as text + html.
 - `message_labels` — join.
 - `triages` — one row per Claude triage run per message (priority + reasoning + model/runId).
 - `promo_codes` — one discount code extracted from a marketing mail, keyed back to it. Two states on one row: suggested (the extraction wrote it) and saved (`saved_at`, the user acted) — the save also writes the six denormalised copies of the mail (subject, sender name/address, `internal_date`, HTML and stripped text), which is what makes a saved promo outlive the Gmail original it trashes. `expires_at` is stored at end-of-day UTC and treated as a date (`promoExpiry.ts`), never an instant.
-- `app_settings` — KV for model picks etc. (see `services/settings.ts`).
-- `encrypted_secrets` — every secret that is not a Gmail refresh token, one row per secret, value AES-256-GCM ciphertext: an LLM vendor's API key (named for the vendor), worp's key and proxy headers, and the Claude Code token (dotted names). See below.
+- `snoozes` — one row per snoozed conversation (PK `account_id + gmail_thread_id`): the message snoozed and `wake_at`. Joined onto the message list by thread.
+- `compose_uploads` — attachments uploaded for a send that has not happened yet (bytes in `bytea`, scoped to an account, swept a day after upload unless a pending scheduled send names them).
+- `scheduled_sends` — schedule send: the send request (`payload` jsonb), `send_at`, a Message-ID of miel's own, and a `pending → sending → sent | failed`, `pending → cancelled` state machine.
+- `contacts` — who each account has written to (PK `account_id + lower(email)`), the address suggestions' source.
+- `app_settings` — KV for model picks etc. (see `services/settings.ts`), and the Google OAuth client's ID and redirect URI when it was entered in the app.
+- `encrypted_secrets` — every secret that is not a Gmail refresh token, one row per secret, value AES-256-GCM ciphertext: an LLM vendor's API key (named for the vendor), worp's key and proxy headers, the Claude Code token and the Google OAuth client secret (dotted names). See below.
 
 ## Migrations
 
@@ -183,8 +191,8 @@ read, so a row an old build wrote still resolves.
 
 The two transports stay distinct on purpose, and the one hosted-vs-CLI branch
 is `claude/Claude.ts`'s own `runTask`. The CLI transport is
-**`effect-ai-claude-code`** (`~/dev/perso/libs/effect-ai-claude-code`, the
-user's own) — an `effect/ai` `LanguageModel` over `claude -p`, so the call is
+**`effect-ai-claude-code`** (on npm; source in
+`~/dev/perso/libs/effect-ai-claude-code`, the user's own) — an `effect/ai` `LanguageModel` over `claude -p`, so the call is
 `LanguageModel.generateObject({ prompt, schema })` provided with
 `ClaudeCodeLanguageModel.layer` (model, `allowedTools`), `ClaudeCodeClient.layer`
 (the stored token as `auth: { oauthToken }`, `CLAUDE_BIN`, the timeout) and
@@ -200,21 +208,16 @@ packages in between — `ai-task-runner-effect` composing `claude-code-effect`,
 both Effect 3 — and the v4 migration folded the runner back into core rather
 than port a generic task system nothing else used.)
 
-**Until the lib is published**, core depends on it as
-`"effect-ai-claude-code": "file:../../../../libs/effect-ai-claude-code"` — a
-copy of the sibling checkout taken at install time, not a live link. Three
-consequences to know. `bun install` needs that checkout to exist, so the #74
-promise ("public registries only, no credentials") is suspended and CI's
-`bun install --frozen-lockfile` cannot pass until the package is on npm; an
-edit in the checkout reaches miel only after `bun install --force` (bun does
-not re-copy an unchanged specifier); and the checkout's `devDependencies` pin
-of `effect` must equal the version miel resolves — bun installs a `file:`
-package's dev pins beside it, and a differing pin lands a second `effect` in
-`node_modules/.bun` that the lib's source then imports, splitting every type
-and every runtime identity (`Layer.provide` of ours into an Effect of theirs
-silently fails). A `link:` is not an alternative: bun resolves a symlinked
-package's imports from its real path, so the checkout would run on its own
-`node_modules/effect` — the same split, at runtime only.
+Core depends on it from npm (`"effect-ai-claude-code": "^0.1.0"`), so
+`bun install` is back to public registries only (#74) and the Docker builds and
+CI's `--frozen-lockfile` install need nothing outside the repo. It used to be a
+`file:` copy of the sibling checkout, which no container build could see. One
+rule survives from then: the lib takes `effect` and `@effect/platform-*` as peer
+dependencies, and miel must resolve exactly one `effect` — a second copy in
+`node_modules/.bun` splits every type and every runtime identity (`Layer.provide`
+of ours into an Effect of theirs silently fails). A change to the lib reaches
+miel by publishing a new version and bumping the range here, never by pointing
+the dependency back at the checkout.
 Triage still has two prompts — the hosted one drops the "curl the body from
 the local API" paragraph, which it has no tool to act on and which would post
 `API_SECRET` to a third party. Neither prompt inlines a body; `claudeUsage.ts`
@@ -343,7 +346,7 @@ and keeps its name: a refusal on the run path is still `claude_unavailable` (503
 The API key for a hosted provider is **not** an env var. It lives in
 `encrypted_secrets` under the vendor's name, encrypted with
 `TOKEN_ENCRYPTION_KEY` (the same `util/crypto.ts` that protects Google refresh
-tokens), and is pasted in the app under Settings → AI & Triage → Credentials,
+tokens), and is pasted in the app under Settings → AI → Providers,
 which since #110 holds one row per provider — the three vendor keys and the
 Claude Code token, which is the same kind of setting and no longer a separate
 read-only subsection. The provider picker is a runtime setting, so its
@@ -636,11 +639,21 @@ reach it; the click, the removal and the refusal are rendered in
 ## The Promo Codes page
 
 Saved promos get a home (#162): `pages/PromoCodesPage.tsx` at **`/promo-codes`**,
-a top-level route beside logs and settings with one entry in the sidebar's
-footer nav. Global, not account-scoped, and that is the feature rather than a
-shortcut — a promo code is a thing used at a checkout, so which mailbox it
-arrived in is a **column** on the row and never a filter the user must satisfy
-before seeing anything. Being outside `/account` is also what keeps it: `App`'s
+a top-level route with one entry among the sidebar's views (its count is the
+codes to review). Global, not account-scoped, and that is the feature rather
+than a shortcut — a promo code is a thing used at a checkout, so which mailbox
+it arrived in is shown on the promo (always in the reader's ticket, and on a
+row whenever the page spans more than one mailbox) and never a filter the user
+must satisfy before seeing anything.
+
+On screen (the design's "Promo codes" page) it is three sections and a reader:
+**To review** — the suggestions, as cards — then **Active** and **Expired** —
+the saved promos, as rows — with the selected promo open in a reader column on
+the right (the code as a ticket with Copy code, Terms, Valid until and the Shop,
+derived from the sender's domain, then the original email copy). The regions
+are labelled "Promo codes to review", "Active promo codes", "Expired promo
+codes", and "Saved promo codes" when nothing is saved but suggestions exist. The
+reader's pager walks the page in that order. Being outside `/account` is also what keeps it: `App`'s
 `isAccountScope` only redirects `/` and `/account…` into the default account, so
 a top-level route is excluded by construction.
 
@@ -667,8 +680,8 @@ there is nothing suggested, and the page's empty state waits for all three
 sections to be empty: a page with suggestions and no saved rows is not empty, it
 is a page with something to do.
 
-The suggested row shares the saved rows' columns and differs in what it *does*:
-one control, the same save. Each of the other three absences is a rule — there
+A suggestion card differs from a saved row in what it *does*: one control, the
+same save (the design draws a delete on the card too; it is left out). Each of the other three absences is a rule — there
 is no copy of the mail to view until a save writes one (and the Gmail original
 is still in the inbox), the guesses become corrigible when the user decides to
 keep them, and removing a detection would be a *dismissal*, an act this feature
@@ -685,11 +698,21 @@ reason — an adapter that joined *any* account would otherwise pass. On
 `PromoSuggestionFilter` every field is optional and which are named is what tells
 the two callers apart: an account and a window is the inbox, neither is the page.
 
-What the payload deliberately omits is the copy of the mail. The save
+What the payload deliberately omits is the mail's *bodies*. The save
 denormalised subject, sender, date and both bodies onto the row so a saved
-promo outlives the Gmail original it trashed; a *list* carrying them would send
-every saved mail's HTML to draw a table of five short fields. Reading the
+promo outlives the Gmail original it trashed; a *list* carrying the bodies would
+send every saved mail's HTML to draw a table of short fields. Reading the
 original is one promo at a time and gets its own read when it lands.
+
+The short fields are on the row, though: every `PromoListing` carries `savedAt`
+(null on a suggestion) and the mail's `subject`, `fromName`, `fromEmail` and
+`internalDate`, and every `PromoSuggestion` the last four — what a "To review"
+card and the reader's "Saved Oct 27" draw. Where they come from is the rule: a
+saved row answers them from **its copy**, a suggestion from **its inbox row**,
+which `PromoStore.unsaved()` already joins and now hands back as
+`SuggestedPromoCode.mail` (metadata only). A suggestion's own copy columns stay
+null — the copy is the save's to write, and nothing reads a suggestion's mail
+off them.
 
 `GET /promo-codes/saved` takes no parameters at all, and `["saved-promos"]` is
 its own query key — the page lists exactly what the suggestions no longer do,
@@ -733,9 +756,9 @@ promo nobody saved has no copy (the columns are written at save time and at no
 other moment) and answers the same 404 an unknown id does, because a viewer must
 never draw an empty mail as though that were what the shop sent.
 
-The read is the dialog's, not the page's: `usePromoOriginalMail(id)` is disabled
-until `ViewOriginalMailButton` opens one, so a table of twenty rows fetches no
-mail until someone asks for one — which is why the list payload carries no
+The read is the reader's, not the page's: `usePromoOriginalMail(id)` runs only
+for the promo opened in the reader ("Original email copy"), so a page of twenty
+rows fetches no mail until someone opens one — which is why the list payload carries no
 bodies in the first place. `["promo-original", id]` is its own key with
 `staleTime: Infinity` and nothing invalidates it: a record does not change.
 `SavedPromoMailBody` renders the stored HTML and falls back to the stored text,
@@ -745,10 +768,11 @@ The browser's remote-images preference still applies: the mail is gone from
 Gmail, but its images are still hosted by the sender and loading one is still
 the read receipt it always was.
 
-Everything in that dialog is read-only, and that is the rule rather than an
+The copy of the mail is read-only, and that is the rule rather than an
 omission: the five extracted fields are the model's guesses and are the
 corrigible part (#164, below), while the copy of the mail is a record. The
-dialog's only control closes it, and the endpoint has no writer.
+endpoint has no writer. A suggestion has no copy to show; its reader says where
+the mail is instead and links to it.
 
 ## Correcting a promo, and removing one
 
@@ -789,12 +813,11 @@ saved row `listSavedPromos` files under expired against the same `now` — so a
 promo with no stated end, or one lapsing today, is never cleared — and answers
 how many went, zero included.
 
-On screen, `SavedPromoRow` is now a two-state row: `SavedPromoReadRow` or
-`SavedPromoEditRow`, with the flag the row's own rather than the section's, since
-correcting two rows is two independent corrections and closing one would discard
-typing nobody asked to discard. The editor replaces the row in place so each box
-sits under the heading that names it; the account cell stays plain text, because
-where a mail arrived is not a guess. `savedPromoDraft.ts` is the pure module
+On screen the correction happens in the reader: Edit swaps the ticket for its
+five fields (`PromoTicketEditor`), Enter saves, Escape cancels, and stepping to
+another promo abandons the open edit — one correction at a time, in the place
+the promo is being read. The account stays plain text, because where a mail
+arrived is not a guess. `savedPromoDraft.ts` is the pure module
 between the boxes and the request — the draft a row starts from (the stored
 instant read as the UTC day it is the end of, for the reason `promoExpiryLabel`
 is UTC-pinned), the patch naming only what changed, `null` for an emptied box,
@@ -823,12 +846,14 @@ presented it as a normal answer are gone:
   offers **no copy act at all**, rather than a disabled one labelled "No code to
   copy" — the way `CodeLedgerRow` leaves the icon off a magic link;
 - `PromoCodeRow` on the message page draws its context and no chip;
-- `SavedPromoReadRow` puts the table's `UNSTATED` dash in the code cell.
+- the Promo Codes page puts the `UNSTATED` dash in the row's code slot and in the
+  reader's ticket, with no copy button.
 
 **Nothing hides, drops or breaks such a row**, and that is the constraint the
 whole change is written around: the save trashed the Gmail original, so the row
 is very often the only surviving copy of that mail. It still renders, still
-opens its original-mail dialog, and is still editable and deletable.
+opens in the reader with its original email copy, and is still editable and
+deletable.
 
 The editor is the other half. `code` joins `discount` as a field that may be
 corrected but not **cleared** — in `UpdatePromoRequest` (so a patch naming
@@ -929,7 +954,12 @@ per aggregate, each with a Postgres adapter (`stores/postgres.ts`) and an
 in-memory one (`testkit/stores.ts`, `testkit/mailbox.ts`). Two implementations
 are what make the seam real (#132).
 
-There are six. `SettingsStore` and `SecretStore` were the first — five
+There are eight. `OutboxStore` (staged uploads and scheduled sends — one store
+because an upload a pending send names must outlive the sweep, and splitting
+them would put that join in a service; `claimDue` is the atomic claim the
+due-work loop relies on) and `ContactStore` (the address suggestions) are the
+newest, and `MessageStore` gained nicknames and snoozes, joined onto the list by
+thread. `SettingsStore` and `SecretStore` were the first — five
 operations over `app_settings` and `encrypted_secrets`. `MessageStore`,
 `TriageStore` and `LabelStore` (#136) are the mailbox: the rows a page of the
 list is made of, what Claude said about them, and the label catalogue both
@@ -1006,79 +1036,404 @@ stores too.
 
 ## The app shell
 
-The frame around every page is gousse's `app-shell` registry item, composed once
-in `packages/web/src/App.tsx`: `AppShell` › `SidebarShell` + `AppMain` ›
-`TopBar` + `AppContent`. The top bar is the layout's, not the page's. It sits
-above the scroll region, and a page fills it through
-`features/shell/PageTopBar.tsx`, which portals the page's `TopBarStart` /
-`TopBarTitle` / `TopBarEnd` into the header the layout rendered — so bar
-content is declared beside the body it belongs to, is laid out by the bar's own
-flex row, and picks up its `data-scrolled` state. The collapsed sidebar's open
-button is the one child the bar contributes itself, which is why no page draws
-a `SidebarTrigger` and `LayoutContext` no longer carries the collapsed flag.
+The look is `miel.figcraft` at the repo root (pages Main view, Promo codes,
+Settings, Onboarding, Compose & Reply, UI System For Miel), and
+`packages/web/DESIGN.md` is what it means for the code — tokens, type scale,
+radii, which primitive to reach for. The redesign changed the frame:
 
-That button has to stay leftmost, and what keeps it there is that `App` gives
-the bar a slot to portal into rather than the header itself. A portal appends
-to its container, so page controls portalled into the `<header>` landed wherever
-the DOM stood when they mounted: with the sidebar open there is no trigger yet,
-and collapsing later appended it *after* them, at the far right. The slot is a
-`display: contents` div, so `TopBarStart`/`TopBarEnd` are still flex items of
-the bar — their `ml-auto` and the inbox's centred period nav both resolve
-against the header — while DOM order is pinned. The bar also widens its gap to
-`gap-4` while collapsed, since the default leaves the trigger and the account
-switcher's avatar reading as one clump.
-
-Two things the slot module settles. Its context is tri-state on purpose:
-`undefined` means no layout above (a page mounted alone in a test) and the
-content renders in place, so a suite still sees the controls it would in the
-app; `null` means the bar has not attached yet, and nothing renders rather than
-flashing the controls inside the content for a frame. And `AppContent` is the
-content column's one scrolling element — `useScrollRestoration` takes that node
-and the bar watches it — so a page must never introduce its own
-`overflow-y-auto`, and a sticky bar inside a page sticks at `top-0`.
-`App.test.tsx` renders all of that.
-
-Nothing in the shell owns state. The collapsed flag is `App`'s, persisted in
-`localStorage`, and the scroll node rides through a callback ref into state,
-because the bar renders before the region and has to re-render once there is a
-node to watch — so the registry's `useAppShell` goes unused here.
-
-Below `sm` the same flag drives a drawer over the page rather than a column
-beside it, so `App` starts it closed there whatever the stored preference says,
-closes it again on every navigation (a tapped row has done its job), and does
-not write the stored flag from that viewport — the preference is the desktop's.
-The inbox's period nav and select button leave the bar for `MobileBottomBar`
-below `md`, and the account switcher shows only its avatar there, because a
-fixed-height bar has no second row to wrap onto.
+- **No shared top bar.** `App.tsx` draws `components/sidebar/AppSidebar` beside
+  a `<main>` column, and every page draws its own header (`PageHeader`: the
+  28px title, then the page's controls on the same row) above its own scroll
+  body (`PageLayout`, both in `features/shell/`). The old `app-shell` +
+  `PageTopBar` portal is gone; the vendored `app-shell` and `sidebar` items
+  stay in `components/ui/` but frame nothing.
+- **One scrolling element per column**, and the page owns it: `PageLayout`'s
+  body hands itself to the layout through `ScrollRegionContext`
+  (`features/shell/scrollRegion.ts`), and `useScrollRestoration` saves an offset
+  against each history entry from whichever body is mounted. A page must never
+  add its own `overflow-y-auto` inside that body. `App.test.tsx` renders it.
+- **The sidebar** holds what the old top bar did: the account switcher (a card
+  at its top), Compose (`C` from anywhere not typing), the views — Inbox with
+  the period's unread count, Snoozed with the account's snoozed count, Done,
+  Promo codes with the codes to review, and Scheduled only while the account
+  has mail waiting to go or a send that failed — the
+  labels, then Filters, Logs, Settings and the last-sync line. Collapsed on
+  desktop it is a 72px rail of the same things (`SidebarRailContext`); below
+  `sm` it is a drawer, opened from the menu button `PageHeader` draws while it
+  is closed (`sidebarToggle.ts`), started closed and closed again on every
+  navigation. Only the desktop flag is persisted.
+- **List and reader are one screen.** `messages/:gmailMessageId` is a child
+  route of `account/:accountId`: `InboxPage` renders the list and an `Outlet`
+  where `MessageDetailPage` is the reader column, handing it the list's
+  reading order (`features/inbox/readingOrder.ts`) for the "1 of N" pager and
+  `J`/`K`. The list stays mounted and scrolled while messages are read. Opening
+  another message while one is open *replaces* the history entry (the row's
+  link and the pager both do), so the entry behind the reader is always the
+  list and `useReturnToInbox`'s `navigate(-1)` still lands there. Below `lg` the
+  reader takes the whole column. Escape closes it.
+- **The inbox header** carries the period title ("This week", `periodTitle`),
+  the dates pill, the search field, the Week/Month/Year switch, Select, Triage
+  and Sync. `PageHeader` is a CSS container, so the inbox drops the pill, Select
+  and the switch by its own column's width — narrow beside the reader — rather
+  than the viewport's; `MobileBottomBar` still carries the period nav and
+  Select below `md`.
+- **Search (⌘K)** is client-side over the period already loaded
+  (`features/inbox/searchMessages.ts`: every word must appear in sender,
+  subject or snippet, case- and accent-insensitively). There is no search
+  endpoint, and the empty result says the search covers only the period.
+- **Done** is `?mailbox=done` beside `?view`/`?range`/`?label`
+  (`features/inbox/mailbox.ts`, and one of `inboxLocation.ts`'s scope params, so
+  a message opened from Done returns to Done). It reads `archivedOnly`.
+- **Toasts** are bottom-centre, one dark line each in both themes
+  (`MielToaster`, `index.css`).
 
 ## The compose window
 
-Replying is a floating window, not a block at the bottom of the page (#96):
-docked bottom-right at `z-[80]`, collapsible to its own title bar, over the page
-rather than in its flow. The split is the thing to keep. `features/compose/*` is
-the window — the shell (`ComposeWindow`), its title bar, the To/Cc/Subject
-header, the body field, the footer, plus the two pure modules `recipients.ts`
-(one text field per address list, parsed but never rewritten under the caret)
-and `composeWindowState.ts` — and none of it knows a message is being answered.
-`features/reply/*` is the reply: the prefilled recipients and subject
-(`replyDefaults.ts`), the AI instruction section carried over from #91, and the
-two mutations. A future blank Compose mounts the same shell with an empty form;
-that is why the seam exists, and it is deliberately not wired to a button here.
+Replying and composing are floating windows docked bottom-right at `z-[80]`,
+over the page rather than in its flow (#96), held app-wide:
+`features/compose/ComposeProvider.tsx`, mounted in `App`, owns every window's
+fields (so a minimized window keeps them) and is the one way anything opens
+one — `useCompose().openNew(accountId)` for the sidebar's Compose and `C`,
+`openReply(message, "reply" | "replyAll" | "forward", prefill?)` for the
+reader's `ReplySplitButton` (keys R, A, F, ⇧R) and `DraftReplyCard`.
+`ComposeDock` renders up to three windows, one open at a time (opening one
+minimizes the others); a fourth is refused with a toast. Each window
+(`ComposeSessionWindow`) owns its AI (`useComposeAi`), its send
+(`useComposeSend`), its Gmail-draft autosave (`useDraftAutosave`) and its keys
+(`composeShortcuts.ts`: ⌘↵ send, ⌘⇧↵ send & archive for replies, ⌘J the AI
+strip, Esc stop or minimize, ⌘⌫ discard).
 
-Which of the three states the window is in is derived, not stored:
+The split is still the thing to keep: `features/compose/*` is the window — the
+shell, title bar, the From row, the To/Cc/Bcc
+chip rows, subject, body, AI strip, footer, plus the pure modules
+`recipients.ts` (typing is committed into chips only on a comma, semicolon,
+Enter or blur — never rewritten under the caret) and `composeWindowState.ts` —
+and none of it knows a message is being answered. `features/reply/*` is the
+reply: the prefilled recipients and subject (`replyDefaults.ts`), the quoted
+thread under a reply's body and the forwarded block under a forward's
+(`QuotedThread`, `ForwardedBlock`, `quoteText.ts`), the split button and the
+reader's draft card, whose drafting is on demand only: nothing is generated
+until someone presses "Draft with AI". New mail sends through `/compose/send`,
+replies through `send-reply` (`replyAll` prefills Cc from `replyAllCc`),
+forwards through `/messages/:a/:m/forward`; a send that names a Gmail draft
+deletes it.
+
+Which state a window is in is derived, not stored:
 `composeWindowMode(intent, draft)` folds the user's intent together with "is
-there anything unsent", so a window holding a draft or typed text cannot fall
-shut — #91's non-negotiable, now with a third state. Minimize is exempt from
-that override on purpose: it is an explicit request to keep the draft and get it
-out of the way, and a window that re-expanded itself would read as broken. The
-body is unmounted while minimized rather than hidden, which is safe because
-every field is controlled by `ReplyComposer`'s state.
+there anything unsent" (for a new mail, being addressed counts), so a window
+holding a draft or typed text cannot fall shut — a close is a request, answered
+in place by a discard confirmation. Minimize is exempt from that override on
+purpose: it is an explicit request to keep the draft and get it out of the way.
+The body is unmounted while minimized rather than hidden, which is safe because
+every field lives in the provider.
+
+Everything the design draws around a send is wired end to end — the server
+side is *Writing mail: what a send carries* below; the window's side is:
+
+- **The quote and the forward are the server's.** Nothing is typed into a body
+  on the window's behalf any more: a reply's body is only what the user wrote,
+  and `GET /messages/:a/:m/quote` draws what the server will append — the reply
+  quote collapsed to a `•••` pill (expand it to read or trim it; a trimmed quote
+  travels as `quotedText`, an emptied one as `includeQuote: false`, an untouched
+  one as nothing), and a forward's block expanded, read-only, with the
+  original's files as removable chips (`keepAttachmentIds` names the ones left).
+  A forward needs no text of its own to be sent.
+- **Files** upload one by one the moment they are attached — the paperclip
+  beside Send, or a drop anywhere on the window (`useFileDrop`, `DropOverlay`) —
+  through `api/uploads.ts`, an `XMLHttpRequest` because only it reports upload
+  progress, and `useAttachmentUploads` keeps the bytes so a change of mailbox
+  stages them again for the new one (an upload belongs to one account). A file
+  over 25 MB fails on its own chip before a byte is sent, a refusal says why on
+  its chip, and neither blocks the rest; a send waits for what is still
+  uploading and names the ids in chip order. The chips sit between the body
+  and the AI strip.
+- **From** is a menu when there is a choice (`fromOptions.ts`): the window's
+  mailbox, its *verified* send-as aliases, then the other connected mailboxes
+  (not on a forward, which the server builds in the mailbox the original
+  arrived in). A reply marks its own mailbox "received here"; picking another
+  sends `fromAccountId`. One option is plain text, as the design draws it.
+- **Suggestions** under To/Cc/Bcc are an ARIA combobox (`useRecipientSuggestions`,
+  `RecipientSuggestions`): the field keeps the caret, the arrows move the
+  highlight, Enter or Tab takes it, Escape hides the list without minimizing the
+  window, and a comma still commits exactly what was typed.
+- **Schedule send** is in Send's caret menu — Schedule send…, Tomorrow morning
+  and Monday morning with the time each resolves to (`features/time/`). The
+  window closes and a toast with Undo takes its place; Undo cancels the held
+  send and reopens the window as it was (`ComposeSessionActions.reopen`). A
+  reply answered from another mailbox is not offered it: the scheduled route
+  threads from the original's own mailbox.
+- **Stop is real**: every generation carries a `requestId` the window chose,
+  Stop aborts the request *and* posts `/compose/generations/:id/cancel`, and the
+  `generation_cancelled` answer is taken as the stop it is, never shown. The
+  refinement chips send `previousDraft` with the chip as the instruction.
+- **Refusals** read as sentences: `composeErrorMessage` (`apiErrorMessage.ts`)
+  replaces the server's id-bearing text for `account_not_found`,
+  `message_not_found`, `upload_not_found`, `attachment_not_found`,
+  `scheduled_not_found` and `send_as_not_allowed`. It is kept apart from
+  `apiErrorMessage` because the same codes answer other routes, where "the
+  message this answers" would be the wrong sentence.
+
+Panels a window opens over itself (the From menu, the suggestions, the schedule
+form) are `ComposePopover`: portalled, fixed to their anchor, at `z-[85]` —
+above the dock — and they catch Escape so it closes the panel, not the window.
 
 To and Cc being editable is end to end, not decoration: `SendReplyRequest`
 takes optional `to`/`cc`, `services/replyRecipients.ts` decides between what was
 typed and the old default (the sender of the message being answered), and
 `rfc822.ts` writes a `Cc` header when there is one. Optional throughout, because
 the CLI names neither and must keep addressing replies the way it always did.
+
+Reply-all and Bcc ride the same rule. The detail payload carries `ccEmails`,
+parsed off the stored `rawHeaders` (there is no Cc column, so no migration), and
+`replyAllCc`, the default Cc reply-all would use — the original's To and Cc minus
+this account and minus the sender being answered — so every client prefills the
+same chips; empty means reply-all reaches nobody a reply does not. The send takes
+`replyAll: true` for a client that names no Cc (the CLI), and a named Cc still
+wins. `bcc` is a header in the raw message and nothing more: Gmail delivers to it
+and strips it. All of it is `services/replyRecipients.ts`, pure.
+
+A send answers `threadId` beside `sentMessageId`, for a "View in Gmail" link. A
+send Gmail refuses is a `GmailSendError` whose `detail` is Gmail's own reason,
+read off the response by `gmailRefusalDetail` and scrubbed of anything
+token-shaped there; the API answers it as `gmail_error` (502) with the detail as
+the message, the arrangement `HostedApiError` already has — a tagged error's own
+`message` is empty, which is why the composer used to show nothing.
+
+## Composing a new message
+
+`POST /compose/send` sends a message that answers nothing, and
+`POST /compose/generate` has the model draft one. Their own prefix because there
+is no message in the path: the account travels in the body.
+`sendNewMessageEffect` in `services/reply.ts` sends through the adapter's
+`sendNew` — `GmailMessages.send` with no `threadId` and no threading headers, so
+Gmail starts a thread. With no stored message to default from, a To that cleans
+away to nothing is refused rather than sent to nobody.
+
+The AI draft is the **reply task**, not a fifth `ModelTask`: the design lists
+three tasks a user picks a model for, and writing mail is what this one does
+whether or not it answers something. `ReplyTaskInputT` is the union of the old
+input and `NewMailGenInput` (sender, To and subject hints, instruction — no
+`from`, no `body`), and `buildReplyPrompt` branches on whether a body is there.
+That absence is the disclosure rule: nothing a correspondent wrote is in the
+prompt, so `BODY_BEARING_TASKS` does not move, and `claude/tasks.test.ts`
+asserts the new-mail prompt is one builder for both transports and inlines no
+body.
+
+`services/reply.ts` moved onto the store seam with this (`MessageStore` for the
+account and the message answered), so it is in `stores/seam.test.ts`'s list and
+`services/reply.test.ts` runs it against the in-memory mailbox.
+
+**Drafts.** `PUT /compose/drafts` is the compose window's autosave into Gmail
+drafts, `DELETE /compose/drafts/:accountId/:draftId` the discard. No table: the
+draft lives in Gmail (`GmailDrafts`, `users.drafts.*`, covered by
+`gmail.modify`, so no re-consent) and its id in the window's state — no id
+creates, an id replaces, so saving on every pause never piles up copies. A reply
+draft names `replyToGmailMessageId` and is threaded as the send would be. Both
+sends take an optional `draftId` and delete that draft once the mail is out; a
+refusal there is logged and swallowed, because failing the request would report
+a sent mail as unsent.
+
+## Writing mail: what a send carries
+
+Every outgoing message — new (`/compose/send`), reply (`send-reply`), forward
+(`/messages/:a/:m/forward`), draft (`PUT /compose/drafts`) or scheduled — goes
+through the same resolution in `services/outgoing.ts` before Gmail is asked
+anything, and every refusal there is a `ComposeRefusedError` (reason code +
+sentence; the middleware maps it to 400/404/409/413), so a refused request has
+sent nothing.
+
+- **MIME.** `google/rfc822.ts` builds the message: a plain `text/plain` part as
+  before when there is nothing else; `multipart/alternative` (text + HTML) when
+  an HTML body rides along; `multipart/mixed` around that when there are files.
+  A message with attachments goes through Gmail's media upload
+  (`message/rfc822`, up to 35 MB) rather than the JSON `raw` field.
+- **Attachments are upload-then-reference.** The compose window uploads each
+  file as it is attached (`POST /compose/uploads`, multipart, one file), keeps
+  the id, and a send, a draft save or a scheduled send names `uploadIds`. That
+  is what gives the design its per-file progress and "Send waits for uploads".
+  Bytes are staged in `compose_uploads` (Postgres, not a container's disk, so a
+  scheduled send survives a restart), scoped to the account. One file over 25 MB
+  is refused at upload; the total is checked again at send
+  (`MAX_ATTACHMENTS_BYTES` in the leaf `composeLimits.ts` — base64 grows a file
+  by a third, and Gmail's own composer stops at 25 MB). The due-work loop sweeps
+  uploads a day old that no pending send names.
+- **The quoted original is the server's.** A reply carries it unless
+  `includeQuote: false` — "It is sent either way" — as `> ` lines under an
+  "On …, … wrote:" attribution and as a `blockquote.gmail_quote` around the
+  original's HTML (`services/quoting.ts`, dates in UTC). `quotedText` replaces
+  the stored original's text when the user trimmed it.
+  `GET /messages/:a/:m/quote` answers both blocks and the forwardable
+  attachments, so the window draws what will be sent. Reply drafts carry the
+  quote too, so the Gmail draft reads as what goes out.
+- **Forward** is its own route: the user's text, the "Forwarded message" block
+  (header, then the original's text and HTML), then the original's attachments
+  fetched from Gmail — all of them unless `keepAttachmentIds` names a subset (a
+  removed chip is simply not named) — plus any uploads. It stays in the
+  original's conversation in this mailbox, as Gmail's own forward does.
+- **Send-as.** `GET /accounts/:id/send-as` lists `users.settings.sendAs`
+  (covered by `gmail.settings.basic`, which every account already granted — no
+  new scope, no re-consent). A send names `from`; only a *verified* alias is
+  accepted, because Gmail would silently rewrite any other From.
+- **A second mailbox.** `send-reply` takes `fromAccountId` to answer from
+  another connected account. That reply cannot join the Gmail thread (thread ids
+  belong to a mailbox), so it is sent with `In-Reply-To`/`References` only,
+  read from the original through the account it arrived in.
+- **Address suggestions** (`GET /accounts/:id/contacts?q=`) come from
+  `contacts`, "people you've emailed": every send through miel records its
+  recipients (best-effort — a sent mail never fails over it), and every sync
+  harvests the To/Cc/Bcc *headers* of the account's sent mail in the window it
+  synced (`format=metadata`, no body, nothing written to `messages` — the inbox
+  search keeps its `-in:sent`). A sighting newer than the stored one counts one
+  more contact, so re-harvesting a window does not inflate the ranking.
+- **Stop and refine.** `generate-reply` and `/compose/generate` run as an
+  interruptible fiber (`services/generations.ts`) keyed by an optional
+  client-chosen `requestId`; `POST /compose/generations/:requestId/cancel` or the
+  client dropping the request interrupts it, which kills the CLI subprocess and
+  aborts the hosted call's signal, and a caller still listening gets
+  `generation_cancelled` (409). `previousDraft` hands the model the window's
+  current draft for "Shorter"/"Warmer"/a follow-up instruction. It is the user's
+  own text, never a received body, so `BODY_BEARING_TASKS` does not move —
+  `claude/tasks.test.ts` asserts a refined new mail still inlines no body.
+- **Mailbox nicknames.** `PATCH /accounts/:id { nickname }` — this install's
+  name for a mailbox, shown by the switcher and the From menu; Gmail is not told.
+  `accountDisplayName` is the one rule on screen (nickname, else the Google
+  name, else the address's local part), and the promo reader names its mailbox
+  through it (`useMailboxName`). Renaming is inline on the Settings › Mailboxes
+  row (`AccountNameEditor`: Enter saves, Escape cancels, empty clears, 60
+  characters), not optimistic, since the server trims and caps.
+
+There is still no AI drafting during sync: a draft is generated only when
+someone asks for one.
+
+## Snooze
+
+Gmail's API has no snooze, so miel does what it looks like from outside:
+`POST /messages/:a/:m/snooze { until }` archives the thread in Gmail and writes a
+`snoozes` row; the due-work loop wakes it at `wake_at` by putting INBOX back on
+the thread and UNREAD on the snoozed message (Gmail's own snooze returns a
+conversation unread), then drops the row. `DELETE …/snooze` wakes it now without
+marking it unread (the user is looking at it). Gmail first, local write after,
+as for every message action. A snoozed thread is archived, so `archivedOnly`
+(Done) now means archived *and not snoozed*, and `snoozedOnly=true` is the
+Snoozed view; a listed message carries `snoozedUntil`. A wake Gmail refuses is
+pushed back 15 minutes rather than retried every tick. It wakes on time only
+while the API runs; anything overdue wakes on the first tick after a restart.
+
+In the web app, the clock is `features/snooze/SnoozeButton.tsx`, mounted by
+`MessageActions` in both the reader's toolbar and a row's strip (last before the
+read/archive/delete trio). The design draws the clock and no picker, so the menu
+is the Send-options specimen's shape, built once in `features/time/`:
+`timePresets.ts` (pure, `now` a parameter — `snoozePresets`, `schedulePresets`,
+`presetTimeLabel`), `TimePresetMenu.tsx` and `CustomTimeForm.tsx`, which the
+compose window's "Schedule send…" reuses. The mutations are
+`api/snooze.mutations.ts`: a snooze leaves the lists like an archive
+(`hideWholeThread`, lists authoritative) and re-times a thread already snoozed,
+toasts "Snoozed until Tue 08:00 · Undo" from the mutation (Undo is the `DELETE`),
+and from the reader leaves by `useReturnToInbox` on the click — the fifth exit
+`detailExits.test.ts` counts. Unsnooze does not leave the reader: the message
+is still there to read. The Snoozed view is `?mailbox=snoozed`
+(`features/inbox/mailbox.ts`), not period-scoped, read with
+`snoozedListParams` so the sidebar's count and the view share one cache entry;
+its rows say "Until Tue 08:00" in the date's place and the reader shows a
+`SnoozedNotice` with Unsnooze. `features/snooze/snoozeWiring.test.tsx` renders
+both.
+
+## Schedule send and the due-work loop
+
+Gmail's API has no scheduled send either — the design's "hands Gmail a time" is
+implemented by miel holding the message. `POST /compose/scheduled` validates
+everything it can now (account, source message, recipients, uploads, size, the
+From alias) and stores the *send request*, not MIME: a reply is threaded and
+quoted, a forward's files fetched, when it goes, through the same send services
+an immediate send uses. `GET /compose/scheduled` lists pending, in-flight and
+failed sends; `DELETE /compose/scheduled/:id` is the toast's Undo (pending only);
+`PATCH … { sendAt }` moves a pending send or gives a failed one another go.
+
+`services/dueWork.ts` is the API process's second loop, beside the sync
+scheduler and independent of it (a snooze must wake whether or not automatic
+sync is on): every 30 s it sends what is due, wakes what is due, and hourly
+sweeps stale uploads, each pass failing on its own. The guarantees, all in
+`services/scheduledSends.ts`:
+
+- **One claim per row.** `OutboxStore.claimDue` is a single
+  `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)`, so two ticks or two
+  API processes never both send a row.
+- **At-least-once, guarded.** A row left `sending` by a process that died is
+  reclaimed after `STALE_CLAIM_MS` (10 min). Before a reclaimed row is sent
+  again, Gmail is searched for `rfc822msgid:` the Message-ID miel wrote into it;
+  if the first attempt landed, the send is recorded instead of repeated.
+- **Failures.** A refusal of ours, or Gmail refusing the message itself (a
+  `GmailSendError` carrying Gmail's reason), fails the row at once with that
+  reason; anything else is retried at 2 and 4 minutes, then failed
+  (`MAX_SEND_ATTEMPTS`).
+
+In the web app, `api/scheduledSends.hooks.ts` is the read (`useScheduledSends`,
+under its own `["scheduled-sends"]` root, polled every 30 s while anything is
+pending or sending — there is no socket event for a send going out) and the two
+writes (`useCancelScheduledSend`, `useRescheduleSend`), which re-read the list
+and leave the words to the caller. The **Scheduled** page
+(`/account/:accountId/scheduled`, `pages/ScheduledPage.tsx`) is an addition the
+design does not draw: there, scheduling hands Gmail a time and Gmail keeps the
+list, but here miel holds the mail and a send can fail with nobody looking. So
+the sidebar row appears only while the account has a pending, sending or failed
+send, and the page lists them — Change time and Cancel on a pending one, Retry
+(led by "Right away") on a failed one, with its `error` in red; a 409
+`scheduled_not_editable` says "It is already being sent".
+
+## The Google OAuth client entered in the app
+
+The onboarding gate's Google step asks for the client ID, secret and redirect
+URI, so a fresh install needs no `.env` edit and no restart before it can
+connect a mailbox. `services/googleOAuthConfig.ts` stores them like every other
+runtime credential — ID and redirect URI in `app_settings`
+(`google.client_id`, `google.redirect_uri`), the secret in `encrypted_secrets`
+(`google.client_secret`) through `encryptedSecrets.ts`, still the only
+decryptor. `GET|PUT|DELETE /settings/google-oauth`; `GET /auth/google/config`
+answers the same status (its `configured`/`missing` keep their old shape).
+
+- **The database wins, the environment is the fallback, never mixed.** A stored
+  client ID means the stored client, all three fields; none stored means
+  `GOOGLE_*` exactly as before, so an existing deployment keeps working with
+  nothing entered. `env.ts` no longer requires them in production.
+- **Resolved per call.** `GoogleAuthLive` is now built from the stores (like
+  `ClaudeLive`) and reads the client on each consent URL, code exchange and
+  token refresh, so a saved client takes effect on the next sign-in.
+  `runWithGoogleAuth` provides Postgres under it.
+- **Changing the client disconnects every mailbox.** A refresh token belongs to
+  the client that minted it. The status carries `accountsToReconnect` (how many
+  a different client would disconnect) for the warning before a save; a save or
+  clear answers `clientChanged` and `reconnectRequired`. Nothing is deleted:
+  putting the old client back revives the grants.
+- A redirect URI must be http(s), end in `GOOGLE_OAUTH_CALLBACK_PATH`, and carry
+  no query; the secret may be omitted to keep the stored one.
+
+In the web app one form is both surfaces: `features/google-oauth/GoogleClientForm.tsx`
+is mounted by the gate's `GoogleConfigStep` (full-width "Save and continue") and
+by `features/settings/GoogleClientCard.tsx` on Settings › Mailboxes, which
+shows what is in effect (ID, masked secret, redirect URI, "Saved in miel" or
+"From the server environment"), unfolds the form on Edit and offers Forget
+(DELETE, confirmed in place) only for a database client. The rules are pure in
+`googleClientDraft.ts`: the redirect URI starts from the one in effect, else
+`<server URL>/api/auth/google/callback` (the dev loopback URI behind a
+`.localhost` host, which Google refuses); an empty secret box keeps the stored
+secret only for the same client ID; a different ID with `accountsToReconnect > 0`
+shows the disconnect warning and turns the button into "Save anyway"; a
+`400 invalid_google_oauth_config` lands under the field it names. A save writes
+the status into the gate's `["auth", "google", "config"]` cache, which is what
+moves the gate on, and toasts `reconnectRequired` when it is not 0. The step's
+footnote keeps the `.env` path and its "check again".
+
+## The sync toast's counts
+
+`SyncRunResult` (and so `sync.finished`'s runs) carries `promosFound`, the codes
+the extraction found in that run's new mail — "Sync done · 14 new, 3 codes to
+review". Additive, so no alias dance: the received schema defaults it to 0, so a
+client of this release reading an older API's event still parses it.
+
+The web's one toast for a finished run is that line (`api/syncDoneToast.ts`,
+dispatched from `syncSocket.ts`): new mail summed over every run, the codes
+clause and a Review action to `/promo-codes` only when there are codes. The
+per-account "Found N new mails" toast on `mails.fetched` is gone with it.
 
 ## Acting on a message
 
@@ -1116,6 +1471,37 @@ too, so a hook that re-decided on each sighting of the label would both re-fire
 on a refetch and undo a "Mark as unread" the reader had just asked for. The
 consequence for the toggle's own suite is that it tests the trip back —
 opening an unread message leaves no "Mark as read" to click.
+
+## Undoing an archive or a trash, and the Done view
+
+"Done" is Gmail's archive — no flag of miel's, no migration. The Done view is
+`GET /messages?archivedOnly=true` (`MessageListFilter.archivedOnly`: archived
+only, trashed and removed still out unless asked for), parsed from the literal
+`"true"` rather than coerced, since `z.coerce.boolean()` reads `"false"` as
+true.
+
+The Undo behind the toasts is two routes, `POST /messages/:a/:m/unarchive` and
+`/untrash`, plus the same two as `BatchMessageActionRequest` actions for the
+section-level actions. Each is its action read backwards at the same two places
+— Gmail first, then the same thread-wide (single) or per-message (batch) local
+write with the flag cleared — so a refusal leaves nothing written. Untrash is a
+`threads.modify` that removes TRASH *and* adds INBOX, not the REST `untrash`,
+which lifts TRASH only and would leave the INBOX miel's trash took away gone; for
+the same reason it clears `isArchived` too. Unarchive is also how a message
+leaves Done.
+
+In the web app the Undo hangs off the mutation, like the failure notice
+(`announcingUndo` in `api/mutations.ts`): archive and trash answer with an
+"Archived · Undo" / "Moved to trash · Undo" toast, and a section's bulk archive
+or trash with "N messages archived · Undo". The toast outlives every component
+that could hold a hook, so Undo runs `unarchive`/`untrash` through a
+`MutationObserver` on the same client. The undos are not optimistic — the rows
+they restore are no longer in the cached lists — and re-read the lists, the
+detail and the promo suggestions instead.
+
+`GET /auth/check` answers `{ ok: true }` behind the bearer middleware and does
+nothing else: a client connecting to a server tells a wrong secret (401) from a
+wrong URL (no answer) with it.
 
 ## Labelling the message you are reading
 

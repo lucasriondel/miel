@@ -1,16 +1,34 @@
-import { useOutletContext, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
+import {
+  ChevronLeft,
+  CircleCheck,
+  Clock,
+  Inbox as InboxIcon,
+  Search as SearchIcon,
+} from "lucide-react";
 import { useAllMessages } from "../api/queries";
+import { snoozedListParams } from "../features/snooze/snoozedListParams";
 import { PrioritySection } from "../components/PrioritySection";
 import { UntriagedSection } from "../components/UntriagedSection";
-import { AllCaughtUp } from "../components/AllCaughtUp";
 import { Empty } from "@/components/ui/empty";
-import { Spinner } from "@/components/ui/spinner";
 import { MobileBottomBar } from "../components/MobileBottomBar";
-import { TopBarStart, TopBarEnd } from "@/components/ui/app-shell";
-import { PageTopBar } from "../features/shell/PageTopBar";
-import { AccountSwitcher } from "../components/topbar/AccountSwitcher";
 import { SyncActions } from "../components/topbar/SyncActions";
 import { PeriodNav } from "../components/topbar/PeriodNav";
+import { SegmentedToggle } from "../components/topbar/SegmentedToggle";
+import { DateRangeNavInline } from "../components/topbar/DateRangeNavInline";
+import { AppButton } from "../components/AppButton";
+import { PageHeader } from "../features/shell/PageHeader";
+import { PageLayout } from "../features/shell/PageLayout";
+import { SearchField } from "../features/inbox/SearchField";
+import { searchMessages } from "../features/inbox/searchMessages";
+import { periodTitle } from "../features/inbox/periodTitle";
+import { readingOrder } from "../features/inbox/readingOrder";
+import type { ReaderContext } from "../features/inbox/readerContext";
+import { InboxEmptyState } from "../features/inbox/InboxEmptyState";
+import { InboxSkeleton } from "../features/inbox/InboxSkeleton";
+import { formatRangeLabel } from "../features/sync/dateRange";
+import { cn } from "@/lib/utils";
 import { ActionablesLedger } from "../features/ledger/ActionablesLedger";
 import { RowLabelPickerHost } from "../features/labels/RowLabelPickerHost";
 import { RowPromosHost } from "../features/promos/RowPromosHost";
@@ -19,11 +37,17 @@ import { SelectModeButton } from "../features/select/SelectModeButton";
 import { BulkActionBar } from "../features/select/BulkActionBar";
 import type { ListedMessage } from "../api/types";
 import type { LayoutContext } from "../App";
-import type { RangeMode } from "../features/sync/dateRange";
+import type { DateRange } from "../features/sync/dateRange";
+import type { Mailbox } from "../features/inbox/mailbox";
 import { bucketMessages } from "./inboxBuckets";
 
+const VIEW_OPTIONS = [
+  { value: "week" as const, label: "Week" },
+  { value: "month" as const, label: "Month" },
+  { value: "year" as const, label: "Year" },
+];
+
 export const InboxPage = () => {
-  const navigate = useNavigate();
   const ctx = useOutletContext<LayoutContext>();
   const {
     selectedAccountId,
@@ -38,20 +62,33 @@ export const InboxPage = () => {
     goNext,
     goToday,
     setViewMode,
+    mailbox,
   } = ctx;
 
   const selection = useSelection();
+  const [query, setQuery] = useState("");
+  const { pathname } = useLocation();
+  // A message open in the reader beside the list (the child route).
+  const readerOpen = /\/messages\/[^/]+/.test(pathname);
 
   const {
     items: data,
     isLoading,
     error,
-  } = useAllMessages({
-    accountId: selectedAccountId,
-    labelId: selectedLabelId,
-    internalDateFrom: rangeStartIso,
-    internalDateTo: rangeEndIso,
-  });
+  } = useAllMessages(
+    // Snoozed is every snoozed thread of the account, whatever the period: the
+    // date that matters is when it comes back. Spelled exactly as the sidebar's
+    // count asks for it, so the two share one cache entry.
+    mailbox === "snoozed"
+      ? snoozedListParams(selectedAccountId)
+      : {
+          accountId: selectedAccountId,
+          labelId: selectedLabelId,
+          internalDateFrom: rangeStartIso,
+          internalDateTo: rangeEndIso,
+          archivedOnly: mailbox === "done" ? true : undefined,
+        },
+  );
 
   /**
    * A whole category in one gesture (#146). Entering select mode is part of the
@@ -64,12 +101,9 @@ export const InboxPage = () => {
     selection.toggleMany(accountId, gmailMessageIds);
   };
 
-  const handleSelectAccount = (id: string) => {
-    selection.exitSelectMode();
-    navigate(`/account/${id}`, { replace: true });
-  };
-
-  const items = data;
+  // Memoised: the list's presence animation keys off the array's identity, and
+  // a fresh filtered array every render would restart a leaving row's exit.
+  const items = useMemo(() => searchMessages(data, query), [data, query]);
   const messageIds = selectedAccountId
     ? items.filter((m) => m.accountId === selectedAccountId).map((m) => m.gmailMessageId)
     : [];
@@ -88,64 +122,117 @@ export const InboxPage = () => {
     />
   );
 
-  return (
-    <>
-      <PageTopBar>
-        <TopBarStart>
-          <AccountSwitcher
-            selectedAccountId={selectedAccountId}
-            onSelectAccount={handleSelectAccount}
+  const header = (
+    <PageHeader
+      title={mailbox === "done" ? "Done" : mailbox === "snoozed" ? "Snoozed" : periodTitle(range)}
+      leading={
+        // No period to step through in Snoozed: it lists every snoozed thread.
+        <span className={cn("hidden", mailbox !== "snoozed" && "@5xl:inline-flex")}>
+          <DateRangeNavInline
+            range={range}
+            isCurrentPeriod={isCurrentPeriod}
+            canGoNext={canGoNext}
+            onPrev={goPrev}
+            onNext={goNext}
+            onToday={goToday}
           />
-        </TopBarStart>
-        {/* Centred on the bar, not between the clusters (the two sides are
-            unequal), the way a centred TopBarTitle is — but a row of controls,
-            so not the title element. Below `md` it moves to the bottom bar. */}
-        <div className="absolute left-1/2 hidden -translate-x-1/2 md:flex">{periodNav}</div>
-        <TopBarEnd>
+        </span>
+      }
+      center={<SearchField value={query} onChange={setQuery} />}
+      trailing={
+        <>
+          <span className={cn("hidden", mailbox !== "snoozed" && "@3xl:inline-flex")}>
+            <SegmentedToggle
+              options={VIEW_OPTIONS}
+              value={range.mode}
+              onChange={setViewMode}
+              ariaLabel="Inbox view"
+            />
+          </span>
+          <span className="hidden @4xl:inline-flex">
+            <SelectModeButton
+              active={selection.selectMode}
+              disabled={!selectedAccountId}
+              onClick={selection.selectMode ? selection.exitSelectMode : selection.enterSelectMode}
+            />
+          </span>
           <SyncActions accountEmail={selectedAccountEmail} range={range} />
-        </TopBarEnd>
-      </PageTopBar>
-      <div className="flex flex-1 flex-col gap-4 pb-24 md:pb-0">
-        {selectedAccountId && selection.selectMode && (
-          <BulkActionBar
-            accountId={selectedAccountId}
-            selectedIds={selectedIds}
-            totalCount={messageIds.length}
-            allSelected={allSelected}
-            onSelectAll={() => selection.selectMany(selectedAccountId, messageIds)}
-            onClear={selection.clear}
-            onExit={selection.exitSelectMode}
+        </>
+      }
+    />
+  );
+
+  const readerContext: ReaderContext = { readingOrder: readingOrder(items) };
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1">
+      <PageLayout
+        // Below `lg` the reader takes the whole column; the list waits behind it.
+        className={cn(readerOpen && "hidden lg:flex")}
+        header={header}
+        bodyClassName="px-4 pt-[22px] pb-24 sm:px-8 md:pb-8"
+      >
+        <div className="flex flex-col gap-4">
+          {selectedAccountId && selection.selectMode && (
+            <BulkActionBar
+              accountId={selectedAccountId}
+              selectedIds={selectedIds}
+              totalCount={messageIds.length}
+              allSelected={allSelected}
+              onSelectAll={() => selection.selectMany(selectedAccountId, messageIds)}
+              onClear={selection.clear}
+              onExit={selection.exitSelectMode}
+            />
+          )}
+          <InboxBody
+            selectedAccountId={selectedAccountId}
+            accountEmail={selectedAccountEmail}
+            mailbox={mailbox}
+            range={range}
+            query={query}
+            onClearQuery={() => setQuery("")}
+            onWiden={() => setViewMode("year")}
+            onPrev={goPrev}
+            rangeStartIso={rangeStartIso}
+            rangeEndIso={rangeEndIso}
+            isLoading={isLoading}
+            error={error}
+            loadedCount={data.length}
+            isCurrentPeriod={isCurrentPeriod}
+            items={items}
+            selectMode={selection.selectMode}
+            isSelected={selection.isSelected}
+            onToggleSelect={selection.toggle}
+            onToggleCategory={handleToggleCategory}
           />
-        )}
-        <InboxBody
-          selectedAccountId={selectedAccountId}
-          mode={range.mode}
-          rangeStartIso={rangeStartIso}
-          rangeEndIso={rangeEndIso}
-          isLoading={isLoading}
-          error={error}
-          items={items}
-          selectMode={selection.selectMode}
-          isSelected={selection.isSelected}
-          onToggleSelect={selection.toggle}
-          onToggleCategory={handleToggleCategory}
-        />
-      </div>
-      <MobileBottomBar>
-        {periodNav}
-        <SelectModeButton
-          active={selection.selectMode}
-          disabled={!selectedAccountId}
-          onClick={selection.selectMode ? selection.exitSelectMode : selection.enterSelectMode}
-        />
-      </MobileBottomBar>
-    </>
+        </div>
+        <MobileBottomBar>
+          {periodNav}
+          <SelectModeButton
+            active={selection.selectMode}
+            disabled={!selectedAccountId}
+            onClick={selection.selectMode ? selection.exitSelectMode : selection.enterSelectMode}
+          />
+        </MobileBottomBar>
+      </PageLayout>
+      <Outlet context={readerContext} />
+    </div>
   );
 };
 
 interface InboxBodyProps {
   selectedAccountId: string | undefined;
-  mode: RangeMode;
+  accountEmail: string | undefined;
+  mailbox: Mailbox;
+  range: DateRange;
+  /** The search on screen, and the two ways out of an empty result. */
+  query: string;
+  onClearQuery: () => void;
+  onWiden: () => void;
+  onPrev: () => void;
+  /** How many the period holds before the search narrows it. */
+  loadedCount: number;
+  isCurrentPeriod: boolean;
   /** The window the list is showing, which the promo section is scoped to. */
   rangeStartIso: string;
   rangeEndIso: string;
@@ -160,7 +247,15 @@ interface InboxBodyProps {
 
 const InboxBody = ({
   selectedAccountId,
-  mode,
+  isCurrentPeriod,
+  accountEmail,
+  mailbox,
+  range,
+  query,
+  onClearQuery,
+  onWiden,
+  onPrev,
+  loadedCount,
   rangeStartIso,
   rangeEndIso,
   isLoading,
@@ -180,20 +275,27 @@ const InboxBody = ({
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-gousse-muted">
-        <Spinner /> Loading messages…
-      </div>
-    );
-  }
+  if (isLoading) return <InboxSkeleton />;
 
   if (error) {
     return <Empty title="Couldn't load messages" description={(error as Error).message} />;
   }
 
   if (items.length === 0) {
-    return <AllCaughtUp mode={mode} />;
+    return (
+      <InboxEmpty
+        accountId={selectedAccountId}
+        isCurrentPeriod={isCurrentPeriod}
+        accountEmail={accountEmail}
+        mailbox={mailbox}
+        range={range}
+        query={query}
+        loadedCount={loadedCount}
+        onClearQuery={onClearQuery}
+        onWiden={onWiden}
+        onPrev={onPrev}
+      />
+    );
   }
 
   const buckets = bucketMessages(items);
@@ -218,7 +320,7 @@ const InboxBody = ({
         internalDateFrom={rangeStartIso}
         internalDateTo={rangeEndIso}
       >
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-[30px]">
           {/* Hidden in select mode: the bulk-action mode stays uncluttered, and
             every act in the ledger is a single-item act that has nothing to say
             about a selection. */}
@@ -265,5 +367,114 @@ const InboxBody = ({
         </div>
       </RowPromosHost>
     </RowLabelPickerHost>
+  );
+};
+
+interface InboxEmptyProps {
+  accountId: string;
+  isCurrentPeriod: boolean;
+  accountEmail: string | undefined;
+  mailbox: Mailbox;
+  range: DateRange;
+  query: string;
+  loadedCount: number;
+  onClearQuery: () => void;
+  onWiden: () => void;
+  onPrev: () => void;
+}
+
+/**
+ * Which empty list this is (Main view › Empty & loading states): a search
+ * that matched nothing, a period nothing arrived in, or a period whose mail has
+ * all been dealt with. Done has its own sentence — nothing archived yet.
+ */
+const InboxEmpty = ({
+  accountId,
+  isCurrentPeriod,
+  accountEmail,
+  mailbox,
+  range,
+  query,
+  loadedCount,
+  onClearQuery,
+  onWiden,
+  onPrev,
+}: InboxEmptyProps) => {
+  const navigate = useNavigate();
+  const { search } = useLocation();
+  const period = `this ${range.mode}`;
+
+  if (query.trim()) {
+    return (
+      <InboxEmptyState
+        icon={<SearchIcon aria-hidden />}
+        title={`No mail matches “${query.trim()}”`}
+        description={`Search only covers ${period}. Widen the period to Month or Year, or try fewer words — sender, subject and snippet are all searched.`}
+        actions={
+          <>
+            <AppButton onClick={onClearQuery}>Clear search</AppButton>
+            {range.mode !== "year" ? (
+              <AppButton tone="primary" onClick={onWiden}>
+                Search this year
+              </AppButton>
+            ) : null}
+          </>
+        }
+      />
+    );
+  }
+
+  if (mailbox === "snoozed") {
+    return (
+      <InboxEmptyState
+        icon={<Clock aria-hidden />}
+        title="Nothing snoozed"
+        description="Snooze a message to have it come back to the inbox when you need it."
+      />
+    );
+  }
+
+  if (mailbox === "done") {
+    return (
+      <InboxEmptyState
+        icon={<CircleCheck aria-hidden />}
+        title={`Nothing done ${period}`}
+        description="Messages you archive land here. Archive one from the inbox and it shows up in this list."
+      />
+    );
+  }
+
+  // An inbox list holds no archived mail, so an empty past period and an
+  // emptied current one look the same from here: the current period is the one
+  // a person has been working through, so it is the one that reads as done.
+  if (loadedCount === 0 && !isCurrentPeriod) {
+    return (
+      <InboxEmptyState
+        icon={<InboxIcon aria-hidden />}
+        title={`Nothing landed ${period}`}
+        description={`No mail arrived in ${accountEmail ?? "this mailbox"} in ${formatRangeLabel(range)}. Sync to pull anything new, or step back to the ${range.mode} before.`}
+        actions={
+          <AppButton onClick={onPrev}>
+            <ChevronLeft aria-hidden />
+            Previous {range.mode}
+          </AppButton>
+        }
+      />
+    );
+  }
+
+  const params = new URLSearchParams(search);
+  params.set("mailbox", "done");
+  return (
+    <InboxEmptyState
+      icon={<CircleCheck aria-hidden />}
+      title="You’re all caught up"
+      description={`Everything from ${period} is archived or done. New mail shows up here on the next sync.`}
+      actions={
+        <AppButton onClick={() => navigate(`/account/${accountId}?${params.toString()}`)}>
+          Open Done
+        </AppButton>
+      }
+    />
   );
 };

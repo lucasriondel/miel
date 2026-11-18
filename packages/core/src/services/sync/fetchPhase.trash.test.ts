@@ -55,8 +55,29 @@ function makeGmail(messages: Record<string, GogMessageRawT>): GmailDataAdapter {
     async batchModifyLabels() {},
     async trashThread() {},
     async archiveThread() {},
+    async unarchiveThread() {},
+    async untrashThread() {},
     async sendReply() {
-      return { messageId: "x" };
+      return { messageId: "x", threadId: "t" };
+    },
+    async sendNew() {
+      return { messageId: "x", threadId: "t" };
+    },
+    async saveDraft() {
+      return { draftId: "d", messageId: "x", threadId: "t" };
+    },
+    async deleteDraft() {},
+    async sendThreaded() {
+      return { messageId: "x", threadId: "t" };
+    },
+    async threadingOf() {
+      throw new Error("unexpected");
+    },
+    async getMessageHeaders() {
+      throw new Error("unexpected");
+    },
+    async listSendAs() {
+      return [];
     },
     async listFilters() {
       return [];

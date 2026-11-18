@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "react-router-dom";
 import { MielToaster } from "./components/MielToaster";
 import { router } from "./router";
+// Inter, the redesign's one typeface (`--font-sans` in index.css), self-hosted
+// from the package rather than fetched from a font CDN.
+import "@fontsource-variable/inter";
 import "./index.css";
 
 const queryClient = new QueryClient({

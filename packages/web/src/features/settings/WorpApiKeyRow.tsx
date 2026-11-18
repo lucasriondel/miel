@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { Input } from "@/components/ui/input";
+import { SETTINGS_INPUT } from "./settingsFields";
 import { useUpdateWorpSettings } from "../../api/worpSettings.hooks";
 import { apiErrorMessage } from "../../api/apiErrorMessage";
 import { SavedFlash } from "@/components/ui/saved-flash";
-import { SettingRow } from "@/components/ui/setting-row";
+import { SettingsRow } from "./SettingsRow";
 import type { SecretStatus } from "../../api/types";
 
 interface Props {
@@ -33,7 +34,7 @@ export const WorpApiKeyRow = ({ apiKey }: Props) => {
     : "No key stored. Paste worp's API key. It is stored encrypted on the server and never shown again.";
 
   return (
-    <SettingRow
+    <SettingsRow
       title="API key"
       description={description}
       alignTop
@@ -45,13 +46,13 @@ export const WorpApiKeyRow = ({ apiKey }: Props) => {
             error={save.isError ? apiErrorMessage(save.error) : null}
           />
           {apiKey.configured ? (
-            <Button
-              variant="danger"
+            <AppButton
+              tone="danger"
               disabled={save.isPending}
               onClick={() => save.mutate({ apiKey: null })}
             >
               Clear key
-            </Button>
+            </AppButton>
           ) : null}
         </>
       }
@@ -72,16 +73,16 @@ export const WorpApiKeyRow = ({ apiKey }: Props) => {
               submit();
             }
           }}
-          className="flex-1 font-mono"
+          className={`flex-1 font-mono ${SETTINGS_INPUT}`}
         />
-        <Button
-          variant="primary"
+        <AppButton
+          tone="primary"
           disabled={save.isPending || draft.trim().length === 0}
           onClick={submit}
         >
           Save
-        </Button>
+        </AppButton>
       </div>
-    </SettingRow>
+    </SettingsRow>
   );
 };

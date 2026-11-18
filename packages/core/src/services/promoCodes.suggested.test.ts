@@ -43,6 +43,9 @@ const detection = (
       {
         accountId,
         gmailMessageId,
+        subject: "Les Beauty Days commencent",
+        fromName: "Sephora",
+        fromEmail: "news@sephora.example",
         internalDate: over.internalDate ?? new Date("2026-09-01T09:00:00.000Z"),
       },
     ],
@@ -65,7 +68,7 @@ const suggested = (stores: TestStores, now: Date = NOW): Promise<PromoListing[]>
   stores.run(listSuggestedPromosEffect({ now }));
 
 describe("the suggestions the Promo Codes page reads", () => {
-  test("carries the five guesses and the mailbox the mail arrived in", async () => {
+  test("carries the five guesses, the mailbox, and the mail it was read out of", async () => {
     const stores = seed([detection("p1")]);
 
     expect(await suggested(stores)).toEqual([
@@ -79,6 +82,13 @@ describe("the suggestions the Promo Codes page reads", () => {
         terms: "orders over £50",
         merchant: "Zara",
         expiresAt: expiring("2026-12-24").toISOString(),
+        // Nobody saved it, and its mail is still in the inbox: the card's
+        // "Sephora · Les Beauty Days commencent · Sun" comes from that row.
+        savedAt: null,
+        subject: "Les Beauty Days commencent",
+        fromName: "Sephora",
+        fromEmail: "news@sephora.example",
+        internalDate: "2026-09-01T09:00:00.000Z",
       },
     ]);
   });

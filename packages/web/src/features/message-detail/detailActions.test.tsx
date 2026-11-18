@@ -104,10 +104,10 @@ const INVOICES: MessageLabel = {
   colorFg: null,
 };
 
-// The detail page reads nothing off the layout — the top bar is the layout's
-// own now, and its controls arrive through `PageTopBar`, which renders them in
-// place when no bar is mounted above. An empty context keeps that true: a page
-// that started destructuring one would throw here rather than get a stub.
+// The reader reads one thing off the route above it — the list's reading order,
+// for its pager — and treats a context without one as "no list beside me". An
+// empty context keeps that true: a reader that started requiring more would
+// throw here rather than get a stub.
 const LAYOUT = {};
 
 const renderPage = (message: MessageDetail = messageDetail()) => {
@@ -180,25 +180,25 @@ describe("what the page shows before the server answers", () => {
     await waitFor(() => expect(maybeButton("Remove label Invoices")).not.toBeNull());
   });
 
-  test("changing the priority re-reads the triage chip", async () => {
+  test("changing the priority re-reads the priority banner", async () => {
     renderPage(
       messageDetail({
         latestTriageId: "tr-1",
         triageHistory: [triageRun({ id: "tr-1", priority: "low" })],
       }),
     );
-    expect(screen.getByText("low")).toBeDefined();
+    expect(screen.getByText("Low priority —")).toBeDefined();
 
     fireEvent.click(button("Change priority"));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "high" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "High" }));
 
-    await waitFor(() => expect(screen.queryByText("high")).not.toBeNull());
-    expect(screen.queryByText("low")).toBeNull();
+    await waitFor(() => expect(screen.queryByText("High priority —")).not.toBeNull());
+    expect(screen.queryByText("Low priority —")).toBeNull();
     expect(sent()).toEqual(["POST /messages/acc-1/msg-1/priority"]);
 
     await refuse();
 
-    await waitFor(() => expect(screen.queryByText("low")).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText("Low priority —")).not.toBeNull());
   });
 });
 

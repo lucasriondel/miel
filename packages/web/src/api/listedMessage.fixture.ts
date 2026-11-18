@@ -26,6 +26,7 @@ export function listedMessage(over: Partial<ListedMessage> = {}): ListedMessage 
     triageId: null,
     labels: [],
     attachments: [],
+    snoozedUntil: null,
     ...over,
   };
 }

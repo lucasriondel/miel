@@ -1,8 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { MutationObserver, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiErrorMessage } from "./apiErrorMessage";
 import { apiFetch } from "./client";
+import { generationExtras, type PreviousDraft } from "./compose.hooks";
 import { queryKeys } from "./queries";
 import type {
   EditedPromo,
@@ -52,7 +53,7 @@ export interface MessageActionInput {
 // go with it — otherwise they re-appear on the next refetch, seconds after the
 // row above them vanished. This is why an optimistic plan is handed every
 // cached message: the siblings live in other queries and other pages.
-const hideWholeThread: OptimisticPlan<MessageActionInput> = (input, cached) => {
+export const hideWholeThread: OptimisticPlan<MessageActionInput> = (input, cached) => {
   const threadIds = new Set(
     cached.filter((m) => sameMessage(m, input)).map((m) => m.gmailThreadId),
   );
@@ -69,7 +70,7 @@ const hideWholeThread: OptimisticPlan<MessageActionInput> = (input, cached) => {
  * whether or not anyone is still listening — the rollback puts the row back in
  * the list either way, and this is what says why it came back.
  */
-function announcingFailure<TInput extends MessageMutationTarget, TResult, TSide = never>(
+export function announcingFailure<TInput extends MessageMutationTarget, TResult, TSide = never>(
   qc: QueryClient,
   whenItFails: string,
   config: MessageMutationConfig<TInput, TSide>,
@@ -116,7 +117,44 @@ const PROMO_SUGGESTIONS = () => [["promo-suggestions"]] as const;
  */
 const PROMO_READS = () => [["promo-suggestions"], ["saved-promos"]] as const;
 
+/**
+ * The other half of archive and trash: a toast that says what happened, with
+ * Undo (Main view › Toasts › "Archived · Undo", "Moved to trash · Undo").
+ *
+ * It hangs off the mutation for the reason the failure notice does — the row's
+ * or the reader's component is usually gone by the time the answer arrives —
+ * and Undo runs through a `MutationObserver` on the same client for the same
+ * reason: the toast outlives everything that could have held a hook.
+ */
+type MessageActionOptions = ReturnType<typeof archiveMessageOptions>;
+
+function announcingUndo(
+  qc: QueryClient,
+  done: string,
+  undo: (qc: QueryClient) => MessageActionOptions,
+  options: MessageActionOptions,
+): MessageActionOptions {
+  return {
+    ...options,
+    onSuccess: (data: MessageActionResult, input: MessageActionInput) => {
+      options.onSuccess(data, input);
+      toast(done, {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void new MutationObserver(qc, undo(qc)).mutate(input);
+          },
+        },
+      });
+    },
+  };
+}
+
 export function archiveMessageMutationOptions(qc: QueryClient) {
+  return announcingUndo(qc, "Archived", unarchiveMessageMutationOptions, archiveMessageOptions(qc));
+}
+
+function archiveMessageOptions(qc: QueryClient) {
   return announcingFailure<MessageActionInput, MessageActionResult>(
     qc,
     "Could not archive message",
@@ -145,6 +183,15 @@ export function useArchiveMessage() {
  * token and one set of invalidations.
  */
 export function trashMessageMutationOptions(qc: QueryClient) {
+  return announcingUndo(
+    qc,
+    "Moved to trash",
+    untrashMessageMutationOptions,
+    trashMessageOptions(qc),
+  );
+}
+
+function trashMessageOptions(qc: QueryClient) {
   return announcingFailure<MessageActionInput, MessageActionResult>(
     qc,
     "Could not delete message",
@@ -168,6 +215,53 @@ export function trashMessageMutationOptions(qc: QueryClient) {
 export function useTrashMessage() {
   const qc = useQueryClient();
   return useMutation(trashMessageMutationOptions(qc));
+}
+
+/**
+ * Taking an archive back: Gmail re-adds INBOX to the thread and the server
+ * clears `isArchived` on every message of it. Also how a message leaves Done.
+ *
+ * Not optimistic: the row being restored is not in the cached lists any more
+ * (the archive removed it), so there is nothing to write — the lists, the
+ * detail and the suggestions the mail carries are re-read instead.
+ */
+export function unarchiveMessageMutationOptions(qc: QueryClient) {
+  return announcingFailure<MessageActionInput, MessageActionResult>(
+    qc,
+    "Could not move the message back to the inbox",
+    {
+      request: (input) => ({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/unarchive`,
+        method: "POST",
+      }),
+      alsoInvalidate: PROMO_SUGGESTIONS,
+    },
+  );
+}
+
+export function useUnarchiveMessage() {
+  const qc = useQueryClient();
+  return useMutation(unarchiveMessageMutationOptions(qc));
+}
+
+/** Taking a trash back: Gmail removes TRASH and adds INBOX to the thread. */
+export function untrashMessageMutationOptions(qc: QueryClient) {
+  return announcingFailure<MessageActionInput, MessageActionResult>(
+    qc,
+    "Could not restore the message",
+    {
+      request: (input) => ({
+        path: `/messages/${input.accountId}/${input.gmailMessageId}/untrash`,
+        method: "POST",
+      }),
+      alsoInvalidate: PROMO_SUGGESTIONS,
+    },
+  );
+}
+
+export function useUntrashMessage() {
+  const qc = useQueryClient();
+  return useMutation(untrashMessageMutationOptions(qc));
 }
 
 export interface SavePromoInput extends MessageActionInput {
@@ -457,6 +551,12 @@ export function useSetMessageRead() {
 
 export interface GenerateReplyInput extends MessageActionInput {
   prompt: string;
+  /** The window's current draft, which the model then edits rather than starting over. */
+  previousDraft?: PreviousDraft;
+  /** Chosen by the caller, so Stop can name the generation it means. */
+  requestId?: string;
+  /** Aborting the request also stops the generation on the server. */
+  signal?: AbortSignal;
 }
 
 export interface GenerateReplyResult {
@@ -474,7 +574,8 @@ export function generateReplyMutationOptions() {
       apiFetch<GenerateReplyResult>({
         path: `/messages/${input.accountId}/${input.gmailMessageId}/generate-reply`,
         method: "POST",
-        body: { prompt: input.prompt },
+        body: { prompt: input.prompt, ...generationExtras(input) },
+        signal: input.signal,
       }),
   };
 }
@@ -492,11 +593,32 @@ export interface SendReplyInput extends MessageActionInput {
    */
   to?: string[];
   cc?: string[];
+  /** A header only: Gmail delivers to it and strips it from what the others see. */
+  bcc?: string[];
+  /** Reply to everyone. Only decides the server's default Cc — a named `cc` still wins. */
+  replyAll?: boolean;
+  /** The compose window's autosaved Gmail draft, deleted by the server once the reply is sent. */
+  draftId?: string;
+  /** A verified send-as alias of the mailbox it goes from. */
+  from?: string;
+  /**
+   * Answer from another connected mailbox. That reply cannot join the Gmail
+   * thread (thread ids belong to a mailbox), so it is threaded by headers only.
+   */
+  fromAccountId?: string;
+  /** Staged uploads of the mailbox it goes from, in chip order. */
+  uploadIds?: string[];
+  /** The server quotes the original by default; false sends without it. */
+  includeQuote?: boolean;
+  /** The quote's text as the user trimmed it, instead of the stored original's. */
+  quotedText?: string;
 }
 
 export interface SendReplyResult {
   ok: true;
   sentMessageId: string;
+  /** The thread the reply went into — what a "View in Gmail" link needs. */
+  threadId: string;
 }
 
 // Sending has no optimistic shape — the sent message is the server's to
@@ -511,6 +633,14 @@ export function sendReplyMutationOptions(qc: QueryClient) {
         body: input.body,
         ...(input.to ? { to: input.to } : {}),
         ...(input.cc ? { cc: input.cc } : {}),
+        ...(input.bcc ? { bcc: input.bcc } : {}),
+        ...(input.replyAll ? { replyAll: true } : {}),
+        ...(input.draftId ? { draftId: input.draftId } : {}),
+        ...(input.from ? { from: input.from } : {}),
+        ...(input.fromAccountId ? { fromAccountId: input.fromAccountId } : {}),
+        ...(input.uploadIds && input.uploadIds.length > 0 ? { uploadIds: input.uploadIds } : {}),
+        ...(input.includeQuote === false ? { includeQuote: false } : {}),
+        ...(input.quotedText !== undefined ? { quotedText: input.quotedText } : {}),
       },
     }),
   });
@@ -521,7 +651,14 @@ export function useSendReply() {
   return useMutation(sendReplyMutationOptions(qc));
 }
 
-export type BatchMessageAction = "read" | "unread" | "archive" | "trash" | "label";
+export type BatchMessageAction =
+  | "read"
+  | "unread"
+  | "archive"
+  | "trash"
+  | "unarchive"
+  | "untrash"
+  | "label";
 
 /** The four that carry nothing — every action but the one with a payload. */
 export type BatchFlagAction = Exclude<BatchMessageAction, "label">;
@@ -546,7 +683,44 @@ export interface BatchMessageActionResult {
   count: number;
 }
 
+/** What a bulk archive or trash is undone by, and what its toast says. */
+const BATCH_UNDO: Partial<Record<BatchMessageAction, { undo: BatchFlagAction; done: string }>> = {
+  archive: { undo: "unarchive", done: "archived" },
+  trash: { undo: "untrash", done: "moved to trash" },
+};
+
 export function batchMessageActionMutationOptions(qc: QueryClient) {
+  const base = batchMessageActionBaseOptions(qc);
+  return {
+    ...base,
+    onSuccess: (data: BatchMessageActionResult, input: BatchMessageActionInput) => {
+      base.onSuccess(data, input);
+      // Restoring rows the cache no longer holds: nothing optimistic could
+      // draw them, so the lists are re-read.
+      if (input.action === "unarchive" || input.action === "untrash") {
+        qc.invalidateQueries({ queryKey: ["messages"] });
+        return;
+      }
+      const undo = BATCH_UNDO[input.action];
+      if (!undo) return;
+      const n = input.gmailMessageIds.length;
+      toast(`${n} ${n === 1 ? "message" : "messages"} ${undo.done}`, {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void new MutationObserver(qc, batchMessageActionMutationOptions(qc)).mutate({
+              accountId: input.accountId,
+              gmailMessageIds: input.gmailMessageIds,
+              action: undo.undo,
+            });
+          },
+        },
+      });
+    },
+  };
+}
+
+function batchMessageActionBaseOptions(qc: QueryClient) {
   return messageMutationOptions<BatchMessageActionInput, BatchMessageActionResult>(qc, {
     request: (input) => ({
       path: "/messages/batch",
@@ -569,6 +743,11 @@ export function batchMessageActionMutationOptions(qc: QueryClient) {
       // stay put and only the ones selected gain the chip.
       if (input.action === "label") {
         return (m) => (selected(m) ? withLabel(m, input.label) : m);
+      }
+      // An undo brings rows back that the lists no longer hold — nothing to
+      // write until the re-read on success.
+      if (input.action === "unarchive" || input.action === "untrash") {
+        return (m) => m;
       }
       return (m) => (selected(m) ? withUnread(m, input.action === "unread") : m);
     },

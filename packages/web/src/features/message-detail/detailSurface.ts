@@ -13,9 +13,9 @@
 export type SurfaceElevation = "sm" | "md";
 
 const SHADOW: Record<SurfaceElevation, string> = {
-  sm: "shadow-gousse-sm",
-  md: "shadow-gousse-md",
+  sm: "",
+  md: "shadow-[0_1px_2px_rgb(20_32_46/0.04)]",
 };
 
 export const detailSurfaceClass = (elevation: SurfaceElevation = "sm") =>
-  `rounded-3xl border border-gousse-line/60 bg-gousse-panel ${SHADOW[elevation]}`;
+  `rounded-xl border border-gousse-line bg-gousse-panel ${SHADOW[elevation]}`;

@@ -1,32 +1,28 @@
-import { useNavigate } from "react-router-dom";
 import { useLogs } from "../api/queries";
 import { apiErrorMessage } from "../api/apiErrorMessage";
 import { Empty } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
-import { TopBarStart, TopBarTitle } from "@/components/ui/app-shell";
-import { PageTopBar } from "../features/shell/PageTopBar";
-import { BackToInboxButton } from "../components/topbar/BackToInboxButton";
+import { PageHeader } from "../features/shell/PageHeader";
+import { PageLayout } from "../features/shell/PageLayout";
 import { LogsTable } from "../features/logs/LogsTable";
 
+/**
+ * The history of sync and triage runs. The redesign draws no Logs page, so it
+ * wears the shape the drawn pages share: the display title, then one centred
+ * hairline card.
+ */
 export const LogsPage = () => {
   const { data, isLoading, error } = useLogs();
-  const navigate = useNavigate();
 
   return (
-    <>
-      <PageTopBar>
-        <TopBarStart>
-          <BackToInboxButton onClick={() => navigate("/")} />
-        </TopBarStart>
-        <TopBarTitle centered>Logs</TopBarTitle>
-      </PageTopBar>
-      <div className="flex flex-col gap-6">
-        <p className="text-sm text-gousse-muted">
+    <PageLayout header={<PageHeader title="Logs" />} bodyClassName="px-5 pt-2 pb-12 sm:px-8">
+      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6">
+        <p className="text-[13px] text-gousse-muted">
           History of sync and triage runs across all accounts, newest first.
         </p>
 
         {isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-gousse-muted">
+          <div className="flex items-center gap-2 text-[13px] text-gousse-muted">
             <Spinner /> Loading logs…
           </div>
         ) : error ? (
@@ -40,6 +36,6 @@ export const LogsPage = () => {
           <LogsTable entries={data.entries} />
         )}
       </div>
-    </>
+    </PageLayout>
   );
 };

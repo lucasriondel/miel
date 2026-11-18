@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { isAuthErr, toGmailError } from "./gmailErrors";
+import { gmailRefusalDetail, isAuthErr, toGmailError } from "./gmailErrors";
 
 describe("isAuthErr", () => {
   test("true for numeric code 401/403", () => {
@@ -40,5 +40,38 @@ describe("toGmailError", () => {
     const err = toGmailError("messages.get", "email:a@b.c", { code: 500 });
     expect(err._tag).toBe("GmailApiError");
     expect((err as { op: string }).op).toBe("messages.get");
+  });
+});
+
+describe("gmailRefusalDetail", () => {
+  test("prefers the API's own message over gaxios's", () => {
+    const err = {
+      message: "Request failed with status code 400",
+      response: { data: { error: { message: "Invalid To header" } } },
+    };
+    expect(gmailRefusalDetail(err)).toBe("Invalid To header");
+  });
+
+  test("falls back to errors[0] and then to the thrown message", () => {
+    expect(gmailRefusalDetail({ errors: [{ message: "Bad Request" }] })).toBe("Bad Request");
+    expect(gmailRefusalDetail(new Error("socket hang up"))).toBe("socket hang up");
+  });
+
+  test("scrubs anything token-shaped before it can reach an HTTP body", () => {
+    const detail = gmailRefusalDetail({
+      message: "failed with Authorization: Bearer ya29.a0AfH6SMBsecret and ya29.other-token",
+    });
+    expect(detail).not.toContain("ya29.");
+    expect(detail).not.toContain("secret");
+    expect(detail).toContain("[redacted]");
+  });
+
+  test("answers nothing when there is nothing to say", () => {
+    expect(gmailRefusalDetail(null)).toBeUndefined();
+    expect(gmailRefusalDetail({ message: "  " })).toBeUndefined();
+  });
+
+  test("keeps a runaway message to one line's worth", () => {
+    expect(gmailRefusalDetail({ message: "x".repeat(1000) })!.length).toBeLessThanOrEqual(301);
   });
 });

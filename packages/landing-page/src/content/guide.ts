@@ -88,7 +88,7 @@ export const INSTALLATION: GuideSection = {
        get fixed in one document out of three. */
     {
       label: "Create a Google OAuth client",
-      body: "Miel signs into Gmail with an OAuth client of your own, so this is the one prerequisite that cannot be installed — it is made once in the Google Cloud console and produces the two values the next step asks for.",
+      body: "Miel signs into Gmail with an OAuth client of your own, so this is the one prerequisite that cannot be installed — it is made once in the Google Cloud console, and the app's first-run setup asks for its client ID, secret and redirect URI.",
       substeps: GOOGLE_OAUTH_SETUP_STEPS.map((step) => `${step.title}. ${step.detail}`),
     },
     {
@@ -96,7 +96,7 @@ export const INSTALLATION: GuideSection = {
       /* Plain prose, no backticks: this renders as HTML, not as Markdown, so a
          backtick would reach the reader as a backtick. Commands belong in the
          block below, where they are formatted as code. */
-      body: "Copy the example file and supply three things: your Google OAuth client ID and secret, a random API secret that must match between API_SECRET and VITE_API_SECRET, and in production a TOKEN_ENCRYPTION_KEY. No AI credential goes in this file — nothing miel runs reads one from the environment. Every provider's credential is pasted in the app instead and stored encrypted in Postgres. Run claude setup-token now anyway: its token is required as shipped, since claude-code is the provider a fresh install triages with, and the next step is where you paste it. It is optional only if you switch every task to Anthropic, Google or OpenAI before your first sync. The rest of the file already has working localhost defaults.",
+      body: "Copy the example file and supply two things: a random API secret that must match between API_SECRET and VITE_API_SECRET, and in production a TOKEN_ENCRYPTION_KEY, which also encrypts the Google client secret the app stores. The Google OAuth client is entered in the app's first-run setup, so it does not have to go in this file — the GOOGLE_ variables are only a fallback for an install that has none saved. No AI credential goes in this file — nothing miel runs reads one from the environment. Every provider's credential is pasted in the app instead and stored encrypted in Postgres. Run claude setup-token now anyway: its token is required as shipped, since claude-code is the provider a fresh install triages with, and the next step is where you paste it. It is optional only if you switch every task to Anthropic, Google or OpenAI before your first sync. The rest of the file already has working localhost defaults.",
       code: "cp .env.example .env\nopenssl rand -base64 32      # TOKEN_ENCRYPTION_KEY\nclaude setup-token           # paste the result in Settings, not in .env",
     },
     {

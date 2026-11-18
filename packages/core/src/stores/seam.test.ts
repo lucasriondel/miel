@@ -29,6 +29,10 @@ const SEAMED_SERVICES = [
   // itself, and since #125 its resolver is on the run path — so where it answers
   // the requirement matters to more than a save.
   "../services/taskProviders.ts",
+  // Writing mail moved onto the mailbox store when compose arrived: the
+  // message answered and the account sending are rows of that read model.
+  "../services/reply.ts",
+  "../services/drafts.ts",
 ];
 
 /** Everything that is a way of talking to Postgres directly. */

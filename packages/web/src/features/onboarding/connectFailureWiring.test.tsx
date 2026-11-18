@@ -9,12 +9,11 @@
 // /<OnboardingGate error={gateError}/)` asserted one spelling of one line: it
 // broke on a rename and passed on a gate handed the wrong string. The whole
 // layout is mounted here instead, at the URL the callback produces.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CREDENTIAL_PROVIDERS } from "@miel/core/providerModels";
-import { App } from "../../App";
 import { MielToaster } from "../../components/MielToaster";
 import { queryKeys } from "../../api/queries";
 import type {
@@ -23,7 +22,16 @@ import type {
   GoogleOAuthConfigStatus,
   ModelSettings,
 } from "../../api/types";
-import { OnboardingGate } from "./OnboardingGate";
+import { googleOAuthStatus } from "../../api/googleOAuthStatus.fixture";
+
+// The real api client, put back before the subjects are imported: a bun module
+// mock is process-global, and a suite whose seam is `fetch` would otherwise
+// inherit whichever client stub ran last (see `rowPromosWiring.test.tsx`).
+const realClient = await import("../../api/client.ts?real");
+mock.module("../../api/client", () => ({ ...realClient }));
+
+const { App } = await import("../../App");
+const { OnboardingGate } = await import("./OnboardingGate");
 
 const CONSENT_URL = "https://accounts.google.com/o/oauth2/v2/auth?state=abc";
 
@@ -58,11 +66,12 @@ afterEach(() => {
   window.location.href = startedAt;
 });
 
-const CONFIGURED: GoogleOAuthConfigStatus = { configured: true, missing: [] };
+const CONFIGURED: GoogleOAuthConfigStatus = googleOAuthStatus();
 const ACCOUNT: Account = {
   id: "acc-1",
   email: "you@example.com",
   displayName: "You",
+  nickname: null,
   avatarUrl: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   lastSyncedAt: null,
@@ -132,7 +141,9 @@ describe("the gate owns the failure", () => {
     await waitFor(() =>
       expect(within(dialog()!).getByText(new RegExp(ACCESS_DENIED))).toBeDefined(),
     );
-    expect(within(dialog()!).getByRole("heading").textContent).toBe("Connect a Gmail account");
+    expect(within(dialog()!).getByRole("heading", { level: 1 }).textContent).toBe(
+      "Connect a Gmail account",
+    );
   });
 
   test("the failure is announced, and read after the pitch as the dialog's description", async () => {
@@ -145,7 +156,7 @@ describe("the gate owns the failure", () => {
     // take.
     expect(described).toHaveLength(2);
     expect(document.getElementById(described[0]!)!.textContent).toContain(
-      "Connect a Google account to get started.",
+      "Connect a Google account to start.",
     );
     expect(described[1]).toBe(screen.getByRole("alert").id);
   });
@@ -159,7 +170,9 @@ describe("the gate owns the failure", () => {
       </QueryClientProvider>,
     );
 
-    expect(within(dialog()!).getByRole("heading").textContent).toBe("Set up AI triage");
+    expect(within(dialog()!).getByRole("heading", { level: 1 }).textContent).toBe(
+      "Set up AI triage",
+    );
     expect(dialog()!.getAttribute("aria-describedby")!.split(" ")).toHaveLength(1);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText(new RegExp(ACCESS_DENIED))).toBeNull();

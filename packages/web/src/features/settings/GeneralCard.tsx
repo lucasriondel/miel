@@ -1,4 +1,4 @@
-import { SettingsCard } from "@/components/ui/setting-row";
+import { SettingsPanel } from "./SettingsPanel";
 import { DefaultViewRow } from "./DefaultViewRow";
 import { RemoteImagesRow } from "./RemoteImagesRow";
 import { ThemeRow } from "./ThemeRow";
@@ -10,9 +10,9 @@ import { ThemeRow } from "./ThemeRow";
  * Which mailbox the app opens on is the same kind of preference, so it joins them.
  */
 export const GeneralCard = () => (
-  <SettingsCard>
+  <SettingsPanel label="Preferences">
     <ThemeRow />
     <RemoteImagesRow />
     <DefaultViewRow />
-  </SettingsCard>
+  </SettingsPanel>
 );

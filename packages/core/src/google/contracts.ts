@@ -14,6 +14,7 @@
 import { Context, Effect } from "effect";
 import type { OAuth2Client } from "google-auth-library";
 import type { GogFilterT, GogLabelT, GogMessageRawT } from "../schemas/gmail";
+import type { MimeAttachment } from "./rfc822";
 import type {
   AccountNotConnectedError,
   GmailApiError,
@@ -42,20 +43,50 @@ export interface SearchHit {
 
 export interface SendResult {
   messageId: string;
+  /**
+   * The thread Gmail filed the sent message in — the reply's own thread, or a
+   * new one for a new message. Enough for a client to link to it in Gmail.
+   */
+  threadId: string;
 }
 
-export interface SendReplyInput {
+/**
+ * One outgoing message, reply or new. The threading fields are what make
+ * the difference: a reply names the thread and the original's Message-ID, a new
+ * message names neither and Gmail starts a thread for it.
+ */
+export interface SendMessageInput {
   to: string[];
   /** Carbon copy, as edited in the compose window (#96). Absent = no Cc header. */
   cc?: string[];
+  /** Blind copy; Gmail delivers to it and strips the header from what others see. */
+  bcc?: string[];
   subject: string;
   body: string;
+  /** An HTML alternative of the body (a quoted HTML original rides here). */
+  html?: string;
+  /** The From header, formatted; absent is the account's own address. */
+  from?: string;
+  /** Files to attach; any at all sends the message as `multipart/mixed`. */
+  attachments?: MimeAttachment[];
+  /** A Message-ID of miel's own (scheduled sends), instead of Gmail's. */
+  messageId?: string;
   /** The message being replied to — drives In-Reply-To/References + threadId. */
-  replyToMessageId: string;
-  /** Gmail thread to attach the reply to (keeps it in-thread). */
-  threadId: string;
+  replyToMessageId?: string;
+  /** Gmail thread to attach the message to (keeps a reply in-thread). */
+  threadId?: string;
   /** Message-ID header of the original, for In-Reply-To/References. */
   inReplyToHeader?: string;
+}
+
+/** The pre-compose name, kept for the callers that only ever send replies. */
+export type SendReplyInput = SendMessageInput;
+
+/** A draft as Gmail stores it: its own id, plus the message it wraps. */
+export interface SavedDraft {
+  draftId: string;
+  messageId: string;
+  threadId: string;
 }
 
 export interface FilterSpec {
@@ -111,6 +142,27 @@ export interface AttachmentBytes {
   size: number;
 }
 
+/** A message's headers, without its body — `messages.get(format=metadata)`. */
+export interface MessageMetadata {
+  id: string;
+  threadId: string;
+  internalDate: Date;
+  /** Lowercased header names. */
+  headers: Record<string, string>;
+}
+
+/** One address the account may send as — `users.settings.sendAs`. */
+export interface SendAsAlias {
+  email: string;
+  displayName: string | null;
+  /** The account's own address. */
+  isPrimary: boolean;
+  /** Gmail's default From. */
+  isDefault: boolean;
+  /** Only an accepted alias can be sent from; Gmail rewrites any other From. */
+  verified: boolean;
+}
+
 export interface GmailMessagesImpl {
   readonly search: (
     ref: AccountRef,
@@ -131,7 +183,7 @@ export interface GmailMessagesImpl {
   >;
   readonly send: (
     ref: AccountRef,
-    msg: SendReplyInput,
+    msg: SendMessageInput,
   ) => Effect.Effect<
     SendResult,
     GmailAuthError | GmailSendError | TokenRefreshError | AccountNotConnectedError,
@@ -144,6 +196,16 @@ export interface GmailMessagesImpl {
   ) => Effect.Effect<
     AttachmentBytes,
     GmailAuthError | GmailApiError | GmailParseError | TokenRefreshError | AccountNotConnectedError,
+    GoogleAuth
+  >;
+  /** The named headers of one message, and nothing of its body. */
+  readonly metadata: (
+    ref: AccountRef,
+    messageId: string,
+    headerNames: readonly string[],
+  ) => Effect.Effect<
+    MessageMetadata,
+    GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
     GoogleAuth
   >;
 }
@@ -220,6 +282,24 @@ export interface GmailThreadsImpl {
     GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
     GoogleAuth
   >;
+  /** Archive's undo: put INBOX back on the thread. */
+  readonly unarchive: (
+    ref: AccountRef,
+    threadId: string,
+  ) => Effect.Effect<
+    void,
+    GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
+    GoogleAuth
+  >;
+  /** Trash's undo: TRASH off, INBOX back on — the exact inverse of `trash`. */
+  readonly untrash: (
+    ref: AccountRef,
+    threadId: string,
+  ) => Effect.Effect<
+    void,
+    GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
+    GoogleAuth
+  >;
 }
 
 export class GmailThreads extends Context.Service<GmailThreads, GmailThreadsImpl>()(
@@ -239,6 +319,33 @@ export interface GmailModifyImpl {
   >;
 }
 
+/**
+ * `users.drafts.*` — the compose window's autosave. Covered by `gmail.modify`,
+ * so it costs no new scope and no re-consent.
+ */
+export interface GmailDraftsImpl {
+  /** Create a draft, or replace the one `draftId` names. */
+  readonly save: (
+    ref: AccountRef,
+    draft: { draftId?: string; message: SendMessageInput },
+  ) => Effect.Effect<
+    SavedDraft,
+    GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
+    GoogleAuth
+  >;
+  /** Delete a draft for good (Gmail drafts have no trash). */
+  readonly delete: (
+    ref: AccountRef,
+    draftId: string,
+  ) => Effect.Effect<
+    void,
+    GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
+    GoogleAuth
+  >;
+}
+
+export class GmailDrafts extends Context.Service<GmailDrafts, GmailDraftsImpl>()("GmailDrafts") {}
+
 export class GmailModify extends Context.Service<GmailModify, GmailModifyImpl>()("GmailModify") {}
 
 export interface GmailProfileImpl {
@@ -246,6 +353,17 @@ export interface GmailProfileImpl {
     ref: AccountRef,
   ) => Effect.Effect<
     AccountProfile,
+    GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
+    GoogleAuth
+  >;
+  /**
+   * The addresses the account may send as (`users.settings.sendAs.list`) —
+   * covered by `gmail.settings.basic`, a scope every account already granted.
+   */
+  readonly sendAs: (
+    ref: AccountRef,
+  ) => Effect.Effect<
+    SendAsAlias[],
     GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
     GoogleAuth
   >;

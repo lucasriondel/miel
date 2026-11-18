@@ -1,7 +1,7 @@
 import { Spinner } from "@/components/ui/spinner";
 import { useWorpSettings } from "../../api/worpSettings.hooks";
 import { apiErrorMessage } from "../../api/apiErrorMessage";
-import { SettingsCard } from "@/components/ui/setting-row";
+import { SettingsPanel } from "./SettingsPanel";
 import { WorpApiKeyRow } from "./WorpApiKeyRow";
 import { WorpBaseUrlRow } from "./WorpBaseUrlRow";
 import { WorpHeadersRow } from "./WorpHeadersRow";
@@ -23,26 +23,26 @@ export const WorpCard = () => {
 
   if (isLoading) {
     return (
-      <SettingsCard>
+      <SettingsPanel title="worp relay">
         <div className="flex items-center gap-2 px-4 py-3.5 text-sm text-gousse-muted">
           <Spinner /> Loading worp settings…
         </div>
-      </SettingsCard>
+      </SettingsPanel>
     );
   }
 
   if (error || !data) {
     return (
-      <SettingsCard>
+      <SettingsPanel title="worp relay">
         <div className="px-4 py-3.5 text-sm text-gousse-high">
           {error ? apiErrorMessage(error) : "Failed to load worp settings"}
         </div>
-      </SettingsCard>
+      </SettingsPanel>
     );
   }
 
   return (
-    <SettingsCard>
+    <SettingsPanel title="worp relay">
       <WorpStatusRow
         configured={data.configured}
         hasBaseUrl={data.baseUrl.length > 0}
@@ -53,6 +53,6 @@ export const WorpCard = () => {
       <WorpBaseUrlRow key={data.baseUrl} baseUrl={data.baseUrl} />
       <WorpApiKeyRow apiKey={data.apiKey} />
       <WorpHeadersRow extraHeaders={data.extraHeaders} />
-    </SettingsCard>
+    </SettingsPanel>
   );
 };

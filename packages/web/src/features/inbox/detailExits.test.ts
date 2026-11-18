@@ -18,6 +18,10 @@ import { join } from "node:path";
 // What each one *does* on screen is rendered in
 // `features/message-detail/detailActions.test.tsx`; the set is still counted
 // here, because no render reaches a fifth exit somebody adds later.
+//
+// A fifth did arrive, on purpose: snoozing leaves the inbox the way archiving
+// does (A13), so from the reader it leaves by the same exit, from the click.
+// Its render is `features/snooze/snoozeWiring.test.tsx`.
 
 const web = join(import.meta.dir, "..", "..");
 const read = (...parts: string[]) => readFileSync(join(web, ...parts), "utf8");
@@ -25,7 +29,7 @@ const read = (...parts: string[]) => readFileSync(join(web, ...parts), "utf8");
 const detailPage = read("pages", "MessageDetailPage.tsx");
 const messageActions = read("components", "MessageActions.tsx");
 
-describe("the four ways off a message", () => {
+describe("the five ways off a message", () => {
   test("Back returns instead of pushing an inbox URL", () => {
     expect(detailPage).toContain("useReturnToInbox");
     expect(detailPage).toMatch(/onClick=\{returnToInbox\}/);
@@ -38,12 +42,15 @@ describe("the four ways off a message", () => {
   test("archive and trash leave by that same exit, not to the root", () => {
     expect(messageActions).toMatch(/archive\.mutate\(input\);\s*leaveDetail\?\.\(\)/);
     expect(messageActions).toMatch(/trash\.mutate\(input\);\s*leaveDetail\?\.\(\)/);
+    expect(messageActions).toMatch(
+      /snooze\.mutate\(\{ \.\.\.input, until: at\.toISOString\(\) \}\);\s*leaveDetail\?\.\(\)/,
+    );
     expect(messageActions).toContain("useReturnToInbox");
   });
 
   // A mutate callback is dropped once the component that passed it unmounts,
   // and these two always unmount — so no exit may hang anything off the answer.
-  test("none of the four waits for the request to land", () => {
+  test("none of the five waits for the request to land", () => {
     for (const source of [detailPage, messageActions]) {
       expect(source).not.toMatch(/onSuccess:\s*returnToInbox/);
     }
@@ -55,9 +62,8 @@ describe("the four ways off a message", () => {
 });
 
 /**
- * Every file that is only ever mounted on the message-detail page. The topbar
- * folder is deliberately excluded past the detail-only back button: the inbox
- * shares it, and switching accounts from there *is* a navigation to an inbox.
+ * Every file that is only ever mounted on the message-detail page (the reader).
+ * Its back button lives in the page itself now, beside the actions.
  */
 const surfaceFiles = (): Array<[string, string]> => {
   const dir = join(web, "features", "message-detail");
@@ -70,10 +76,6 @@ const surfaceFiles = (): Array<[string, string]> => {
   return [
     ["pages/MessageDetailPage.tsx", detailPage],
     ["components/MessageActions.tsx", messageActions],
-    [
-      "components/topbar/BackToInboxButton.tsx",
-      read("components", "topbar", "BackToInboxButton.tsx"),
-    ],
     ...detailOnly,
   ];
 };

@@ -32,7 +32,7 @@ const ALL = {
 async function config() {
   const res = await app.fetch(new Request("http://localhost/auth/google/config"));
   expect(res.status).toBe(200);
-  return (await res.json()) as { configured: boolean; missing: string[] };
+  return (await res.json()) as { configured: boolean; missing: string[]; source: string | null };
 }
 
 afterEach(() => {
@@ -47,22 +47,25 @@ describe("GET /auth/google/config", () => {
   test("reports configured with all three variables set", async () => {
     setEnv(ALL);
 
-    expect(await config()).toEqual({ configured: true, missing: [] });
+    expect(await config()).toMatchObject({ configured: true, missing: [], source: "environment" });
   });
 
   test("names every variable that is unset", async () => {
     setEnv({});
 
-    expect(await config()).toEqual({ configured: false, missing: [...VARS] });
+    expect(await config()).toMatchObject({ configured: false, missing: [...VARS], source: null });
   });
 
   test("an empty value counts as unset, not as a client id of ''", async () => {
     setEnv({ ...ALL, GOOGLE_CLIENT_SECRET: "" });
 
-    expect(await config()).toEqual({ configured: false, missing: ["GOOGLE_CLIENT_SECRET"] });
+    expect(await config()).toMatchObject({ configured: false, missing: ["GOOGLE_CLIENT_SECRET"] });
   });
 
-  test("sends no values, only names — one of the three is a secret", async () => {
+  // The client id and the redirect URI are not secrets — both travel in every
+  // consent URL, and the app's Google step shows them back — but the secret is,
+  // and an environment one has no stored hint to show either.
+  test("never sends the client secret", async () => {
     setEnv({
       GOOGLE_CLIENT_ID: "sentinel-client-id",
       GOOGLE_CLIENT_SECRET: "sentinel-secret",
@@ -71,7 +74,8 @@ describe("GET /auth/google/config", () => {
     const res = await app.fetch(new Request("http://localhost/auth/google/config"));
 
     const body = await res.text();
-    expect(body).not.toContain("sentinel");
+    expect(body).not.toContain("sentinel-secret");
+    expect(JSON.parse(body)).toMatchObject({ clientId: "sentinel-client-id", secretHint: null });
   });
 
   test("is read at use-time, so setting the variables needs no new process", async () => {

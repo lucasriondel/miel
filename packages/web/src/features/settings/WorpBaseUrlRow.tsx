@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { Input } from "@/components/ui/input";
+import { SETTINGS_INPUT } from "./settingsFields";
 import { useUpdateWorpSettings } from "../../api/worpSettings.hooks";
 import { apiErrorMessage } from "../../api/apiErrorMessage";
 import { SavedFlash } from "@/components/ui/saved-flash";
-import { SettingRow } from "@/components/ui/setting-row";
+import { SettingsRow } from "./SettingsRow";
 
 interface Props {
   baseUrl: string;
@@ -29,7 +30,7 @@ export const WorpBaseUrlRow = ({ baseUrl }: Props) => {
   };
 
   return (
-    <SettingRow
+    <SettingsRow
       title="Base URL"
       description="Your worp instance, e.g. https://worp.example.com. Clear it to turn the relay off."
       alignTop
@@ -57,12 +58,12 @@ export const WorpBaseUrlRow = ({ baseUrl }: Props) => {
               submit();
             }
           }}
-          className="flex-1 font-mono"
+          className={`flex-1 font-mono ${SETTINGS_INPUT}`}
         />
-        <Button variant="primary" disabled={save.isPending || !dirty} onClick={submit}>
+        <AppButton tone="primary" disabled={save.isPending || !dirty} onClick={submit}>
           Save
-        </Button>
+        </AppButton>
       </div>
-    </SettingRow>
+    </SettingsRow>
   );
 };

@@ -9,10 +9,12 @@
 // owns that lifecycle for every provider, so these tests exercise it through
 // the tile a user actually sees, on both kinds of credential.
 //
-// A tile has two shapes rather than one, which is the point of the layout and
-// the thing these tests pin: with nothing stored it is a paste field, and with
-// a credential stored it is the masked hint and a way to remove it — no dead
-// input under a key that already exists.
+// Since the redesign the card is a list of provider rows (`miel.figcraft`,
+// Settings › AI › Providers), and a row has three shapes, which is the thing
+// these tests pin: with nothing stored it offers "Add key" and nothing else,
+// pressing that opens the paste field, and with a credential stored it is the
+// masked hint, a Connected pill and Remove — no dead input under a key that
+// already exists, and none sitting in a row nobody asked to fill.
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -111,12 +113,19 @@ const renderCard = (
 const tile = (provider: Provider) =>
   within(screen.getByRole("group", { name: PROVIDER_LABELS[provider] }));
 
+/** The resting "Add key" / "Add token" button of a row with nothing stored. */
+const addButton = (provider: Provider) =>
+  tile(provider).getByRole("button", { name: /^Add (key|token)$/ });
+
+/** Opens a row's editor, as the user does before pasting anything. */
+const openEditor = (provider: Provider) => fireEvent.click(addButton(provider));
+
 afterEach(() => {
   requests.length = 0;
   answer = REFUSE;
 });
 
-describe("the grid of credentials", () => {
+describe("the list of credentials", () => {
   test("gives every provider in the catalogue its own tile", () => {
     renderCard();
 
@@ -134,7 +143,7 @@ describe("the grid of credentials", () => {
     expect(positions).toEqual(positions.toSorted((a, b) => a - b));
   });
 
-  test("says the promise once, under the grid, rather than on all four tiles", () => {
+  test("says the promise once, under the card, rather than on all four rows", () => {
     renderCard();
 
     expect(screen.getAllByText(/stored encrypted/i)).toHaveLength(1);
@@ -152,23 +161,44 @@ describe("the grid of credentials", () => {
 });
 
 describe("a tile with nothing stored", () => {
-  test("offers a password field, and nothing to clear", () => {
+  test("offers to add one and nothing to remove, with no field until asked", () => {
     renderCard();
 
     for (const provider of PROVIDERS) {
-      expect(tile(provider).getByText("Not set")).toBeDefined();
-      expect(tile(provider).queryByRole("button", { name: /^Clear/ })).toBeNull();
+      expect(addButton(provider)).toBeDefined();
+      expect(tile(provider).queryByRole("button", { name: /^Remove/ })).toBeNull();
+      expect(tile(provider).queryByText("Connected")).toBeNull();
     }
+    expect(tile("anthropic").queryByLabelText("Anthropic API key")).toBeNull();
+  });
+
+  test("calls the token a token and a key a key", () => {
+    renderCard();
+
+    expect(tile(CLAUDE_CODE_PROVIDER).getByRole("button", { name: "Add token" })).toBeDefined();
+    expect(tile("anthropic").getByRole("button", { name: "Add key" })).toBeDefined();
+  });
+
+  test("opens a password field on Add, and Cancel puts it away", () => {
+    renderCard();
+
+    openEditor("anthropic");
+    openEditor(CLAUDE_CODE_PROVIDER);
     expect(tile("anthropic").getByLabelText("Anthropic API key").getAttribute("type")).toBe(
       "password",
     );
     expect(
       tile(CLAUDE_CODE_PROVIDER).getByLabelText("Claude Code token").getAttribute("type"),
     ).toBe("password");
+
+    fireEvent.click(tile("anthropic").getByRole("button", { name: "Cancel" }));
+    expect(tile("anthropic").queryByLabelText("Anthropic API key")).toBeNull();
+    expect(addButton("anthropic")).toBeDefined();
   });
 
   test("does not invite the browser to autofill or remember what is typed", () => {
     renderCard();
+    openEditor("openai");
 
     const field = tile("openai").getByLabelText("OpenAI API key");
     expect(field.getAttribute("autocomplete")).toBe("off");
@@ -177,8 +207,13 @@ describe("a tile with nothing stored", () => {
 
   test("says where to get one", () => {
     renderCard();
+    openEditor("anthropic");
+    openEditor(CLAUDE_CODE_PROVIDER);
 
-    expect(tile("anthropic").getByText("console.anthropic.com")).toBeDefined();
+    const link = tile("anthropic").getByRole("link", {
+      name: "Create a key at console.anthropic.com ↗",
+    });
+    expect(link.getAttribute("href")).toBe("https://console.anthropic.com");
     expect(tile(CLAUDE_CODE_PROVIDER).getByText(/setup-token/)).toBeDefined();
   });
 
@@ -211,17 +246,17 @@ describe("a tile whose credential is stored", () => {
   test("keeps the vendors apart — one stored key does not light up the others", () => {
     renderCard({ openai: storedKey("openai") });
 
-    expect(tile("openai").getByText("Stored")).toBeDefined();
-    expect(tile("anthropic").getByText("Not set")).toBeDefined();
-    expect(tile("google").getByText("Not set")).toBeDefined();
-    expect(tile(CLAUDE_CODE_PROVIDER).getByText("Not set")).toBeDefined();
+    expect(tile("openai").getByText("Connected")).toBeDefined();
+    expect(addButton("anthropic")).toBeDefined();
+    expect(addButton("google")).toBeDefined();
+    expect(addButton(CLAUDE_CODE_PROVIDER)).toBeDefined();
   });
 
-  test("names the credential in the clear button, so the two kinds read as peers", () => {
+  test("names the credential in the remove button, so the two kinds read as peers", () => {
     renderCard({ anthropic: storedKey("anthropic") }, STORED_TOKEN);
 
-    expect(tile("anthropic").getByRole("button", { name: "Clear key" })).toBeDefined();
-    expect(tile(CLAUDE_CODE_PROVIDER).getByRole("button", { name: "Clear token" })).toBeDefined();
+    expect(tile("anthropic").getByRole("button", { name: "Remove key" })).toBeDefined();
+    expect(tile(CLAUDE_CODE_PROVIDER).getByRole("button", { name: "Remove token" })).toBeDefined();
   });
 });
 
@@ -229,6 +264,7 @@ describe("pasting a credential", () => {
   test("sends a vendor key to that vendor's endpoint, and shows what came back", async () => {
     answer = () => ({ provider: "anthropic", configured: true, hint: "sk-ant-…3f9" });
     renderCard();
+    openEditor("anthropic");
 
     fireEvent.change(tile("anthropic").getByLabelText("Anthropic API key"), {
       target: { value: "  sk-ant-api03-secret  " },
@@ -250,6 +286,7 @@ describe("pasting a credential", () => {
   test("sends the local provider's token to the token endpoint", async () => {
     answer = () => ({ configured: true, hint: "sk-ant-…o4t" });
     renderCard();
+    openEditor(CLAUDE_CODE_PROVIDER);
 
     fireEvent.change(tile(CLAUDE_CODE_PROVIDER).getByLabelText("Claude Code token"), {
       target: { value: "sk-ant-oat01-secret" },
@@ -269,6 +306,7 @@ describe("pasting a credential", () => {
   test("never renders the credential back — only the masked hint", async () => {
     answer = () => ({ provider: "google", configured: true, hint: "AIza…9kd" });
     renderCard();
+    openEditor("google");
 
     fireEvent.change(tile("google").getByLabelText("Google API key"), {
       target: { value: "AIzaSyTOPSECRET" },
@@ -281,9 +319,12 @@ describe("pasting a credential", () => {
 
   test("asks for nothing when the field is empty", () => {
     renderCard();
+    openEditor("openai");
 
-    // Nothing to submit, so no button to press — and Enter sends no request.
-    expect(tile("openai").queryByRole("button", { name: "Save key" })).toBeNull();
+    // Nothing to submit, so the button is off — and Enter sends no request.
+    expect(
+      tile("openai").getByRole<HTMLButtonElement>("button", { name: "Save key" }).disabled,
+    ).toBe(true);
     fireEvent.keyDown(tile("openai").getByLabelText("OpenAI API key"), { key: "Enter" });
 
     expect(requests).toEqual([]);
@@ -301,6 +342,7 @@ describe("a refused save", () => {
   test("shows the sentence the server sent, not the code beside it", async () => {
     answer = REJECTED;
     renderCard();
+    openEditor("anthropic");
 
     fireEvent.change(tile("anthropic").getByLabelText("Anthropic API key"), {
       target: { value: "sk-ant-wrong" },
@@ -314,6 +356,7 @@ describe("a refused save", () => {
   test("keeps what was typed, so the user can fix it rather than retype it", async () => {
     answer = REJECTED;
     renderCard();
+    openEditor("anthropic");
     const field = tile("anthropic").getByLabelText<HTMLInputElement>("Anthropic API key");
 
     fireEvent.change(field, { target: { value: "sk-ant-wrong" } });
@@ -326,6 +369,7 @@ describe("a refused save", () => {
   test("reports the failure on the tile it happened on, and on no other", async () => {
     answer = REJECTED;
     renderCard();
+    openEditor("anthropic");
 
     fireEvent.change(tile("anthropic").getByLabelText("Anthropic API key"), {
       target: { value: "sk-ant-wrong" },
@@ -344,6 +388,7 @@ describe("a refused save", () => {
       throw new Error("That token was refused.");
     };
     renderCard();
+    openEditor(CLAUDE_CODE_PROVIDER);
 
     fireEvent.change(tile(CLAUDE_CODE_PROVIDER).getByLabelText("Claude Code token"), {
       target: { value: "sk-ant-nope" },
@@ -356,30 +401,26 @@ describe("a refused save", () => {
 });
 
 describe("clearing a credential", () => {
-  test("deletes the vendor's key and drops back to the paste field", async () => {
+  test("deletes the vendor's key and drops back to Add key", async () => {
     answer = () => ({ provider: "anthropic", configured: false, hint: null });
     renderCard({ anthropic: storedKey("anthropic") });
 
-    fireEvent.click(tile("anthropic").getByRole("button", { name: "Clear key" }));
+    fireEvent.click(tile("anthropic").getByRole("button", { name: "Remove key" }));
 
-    await waitFor(() =>
-      expect(tile("anthropic").getByLabelText("Anthropic API key")).toBeDefined(),
-    );
+    await waitFor(() => expect(addButton("anthropic")).toBeDefined());
     expect(requests).toEqual([
       { path: "/settings/provider-credentials/anthropic", method: "DELETE" },
     ]);
-    expect(tile("anthropic").getByText("Not set")).toBeDefined();
+    expect(tile("anthropic").queryByText("Connected")).toBeNull();
   });
 
   test("deletes the local provider's token through the token endpoint", async () => {
     answer = () => ({ configured: false, hint: null });
     renderCard({}, STORED_TOKEN);
 
-    fireEvent.click(tile(CLAUDE_CODE_PROVIDER).getByRole("button", { name: "Clear token" }));
+    fireEvent.click(tile(CLAUDE_CODE_PROVIDER).getByRole("button", { name: "Remove token" }));
 
-    await waitFor(() =>
-      expect(tile(CLAUDE_CODE_PROVIDER).getByLabelText("Claude Code token")).toBeDefined(),
-    );
+    await waitFor(() => expect(addButton(CLAUDE_CODE_PROVIDER)).toBeDefined());
     expect(requests).toEqual([{ path: "/settings/claude-code-token", method: "DELETE" }]);
   });
 
@@ -391,17 +432,17 @@ describe("clearing a credential", () => {
       });
     renderCard({ google: storedKey("google") });
 
-    fireEvent.click(tile("google").getByRole("button", { name: "Clear key" }));
+    fireEvent.click(tile("google").getByRole("button", { name: "Remove key" }));
 
     const button = await waitFor(() =>
-      tile("google").getByRole<HTMLButtonElement>("button", { name: "Clearing…" }),
+      tile("google").getByRole<HTMLButtonElement>("button", { name: "Removing…" }),
     );
     expect(button.disabled).toBe(true);
     fireEvent.click(button);
     expect(requests).toHaveLength(1);
 
     release?.();
-    await waitFor(() => expect(tile("google").getByText("Not set")).toBeDefined());
+    await waitFor(() => expect(addButton("google")).toBeDefined());
   });
 
   test("shows a refused clear as a sentence on the tile", async () => {
@@ -410,11 +451,11 @@ describe("clearing a credential", () => {
     };
     renderCard({ openai: storedKey("openai") });
 
-    fireEvent.click(tile("openai").getByRole("button", { name: "Clear key" }));
+    fireEvent.click(tile("openai").getByRole("button", { name: "Remove key" }));
 
     const alert = await waitFor(() => tile("openai").getByRole("alert"));
     expect(alert.textContent).toBe("The key of the vendor triage runs on cannot be cleared.");
     // Still stored: a refused clear leaves the credential where it was.
-    expect(tile("openai").getByText("Stored")).toBeDefined();
+    expect(tile("openai").getByText("Connected")).toBeDefined();
   });
 });

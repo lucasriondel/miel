@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Option } from "effect";
 import type { OAuth2Client } from "google-auth-library";
 import { runExit, expectFailureTag, expectSuccess } from "../testkit/runExit";
 import { GmailMessages, GoogleAuth, type GoogleAuthImpl, type SendReplyInput } from "./contracts";
@@ -125,6 +125,98 @@ describe("GmailMessages", () => {
     };
     const exit = await run(Effect.flatMap(GmailMessages, (s) => s.send(ref, sendInput)));
     expectFailureTag(exit, "GmailSendError");
+  });
+
+  // The thread is what a "View in Gmail" link needs, so the send answers it.
+  test("send answers the thread Gmail filed the message in", async () => {
+    messagesSendImpl = async () => ({ data: { id: "sent1", threadId: "t0" } });
+    const exit = await run(Effect.flatMap(GmailMessages, (s) => s.send(ref, sendInput)));
+    expect(expectSuccess(exit)).toEqual({ messageId: "sent1", threadId: "t0" });
+  });
+
+  // A new message names no thread; Gmail starts one and answers its id.
+  test("a new message is sent with no threadId and no threading headers", async () => {
+    let sent: { requestBody?: { raw?: string; threadId?: string } } = {};
+    messagesSendImpl = async (args) => {
+      sent = args as typeof sent;
+      return { data: { id: "new1", threadId: "fresh-thread" } };
+    };
+    const exit = await run(
+      Effect.flatMap(GmailMessages, (s) =>
+        s.send(ref, { to: ["x@y.z"], bcc: ["hidden@y.z"], subject: "Hello", body: "Hi" }),
+      ),
+    );
+    expect(expectSuccess(exit)).toEqual({ messageId: "new1", threadId: "fresh-thread" });
+    expect(sent.requestBody).not.toHaveProperty("threadId");
+    const raw = Buffer.from(sent.requestBody?.raw ?? "", "base64url").toString("utf8");
+    expect(raw).not.toContain("In-Reply-To:");
+    expect(raw).toContain("Bcc: hidden@y.z");
+  });
+
+  // A file makes the message too big for the JSON `raw` field to be the right
+  // door: it goes through the media upload, as the MIME text, with the thread
+  // still named in the metadata.
+  test("a message with an attachment is sent through the media upload", async () => {
+    let sent: {
+      requestBody?: { raw?: string; threadId?: string };
+      media?: { mimeType: string; body: string };
+    } = {};
+    messagesSendImpl = async (args) => {
+      sent = args as typeof sent;
+      return { data: { id: "m-att", threadId: "t0" } };
+    };
+    const exit = await run(
+      Effect.flatMap(GmailMessages, (s) =>
+        s.send(ref, {
+          ...sendInput,
+          attachments: [{ filename: "a.txt", mimeType: "text/plain", data: new Uint8Array([65]) }],
+        }),
+      ),
+    );
+    expectSuccess(exit);
+    expect(sent.requestBody).toEqual({ threadId: "t0" });
+    expect(sent.media?.mimeType).toBe("message/rfc822");
+    expect(sent.media?.body).toContain("multipart/mixed");
+    expect(sent.media?.body).toContain("In-Reply-To: <msg0@mail>");
+  });
+
+  test("metadata reads the named headers, lowercased, and no body", async () => {
+    let asked: { format?: string; metadataHeaders?: string[] } = {};
+    messagesGetImpl = async (args) => {
+      asked = args as typeof asked;
+      return {
+        data: {
+          id: "m1",
+          threadId: "t1",
+          internalDate: "1700000000000",
+          payload: { headers: [{ name: "To", value: "a@b.c, Bob <b@c.d>" }] },
+        },
+      };
+    };
+    const exit = await run(Effect.flatMap(GmailMessages, (s) => s.metadata(ref, "m1", ["To"])));
+    expect(asked).toMatchObject({ format: "metadata", metadataHeaders: ["To"] });
+    expect(expectSuccess(exit)).toEqual({
+      id: "m1",
+      threadId: "t1",
+      internalDate: new Date(1700000000000),
+      headers: { to: "a@b.c, Bob <b@c.d>" },
+    });
+  });
+
+  // A send the user watched fail is owed Gmail's reason, which a tagged
+  // error's empty `message` would otherwise swallow.
+  test("a refused send carries Gmail's reason as its detail", async () => {
+    messagesSendImpl = async () => {
+      throw {
+        code: 400,
+        message: "Request failed with status code 400",
+        response: { data: { error: { message: "Invalid To header" } } },
+      };
+    };
+    const exit = await run(Effect.flatMap(GmailMessages, (s) => s.send(ref, sendInput)));
+    expectFailureTag(exit, "GmailSendError");
+    const err = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+    expect(Option.getOrUndefined(err)).toMatchObject({ detail: "Invalid To header" });
   });
 
   test("getAttachment returns base64url-decoded bytes", async () => {

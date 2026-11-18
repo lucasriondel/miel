@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import {
   apiSchemas,
+  clearGoogleOAuthConfig,
+  getGoogleOAuthStatus,
+  saveGoogleOAuthConfig,
   checkedDeleteProviderCredential,
   checkedUpdateModelSettings,
   deleteClaudeCodeToken,
@@ -130,3 +133,18 @@ settingsRoutes.put("/triage-batch", async (c) => {
   const settings = await updateTriageBatchSettings(body);
   return c.json(settings);
 });
+
+// The Google OAuth client entered in the app (onboarding's Google step). The
+// database's client wins over the GOOGLE_* variables, which stay the fallback.
+// Answers never carry the secret — a masked hint at most. A save or a clear that
+// changes the client in effect answers `clientChanged` and how many connected
+// accounts must reconnect (`reconnectRequired`), since a Google grant belongs to
+// the client that issued it.
+settingsRoutes.get("/google-oauth", async (c) => c.json(await getGoogleOAuthStatus()));
+
+settingsRoutes.put("/google-oauth", async (c) => {
+  const body = apiSchemas.UpdateGoogleOAuthRequest.parse(await c.req.json());
+  return c.json(await saveGoogleOAuthConfig(body));
+});
+
+settingsRoutes.delete("/google-oauth", async (c) => c.json(await clearGoogleOAuthConfig()));

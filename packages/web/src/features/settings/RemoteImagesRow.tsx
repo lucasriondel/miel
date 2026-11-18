@@ -1,4 +1,4 @@
-import { SettingRow } from "@/components/ui/setting-row";
+import { SettingsRow } from "./SettingsRow";
 import { useRemoteImagesPreference } from "../preferences/remoteImages";
 import { Segmented } from "./Segmented";
 
@@ -18,7 +18,7 @@ const OPTIONS = [
 export const RemoteImagesRow = () => {
   const { preference, setPreference } = useRemoteImagesPreference();
   return (
-    <SettingRow
+    <SettingsRow
       title="Remote images"
       description="Images hosted by the sender load with the message. Hiding them keeps senders from learning when you opened it."
       control={

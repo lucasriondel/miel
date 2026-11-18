@@ -18,28 +18,29 @@ const controlClasses = (html: string) =>
   [...html.matchAll(/<(?:button|summary)\b[^>]*class="([^"]*)"/g)].map(([, cls]) => cls!);
 
 describe("detailSurfaceClass", () => {
-  test("is a rounded-3xl panel — the card radius, not the old rounded-xl", () => {
+  // The redesign's card (Main view › Card): a 12px corner on white, edged by
+  // the plain hairline token — the same surface the inbox's sections sit on.
+  test("is a rounded-xl white card with a hairline", () => {
     const cls = detailSurfaceClass();
-    expect(cls).toContain("rounded-3xl");
+    expect(cls).toContain("rounded-xl");
     expect(cls).toContain("bg-gousse-panel");
+    expect(cls).toContain("border border-gousse-line");
+    expect(cls).not.toContain("rounded-3xl");
   });
 
-  // §2: depth is a shadow ramp; the border is a hairline at reduced alpha and
-  // never carries the weight.
-  test("takes depth from a shadow and edges with a reduced-alpha hairline", () => {
-    expect(detailSurfaceClass()).toContain("shadow-gousse-sm");
-    expect(detailSurfaceClass("md")).toContain("shadow-gousse-md");
-    expect(detailSurfaceClass()).toMatch(/border border-gousse-line\/\d+/);
-    expect(detailSurfaceClass()).not.toContain("border-2");
+  // Flat by default; the raised variant is the design's faintest shadow, never
+  // a ramp heavy enough to read as a floating layer.
+  test("is flat at rest and only faintly raised", () => {
+    expect(detailSurfaceClass()).not.toContain("shadow");
+    expect(detailSurfaceClass("md")).toContain("shadow-[0_1px_2px_rgb(20_32_46/0.04)]");
   });
 
-  // Tailwind v4 scans source text, so an interpolated `shadow-gousse-${x}`
-  // would compile to nothing. Both ramps must exist as literals in the module.
-  test("spells both shadow ramps out as literals for the scanner", async () => {
+  // Tailwind v4 scans source text, so a shadow assembled at runtime would
+  // compile to nothing. The raised shadow must exist as a literal.
+  test("spells its shadow out as a literal for the scanner", async () => {
     const source = await Bun.file(new URL("./detailSurface.ts", import.meta.url)).text();
-    expect(source).toContain('"shadow-gousse-sm"');
-    expect(source).toContain('"shadow-gousse-md"');
-    expect(source).not.toMatch(/shadow-gousse-\$\{/);
+    expect(source).toContain('"shadow-[0_1px_2px_rgb(20_32_46/0.04)]"');
+    expect(source).not.toMatch(/shadow-[\w[\]-]*\$\{/);
   });
 });
 
@@ -47,7 +48,7 @@ describe("DetailCard", () => {
   test("renders a section wearing the shared surface", () => {
     const html = markup(<DetailCard>body</DetailCard>);
     expect(html).toStartWith("<section");
-    expect(html).toContain("rounded-3xl");
+    expect(html).toContain("rounded-xl");
     expect(html).toContain("body");
   });
 
@@ -74,21 +75,19 @@ describe("PillSegmented", () => {
       />,
     );
 
-  test("is a pill track holding pill thumbs (§3)", () => {
+  // UI System › Segmented Control: a filled track with a 2px inset holding
+  // 6px-cornered thumbs.
+  test("is a filled track holding rounded thumbs", () => {
     const html = control("html");
-    const rounded = [...html.matchAll(/rounded-full/g)];
-    // The track plus one thumb per option.
-    expect(rounded.length).toBe(3);
-    expect(html).not.toContain("rounded-lg");
+    expect(html).toContain("rounded-lg bg-gousse-fill p-0.5");
+    expect([...html.matchAll(/rounded-md/g)].length).toBe(2);
+    expect(html).not.toContain("rounded-full");
   });
 
-  test("fills the active thumb accent/15 with bold ink, mutes the rest (§1)", () => {
+  test("lifts the active thumb in white with semibold ink, mutes the rest", () => {
     const html = control("html");
-    expect(html).toContain("bg-gousse-accent/15");
-    expect(html).toContain("font-bold");
+    expect(html).toContain("bg-gousse-panel font-semibold text-gousse-ink shadow-gousse-sm");
     expect(html).toContain("text-gousse-muted");
-    // Never the hard accent fill the old square toggle used.
-    expect(html).not.toContain("bg-gousse-accent text-white");
   });
 
   test("exposes the selection to assistive tech", () => {
@@ -101,9 +100,9 @@ describe("PillSegmented", () => {
     expect(checked.map(([, label]) => label)).toEqual(["Text"]);
   });
 
-  test("presses with a named transition, never transition-all (§5)", () => {
+  test("transitions its colours only, never transition-all", () => {
     for (const cls of controlClasses(control("html"))) {
-      expect(cls).toContain("active:scale-[0.96]");
+      expect(cls).toContain("transition-colors");
       expect(cls).not.toContain("transition-all");
     }
   });
@@ -116,18 +115,19 @@ describe("DisclosureRow", () => {
     </DisclosureRow>,
   );
 
-  test("is a <details> whose summary is a full-width pill target", () => {
+  test("is a <details> whose summary is a full-width quiet target", () => {
     expect(row).toContain("<details");
     expect(row).toContain("<summary");
     const [summary] = controlClasses(row);
-    expect(summary).toContain("rounded-full");
+    expect(summary).toContain("rounded-md");
+    expect(summary).toContain("hover:bg-gousse-fill");
     expect(summary).toContain("w-full");
     expect(summary).toContain("cursor-pointer");
   });
 
-  // §5: 40px floor for a click target. min-h-10 is 2.5rem.
-  test("keeps a 40px minimum hit height", () => {
-    expect(controlClasses(row)[0]).toContain("min-h-10");
+  // A 32px floor for the click target: min-h-8 is 2rem.
+  test("keeps a 32px minimum hit height", () => {
+    expect(controlClasses(row)[0]).toContain("min-h-8");
   });
 
   test("carries a chevron that rotates once the row opens", () => {
@@ -140,9 +140,9 @@ describe("DisclosureRow", () => {
     expect(row).toContain("::-webkit-details-marker]:hidden");
   });
 
-  test("presses with a named transition and renders its children", () => {
+  test("transitions named properties and renders its children", () => {
     const [summary] = controlClasses(row);
-    expect(summary).toContain("active:scale-[0.96]");
+    expect(summary).toMatch(/transition-\[/);
     expect(summary).not.toContain("transition-all");
     expect(row).toContain("hidden");
   });
@@ -174,11 +174,10 @@ describe("DisclosureRow", () => {
       expect(inner).not.toMatch(/class="group[ "]/);
     });
 
-    test("keeps the same pill target as an unnested row", () => {
+    test("keeps the same target as an unnested row", () => {
       const [summary] = controlClasses(inner);
-      expect(summary).toContain("min-h-10");
-      expect(summary).toContain("rounded-full");
-      expect(summary).toContain("active:scale-[0.96]");
+      expect(summary).toContain("min-h-8");
+      expect(summary).toContain("rounded-md");
     });
 
     // Same scanner constraint as detailSurface's ramps: an interpolated group

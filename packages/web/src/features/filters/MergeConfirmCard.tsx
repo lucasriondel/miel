@@ -1,5 +1,5 @@
 import { ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { Spinner } from "@/components/ui/spinner";
 import type { Label } from "../../api/types";
 import { FilterActionTags } from "./FilterActionTags";
@@ -46,7 +46,7 @@ export const MergeConfirmCard = ({
   // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- see above
   <section
     aria-label="Confirm filter merge"
-    className="filter-card border border-gousse-accent/30 px-4 py-3.5"
+    className="rounded-xl border border-gousse-primary/30 bg-gousse-panel px-4 py-3.5"
     onKeyDown={(e) => {
       // Escape backs out, as it does on the per-row delete confirm.
       if (e.key === "Escape" && !pending) {
@@ -67,14 +67,14 @@ export const MergeConfirmCard = ({
 
     <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
       {preview.ok ? (
-        <Button onClick={onConfirm} disabled={pending}>
+        <AppButton tone="primary" onClick={onConfirm} disabled={pending}>
           {pending ? <Spinner /> : null}
           Merge
-        </Button>
+        </AppButton>
       ) : null}
-      <Button variant="ghost" onClick={onCancel} disabled={pending}>
+      <AppButton tone="ghost" onClick={onCancel} disabled={pending}>
         {preview.ok ? "Cancel" : "Close"}
-      </Button>
+      </AppButton>
     </div>
   </section>
 );

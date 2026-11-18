@@ -59,9 +59,9 @@ Create three **Applications** in Dokploy, all pointing at this repo:
 | `API_SECRET` | long random string |
 | `API_PORT` | `3001` |
 | `WEB_ORIGIN` | `https://miel.gousse.cool` (bare scheme://host — the `/app` prefix is appended in code) |
-| `GOOGLE_CLIENT_ID` | from the Google Cloud OAuth client (see §2) |
-| `GOOGLE_CLIENT_SECRET` | same client (Dokploy secret) |
-| `GOOGLE_REDIRECT_URI` | `https://miel.gousse.cool/api/auth/google/callback` — registered on that client verbatim |
+| `GOOGLE_CLIENT_ID` | optional — from the Google Cloud OAuth client (see §2); a client entered in the app takes precedence |
+| `GOOGLE_CLIENT_SECRET` | optional — same client (Dokploy secret) |
+| `GOOGLE_REDIRECT_URI` | optional — `https://miel.gousse.cool/api/auth/google/callback`, registered on that client verbatim |
 | `TOKEN_ENCRYPTION_KEY` | `openssl rand -base64 32`. **Required in prod**: it encrypts every stored Google refresh token *and* every stored provider API key |
 | `CLAUDE_BIN` | `claude` (already baked into the image; set only to override) |
 
@@ -224,8 +224,12 @@ to bootstrap. Nothing has to be run on the VPS for this.
      reached through the web container's `/api` proxy, so the URI carries it)
    - `http://localhost:5531/auth/google/callback` (local dev, if you develop
      against the same client)
-4. Put the client ID and secret into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
-   in the `miel-api` environment, and the prod URI into `GOOGLE_REDIRECT_URI`.
+4. Paste the client ID, the secret and the prod URI into the app's first-run
+   *Google* step (stored in Postgres, the secret encrypted — no restart). Or put
+   them into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI`
+   in the `miel-api` environment; a client saved in the app wins over those.
+   Switching to a different client later disconnects every account (a grant
+   belongs to the client that issued it), so each reconnects once.
 5. While the consent screen is in **Testing**, add each address that will connect
    under **Audience → Test users**, or the flow ends in `access_denied`. Personal
    use needs no verification.
@@ -240,7 +244,7 @@ encrypted with `TOKEN_ENCRYPTION_KEY` and stored in Postgres.
 The scopes requested are listed in `packages/core/src/google/scopes.ts`, which is
 also what the public homepage's permission table is generated from.
 
-> **`GOOGLE_REDIRECT_URI` must match the registered URI byte for byte** — scheme,
+> **The redirect URI (the app's field, or `GOOGLE_REDIRECT_URI`) must match the registered URI byte for byte** — scheme,
 > host, path, no trailing slash. A mismatch surfaces as Google's
 > `redirect_uri_mismatch` before the app is ever reached. `invalid_client` means
 > the client ID or secret is wrong instead.

@@ -94,7 +94,7 @@ describe("a priority section's category subgroups", () => {
     // The label each category is known by, from `systemLabels`.
     expect(screen.getByRole("button", { name: "Collapse Primary" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Collapse Promotions" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Collapse Notifications" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Collapse Updates" })).toBeTruthy();
   });
 
   test("counts each band's own messages", () => {
@@ -106,7 +106,7 @@ describe("a priority section's category subgroups", () => {
 
     const promos = screen.getByRole("button", { name: "Collapse Promotions" });
     expect(within(promos).getByText("2")).toBeTruthy();
-    const updates = screen.getByRole("button", { name: "Collapse Notifications" });
+    const updates = screen.getByRole("button", { name: "Collapse Updates" });
     expect(within(updates).getByText("1")).toBeTruthy();
   });
 
@@ -320,6 +320,6 @@ describe("untriaged", () => {
     );
 
     expect(screen.getByRole("button", { name: "Collapse Promotions" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Collapse Notifications" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Collapse Updates" })).toBeTruthy();
   });
 });

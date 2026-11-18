@@ -63,14 +63,14 @@ export const ActionablesLedger = ({ messages }: Props) => {
   return (
     <section
       aria-label="Found in your mail"
-      className="overflow-hidden rounded-2xl border border-gousse-line bg-gousse-panel shadow-gousse-sm"
+      className="overflow-hidden rounded-xl border border-gousse-line bg-gousse-panel shadow-[0_1px_2px_rgb(20_32_46/0.04)]"
     >
-      <header className="flex items-center gap-2.5 border-b border-gousse-line/60 py-2 pl-4 pr-3.5">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-gousse-accent/[0.12] py-1 pl-2 pr-2.5 text-[11px] font-bold text-gousse-accent">
-          <Sparkles className="h-3 w-3 shrink-0" aria-hidden />
+      <header className="flex h-8 items-center gap-2.5 bg-gousse-ink/[0.04] pr-3.5 pl-4">
+        <span className="inline-flex items-center gap-2 text-xs font-semibold text-gousse-ink">
+          <Sparkles className="h-3.5 w-3.5 shrink-0 text-gousse-muted" aria-hidden />
           Found in your mail
         </span>
-        <span className="ml-auto text-[11px] tabular-nums text-gousse-muted">
+        <span className="ml-auto text-xs text-gousse-muted tabular-nums">
           {ledgerSummary(visible)}
         </span>
       </header>

@@ -1,4 +1,4 @@
-import { SettingRow } from "@/components/ui/setting-row";
+import { SettingsRow } from "./SettingsRow";
 
 interface Props {
   configured: boolean;
@@ -18,7 +18,7 @@ export const WorpStatusRow = ({ configured, hasBaseUrl, hasApiKey }: Props) => {
   const missing = [!hasBaseUrl && "a base URL", !hasApiKey && "an API key"].filter(Boolean);
 
   return (
-    <SettingRow
+    <SettingsRow
       title="Status"
       description={
         configured
@@ -28,7 +28,9 @@ export const WorpStatusRow = ({ configured, hasBaseUrl, hasApiKey }: Props) => {
       control={
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-            configured ? "bg-gousse-low/15 text-gousse-low" : "bg-gousse-line/40 text-gousse-muted"
+            configured
+              ? "bg-gousse-tint-green text-gousse-tint-green-ink"
+              : "bg-gousse-fill text-gousse-muted"
           }`}
         >
           {configured ? "Configured" : "Not configured"}

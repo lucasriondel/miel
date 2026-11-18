@@ -69,6 +69,31 @@ describe("GmailThreads", () => {
     });
   });
 
+  // The undos are the actions read backwards, so a round trip is a no-op.
+  test("unarchive puts INBOX back with nothing removed", async () => {
+    const exit = await run(
+      Effect.flatMap(GmailThreads, (s) => s.unarchive({ email: "a@b.c" }, "T5")),
+    );
+    expect(expectSuccess(exit)).toBeUndefined();
+    expect(lastModifyArgs).toEqual({
+      userId: "me",
+      id: "T5",
+      requestBody: { addLabelIds: ["INBOX"], removeLabelIds: [] },
+    });
+  });
+
+  test("untrash lifts TRASH and puts INBOX back — trash's exact inverse", async () => {
+    const exit = await run(
+      Effect.flatMap(GmailThreads, (s) => s.untrash({ email: "a@b.c" }, "T6")),
+    );
+    expect(expectSuccess(exit)).toBeUndefined();
+    expect(lastModifyArgs).toEqual({
+      userId: "me",
+      id: "T6",
+      requestBody: { addLabelIds: ["INBOX"], removeLabelIds: ["TRASH"] },
+    });
+  });
+
   test("a 500 throw maps to GmailApiError", async () => {
     threadsModifyImpl = async () => {
       throw { code: 500, message: "server error" };

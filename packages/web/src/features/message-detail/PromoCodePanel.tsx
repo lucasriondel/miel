@@ -48,23 +48,21 @@ export const PromoCodePanel = ({ message }: Props) => {
 
   return (
     <DetailCard>
-      <header className="flex items-center gap-3 border-b border-gousse-line/60 px-5 py-3.5">
-        <Ticket className="h-5 w-5 shrink-0 text-gousse-muted" aria-hidden />
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gousse-muted">
-          Promo Codes
-        </h2>
+      <header className="flex h-10 items-center gap-2 border-b border-gousse-line px-4">
+        <Ticket className="h-3.5 w-3.5 shrink-0 text-gousse-muted" aria-hidden />
+        <h2 className="text-xs font-semibold text-gousse-ink">Promo Codes</h2>
       </header>
 
       {result && result.promos.length > 0 ? (
-        <div className="divide-y divide-gousse-line/60">
+        <div className="divide-y divide-gousse-fill">
           {result.promos.map((promo) => (
             <PromoCodeRow key={promo.id} promo={promo} />
           ))}
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3 border-t border-gousse-line/60 bg-gousse-bg/30 px-5 py-3 first:border-t-0">
-        <span className="text-xs font-medium text-gousse-muted">
+      <div className="flex items-center justify-between gap-3 border-t border-gousse-line bg-gousse-hover px-4 py-2.5 first:border-t-0">
+        <span className="text-xs text-gousse-muted">
           {/* The empty answer is stated here rather than as a row of its own:
               it is a fact about the run, not a promo. */}
           {result && !result.found
@@ -75,9 +73,13 @@ export const PromoCodePanel = ({ message }: Props) => {
           type="button"
           onClick={handleExtract}
           disabled={extract.isPending}
-          className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-gousse-line/60 bg-gousse-panel px-4 text-xs font-bold text-gousse-muted transition-[background-color,color,transform] hover:bg-gousse-ink/10 hover:text-gousse-ink active:scale-[0.96] disabled:opacity-50"
+          className="inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg border border-gousse-border bg-gousse-panel px-3 text-xs font-semibold text-gousse-ink transition-colors hover:border-gousse-border-strong hover:bg-gousse-hover disabled:cursor-progress disabled:opacity-60"
         >
-          {extract.isPending ? <Spinner size={16} /> : <Sparkles className="h-4 w-4" aria-hidden />}
+          {extract.isPending ? (
+            <Spinner size={14} />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          )}
           {extract.isPending ? "Searching…" : result ? "Search again" : "Find promo codes"}
         </button>
       </div>

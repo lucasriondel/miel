@@ -9,8 +9,8 @@ interface Props {
 
 const MetaRow = ({ term, children }: { term: string; children: React.ReactNode }) => (
   <>
-    <dt className="font-medium text-gousse-muted">{term}</dt>
-    <dd className="break-words font-medium text-gousse-ink">{children}</dd>
+    <dt className="text-gousse-muted">{term}</dt>
+    <dd className="break-words text-gousse-ink">{children}</dd>
   </>
 );
 
@@ -28,9 +28,9 @@ export const MessageMetaDisclosure = ({ message }: Props) => {
   const hasDate = !Number.isNaN(date.getTime());
 
   return (
-    <DisclosureRow label="Details" summaryClassName="w-fit gap-2 pr-3">
-      <DetailCard className="mt-2 px-5 py-4">
-        <dl className="grid grid-cols-[76px_1fr] gap-x-4 gap-y-2 text-sm">
+    <DisclosureRow label="Details" summaryClassName="-ml-2 w-fit">
+      <DetailCard className="mt-2 px-4 py-3">
+        <dl className="grid grid-cols-[76px_1fr] gap-x-4 gap-y-1.5 text-[13px]">
           <MetaRow term="To">
             {message.toEmails.length > 0 ? message.toEmails.join(", ") : "—"}
           </MetaRow>

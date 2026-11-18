@@ -5,8 +5,9 @@ import {
   isHostedProvider,
   type ModelTask,
 } from "@miel/core/providerModels";
-import { ModelRow as GousseModelRow } from "@/components/ui/model-row";
+import { SavedFlash } from "@/components/ui/saved-flash";
 import { ProviderKeyField } from "./ProviderKeyField";
+import { ProviderSelect } from "./ProviderSelect";
 import { providerOptions } from "./providerOptions";
 import { useUpdateSettings } from "../../api/mutations";
 import { useProviderCredentials } from "../../api/providerCredential.hooks";
@@ -34,31 +35,29 @@ interface Props {
 }
 
 /**
- * One model-picker row inside the Models card: which provider runs this task,
- * and which of that provider's models it uses.
- *
- * The row itself is gousse-ui's, which is controlled and autosaving: it draws
- * the two selects and the save tick and knows no catalogue, so what stays here
- * is the part that is miel's — the mutation, the roster the select is narrowed
- * to, and the repair field underneath.
+ * One row of the Tasks table: which provider runs this task, and which of that
+ * provider's models it uses — the task's name in the first column, then the two
+ * selects under the Provider and Model headings.
  *
  * The provider drives the model list (#105) — the ids a vendor serves are its
  * own, and the settings route refuses a pairing that crosses vendors, so a
  * free-text model id here could only produce a 400 later. Switching provider
  * sends no model at all; the service picks that vendor's default.
  *
- * The row no longer asks for a key as part of choosing a provider. Credentials
- * are a section of their own above this one, and the select offers only what
- * has one (see `providerOptions`), so a pick is always a pick the route
- * accepts. The one key field left is the repair for the case that filter
- * deliberately keeps: the saved provider whose key went missing, which stays in
- * the list because removing it would misreport what the task runs on.
+ * The row does not ask for a key as part of choosing a provider. Credentials
+ * are the Providers card below, and the select offers only what has one (see
+ * `providerOptions`), so a pick is always a pick the route accepts. The one key
+ * field left is the repair for the case that filter deliberately keeps: the
+ * saved provider whose key went missing, which stays in the list because
+ * removing it would misreport what the task runs on.
  *
- * `disabled` covers both selects rather than the provider one alone, which is
- * where the roster guard now lands too: a list that grows under the cursor is
- * worse than one that arrives a beat late, and the model list is the selected
- * provider's, so freezing the pair while the roster settles is the coherent
- * version of the same rule.
+ * `disabled` covers both selects rather than the provider one alone: a list
+ * that grows under the cursor is worse than one that arrives a beat late, and
+ * the model list is the selected provider's, so freezing the pair while the
+ * roster settles is the coherent version of the same rule.
+ *
+ * The description is the row's tooltip rather than a second line: the table
+ * reads as one line per task, and what a task spends money on is a hover away.
  */
 export const ModelRow = ({ task, title, description, value, provider, onSaved }: Props) => {
   const update = useUpdateSettings();
@@ -74,6 +73,7 @@ export const ModelRow = ({ task, title, description, value, provider, onSaved }:
     isHostedProvider(provider) &&
     !credentials.pending &&
     !credentials.configured.has(provider as CredentialProvider);
+  const disabled = credentials.pending || update.isPending;
 
   const save = (patch: Partial<ModelSettings>) => {
     setSaved(false);
@@ -86,27 +86,40 @@ export const ModelRow = ({ task, title, description, value, provider, onSaved }:
   };
 
   return (
-    <GousseModelRow
-      title={title}
-      description={description}
-      provider={provider}
-      providers={options.map((p) => ({ id: p, label: PROVIDER_LABELS[p] }))}
-      model={value}
-      models={PROVIDER_MODELS[provider]}
-      onProviderChange={(next) => save({ [`${task}Provider`]: next as Provider })}
-      onModelChange={(next) => save({ [`${task}Model`]: next })}
-      disabled={credentials.pending}
-      saving={update.isPending}
-      saved={saved}
-      error={update.isError ? apiErrorMessage(update.error) : null}
-      alignTop={missingKey}
-    >
+    <div className="flex flex-col gap-2 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-[8rem] flex-1 items-center gap-2" title={description}>
+          <span className="text-[13px] font-medium text-gousse-ink">{title}</span>
+          <SavedFlash
+            saving={update.isPending}
+            saved={saved && !update.isError}
+            error={update.isError ? apiErrorMessage(update.error) : null}
+          />
+        </div>
+        <ProviderSelect
+          ariaLabel={`${title} provider`}
+          value={provider}
+          options={options.map((p) => ({ id: p, label: PROVIDER_LABELS[p] }))}
+          disabled={disabled}
+          withMark
+          onChange={(next) => save({ [`${task}Provider`]: next as Provider })}
+          className="w-[150px]"
+        />
+        <ProviderSelect
+          ariaLabel={`${title} model`}
+          value={value}
+          options={PROVIDER_MODELS[provider]}
+          disabled={disabled}
+          onChange={(next) => save({ [`${task}Model`]: next })}
+          className="w-[200px]"
+        />
+      </div>
       {missingKey ? (
         <ProviderKeyField
           provider={provider as CredentialProvider}
           submitLabel={`Save ${PROVIDER_LABELS[provider]} key`}
         />
       ) : null}
-    </GousseModelRow>
+    </div>
   );
 };

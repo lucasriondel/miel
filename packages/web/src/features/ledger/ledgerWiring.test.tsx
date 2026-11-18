@@ -57,6 +57,10 @@ const PROMO: PromoSuggestion = {
   terms: "Full-price items only",
   expiresAt: "2026-12-24T23:59:59.999Z",
   merchant: "Uniqlo",
+  subject: "Autumn sale",
+  fromName: "Uniqlo",
+  fromEmail: "news@uniqlo.example",
+  internalDate: "2026-09-01T09:00:00.000Z",
 };
 
 const originalFetch = globalThis.fetch;
@@ -111,6 +115,7 @@ const layout = (): LayoutContext => ({
   goToday: () => {},
   setViewMode: () => {},
   selectedAccountEmail: undefined,
+  mailbox: "inbox",
 });
 
 const mountInbox = () => {
@@ -194,7 +199,7 @@ describe("the ledger", () => {
     mountInbox();
     await shownLedger();
 
-    fireEvent.click(screen.getByRole("button", { name: "Enter select mode" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Enter select mode" })[0]!);
 
     expect(ledger() === null).toBe(true);
   });

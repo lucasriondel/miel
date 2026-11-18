@@ -48,11 +48,12 @@ export const MessageDetailBody = ({ message }: Props) => {
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gousse-muted">
-          Message Body
-        </h2>
-        <div className="ml-auto flex items-center gap-3">
+      {/* The body reads as the page itself (Main view › Reader): no card and
+          no heading on screen, only the two controls when there is a choice
+          to make. */}
+      <h2 className="sr-only">Message Body</h2>
+      <div className="flex items-center gap-3 empty:hidden [&:not(:has(*))]:hidden">
+        <div className="ml-auto flex items-center gap-3 empty:hidden">
           {/* No toggle when images load by default: the header would be asking
               a question the user has already answered in Settings (#149). */}
           {showHtml && hasRemoteImages && preference === "hide" ? (
@@ -71,12 +72,7 @@ export const MessageDetailBody = ({ message }: Props) => {
       {showHtml ? (
         <HtmlBodyFrame html={message.bodyHtml ?? ""} imagesEnabled={imagesEnabled} />
       ) : (
-        <pre
-          className={cn(
-            detailSurfaceClass("md"),
-            "max-h-[600px] overflow-auto whitespace-pre-wrap p-5 text-sm font-medium text-gousse-ink",
-          )}
-        >
+        <pre className="font-sans text-sm leading-[22px] break-words whitespace-pre-wrap text-gousse-body">
           {message.bodyText ?? ""}
         </pre>
       )}

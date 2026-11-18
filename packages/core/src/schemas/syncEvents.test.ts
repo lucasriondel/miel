@@ -70,3 +70,23 @@ describe("the provider-unavailable event (#127)", () => {
     expect(clientNames.has("sync.claude_unavailable")).toBe(true);
   });
 });
+
+// The sync toast's "3 codes to review" (A20) rides on the run result. Additive,
+// so it needs no alias: a client reading an older API's event, which lacks the
+// field, reads 0 rather than refusing the event.
+describe("promosFound on a run result", () => {
+  const run = { account: "me@example.com", fetched: 14, triaged: 14, filtersSynced: 0, errors: [] };
+
+  test("is carried when the server sends it", () => {
+    const parsed = ReceivedSyncServerEvent.parse({
+      type: "sync.finished",
+      runs: [{ ...run, promosFound: 3 }],
+    });
+    expect(parsed).toMatchObject({ runs: [{ promosFound: 3 }] });
+  });
+
+  test("reads as 0 from a server that does not send it yet", () => {
+    const parsed = ReceivedSyncServerEvent.parse({ type: "sync.finished", runs: [run] });
+    expect(parsed).toMatchObject({ runs: [{ promosFound: 0 }] });
+  });
+});

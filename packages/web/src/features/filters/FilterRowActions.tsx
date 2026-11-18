@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { Spinner } from "@/components/ui/spinner";
 
 interface Props {
@@ -44,7 +44,7 @@ export const FilterRowActions = ({
         aria-label="Delete filter"
         title="Delete filter"
         onClick={onRequestConfirm}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gousse-muted transition-[transform,background-color,color] active:scale-[0.96] hover:bg-gousse-high/10 hover:text-gousse-high"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gousse-muted transition-[transform,background-color,color] active:scale-[0.96] hover:bg-gousse-high-bg hover:text-gousse-high"
       >
         <Trash2 className="h-4 w-4" aria-hidden />
       </button>
@@ -59,7 +59,7 @@ export const FilterRowActions = ({
     // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- see above
     <div
       ref={clusterRef}
-      className="filter-row-actions flex flex-wrap items-center justify-end gap-1.5"
+      className="flex flex-wrap items-center justify-end gap-1.5"
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.stopPropagation();
@@ -68,13 +68,13 @@ export const FilterRowActions = ({
       }}
     >
       <span className="text-xs text-gousse-muted">Delete this filter?</span>
-      <Button variant="danger" onClick={onConfirm} disabled={pending}>
+      <AppButton tone="danger" onClick={onConfirm} disabled={pending}>
         {pending ? <Spinner /> : null}
         Delete
-      </Button>
-      <Button variant="ghost" onClick={onCancel} disabled={pending}>
+      </AppButton>
+      <AppButton tone="ghost" onClick={onCancel} disabled={pending}>
         Cancel
-      </Button>
+      </AppButton>
     </div>
   );
 };

@@ -10,7 +10,7 @@ import { fetchPhase, type FetchPhaseResult } from "./fetchPhase";
 import { triagePhase } from "./triagePhase";
 import { GmailService } from "./services";
 import type { Claude } from "../../claude/Claude";
-import type { LabelStore, PromoStore, SettingsStore } from "../../stores/contracts";
+import type { ContactStore, LabelStore, PromoStore, SettingsStore } from "../../stores/contracts";
 import { createDebug } from "../../util/debug";
 import { stepMarkCompleted } from "./steps";
 import { stepOpenTriageRun, stepFinishTriageRun, triageRunStatusFor } from "./triageRun";
@@ -46,7 +46,7 @@ export const fetchAndTriageEffect = (
   | MessageSearchError
   | GrantError
   | ProviderUnavailableError,
-  GmailService | Claude | SettingsStore | LabelStore | PromoStore
+  GmailService | Claude | SettingsStore | LabelStore | PromoStore | ContactStore
 > => {
   const log = opts.log ?? (() => {});
   const emit = opts.onEvent ?? (() => {});
@@ -81,6 +81,7 @@ export const fetchAndTriageEffect = (
         fetched: fetch.normalized.length,
         triaged: 0,
         filtersSynced: fetch.filtersSynced,
+        promosFound: fetch.promosFound,
         errors,
       };
     }
@@ -133,6 +134,7 @@ export const fetchAndTriageEffect = (
       fetched: fetch.normalized.length,
       triaged: triage.triaged,
       filtersSynced: fetch.filtersSynced,
+      promosFound: fetch.promosFound,
       errors,
     };
   });

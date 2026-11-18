@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { sidebarRowClass } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 interface Props {
   active: boolean;
@@ -18,9 +18,14 @@ interface Props {
 }
 
 /**
- * Shared sidebar row. Layout + typography live here; the hue-driven surfaces
- * (bg, left active bar, glyph/count tint) come from `.sidebar-row` in index.css
- * so a single `--hue` custom property can feed rest/hover/active uniformly.
+ * One label row in the sidebar (UI System › Sidebar Label Item): 30px, an 8px
+ * corner, the label's colour as a small square and its name. Selected is the
+ * brand ink at 10% with the name in semibold, the same treatment as the nav
+ * rows above it, so the two lists read as one column of places to go.
+ *
+ * `--hue` still rides on the row for the nested tree's chevron and children
+ * (`.sidebar-children` in the vendored sidebar sheet), but nothing here paints
+ * with it: the colour a label owns is its swatch, and only its swatch.
  */
 export const LabelListRow = ({
   active,
@@ -35,9 +40,9 @@ export const LabelListRow = ({
 }: Props) => {
   const style: CSSProperties = {};
   if (hue) (style as Record<string, string>)["--hue"] = hue;
-  // One step = the glyph slot + its gap, so a child's text sits directly under
+  // One step = the swatch slot + its gap, so a child's text sits directly under
   // its parent's text rather than drifting off on its own margin.
-  if (depth > 0) style.paddingLeft = `${0.625 + depth * 1.625}rem`;
+  if (depth > 0) style.paddingLeft = `${0.625 + depth * 1.375}rem`;
 
   return (
     <button
@@ -48,7 +53,13 @@ export const LabelListRow = ({
       data-tinted={tinted ? "true" : undefined}
       data-collapsed={collapsed ? "true" : undefined}
       style={style}
-      className={sidebarRowClass(active)}
+      aria-current={active ? "true" : undefined}
+      className={cn(
+        "flex h-[30px] w-full shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors duration-150",
+        active
+          ? "bg-gousse-primary/10 font-semibold text-gousse-primary"
+          : "text-gousse-ink hover:bg-gousse-primary/5",
+      )}
     >
       {children}
       {trailing}

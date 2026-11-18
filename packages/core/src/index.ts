@@ -36,6 +36,7 @@ export {
   GmailLabels,
   GmailFilters,
   GmailThreads,
+  GmailDrafts,
   GmailModify,
   GmailProfile,
   refKey,
@@ -46,6 +47,8 @@ export type {
   SearchHit as GmailSearchHit,
   SendResult as GmailSendResult,
   SendReplyInput,
+  SendMessageInput,
+  SavedDraft as GmailSavedDraft,
   FilterSpec,
   TokenGrant,
 } from "./google/contracts";
@@ -195,6 +198,8 @@ export {
   applyLabels,
   archiveMessage,
   trashMessage,
+  unarchiveMessage,
+  untrashMessage,
   setMessageRead,
   batchModifyMessages,
 } from "./services/apply";
@@ -209,7 +214,9 @@ export {
   getMessageDetail,
   listAccounts as listAccountsFromDb,
   getAccountById,
+  setAccountNickname,
   setMessagePriority,
+  MAX_NICKNAME_LENGTH,
 } from "./services/messages";
 export type {
   ListedMessage,
@@ -256,13 +263,72 @@ export type {
   SavePromoArgs,
   SavePromoResult,
 } from "./services/promoCodes";
-export { generateReply, sendReply } from "./services/reply";
+export {
+  forwardMessage,
+  generateNewMessage,
+  generateReply,
+  quotePreview,
+  sendNewMessage,
+  sendReply,
+} from "./services/reply";
 export type {
+  ForwardMessageArgs,
+  GenerateNewMessageArgs,
   GenerateReplyArgs,
   GenerateReplyResult,
+  PreviousDraft,
+  QuotePreview,
+  SendMessageResult,
+  SendNewMessageArgs,
   SendReplyArgs,
   SendReplyResult,
 } from "./services/reply";
+export type { QuoteBlock } from "./services/quoting";
+// Stopping an AI draft server-side: the request id a generation runs under.
+export { cancelGeneration } from "./services/generations";
+export type { Cancellation } from "./services/generations";
+// Attachments staged for a send, the addresses an account may send as, and the
+// address suggestions.
+export { removeUpload, uploadAttachment } from "./services/uploads";
+export type { UploadedAttachment, UploadAttachmentArgs } from "./services/uploads";
+export { MAX_ATTACHMENTS_BYTES, UPLOAD_TTL_MS } from "./composeLimits";
+export { listSendAs } from "./services/sendAs";
+export type { SendAsAlias } from "./google/gmailAdapter";
+export { suggestContacts, MAX_CONTACT_SUGGESTIONS } from "./services/contacts";
+export type { ContactSuggestion } from "./services/contacts";
+// Snooze and schedule send — miel's own, since Gmail's API has neither — and
+// the loop that wakes and sends them when they fall due.
+export { snoozeMessage, unsnoozeMessage } from "./services/snooze";
+export type { SnoozeArgs, SnoozeResult } from "./services/snooze";
+export {
+  cancelScheduled,
+  listScheduled,
+  reschedule,
+  scheduleSend,
+  MAX_SEND_ATTEMPTS,
+  STALE_CLAIM_MS,
+} from "./services/scheduledSends";
+export type { ScheduleSendArgs, ScheduledSendView } from "./services/scheduledSends";
+export { createDueWorkLoop } from "./services/dueWork";
+export type { DueWorkDeps, DueWorkLoop, DueWorkTickResult } from "./services/dueWork";
+// The Google OAuth client entered in the app (the database's, with the
+// environment as the fallback). The resolver that carries the decrypted secret
+// is deliberately absent: `GoogleAuth` imports it from the module.
+export {
+  clearGoogleOAuthConfig,
+  getGoogleOAuthStatus,
+  saveGoogleOAuthConfig,
+  redirectUriProblem,
+} from "./services/googleOAuthConfig";
+export type {
+  GoogleOAuthSource,
+  GoogleOAuthStatus,
+  SaveGoogleOAuthConfigArgs,
+  SaveGoogleOAuthConfigResult,
+} from "./services/googleOAuthConfig";
+// The compose window's autosave into Gmail drafts.
+export { deleteDraft, saveDraft } from "./services/drafts";
+export type { SaveDraftArgs, SaveDraftResult } from "./services/drafts";
 export {
   downloadAttachment,
   downloadAttachmentEffect,
@@ -356,6 +422,8 @@ export {
   applyLabelsEffect,
   archiveMessageEffect,
   trashMessageEffect,
+  unarchiveMessageEffect,
+  untrashMessageEffect,
   setMessageReadEffect,
   batchModifyMessagesEffect,
 } from "./services/apply";
@@ -364,9 +432,33 @@ export {
   getMessageDetailEffect,
   listAccountsEffect as listAccountsFromDbEffect,
   getAccountByIdEffect,
+  setAccountNicknameEffect,
   setMessagePriorityEffect,
 } from "./services/messages";
-export { generateReplyEffect, sendReplyEffect } from "./services/reply";
+export {
+  forwardMessageEffect,
+  generateNewMessageEffect,
+  generateReplyEffect,
+  quotePreviewEffect,
+  sendNewMessageEffect,
+  sendReplyEffect,
+} from "./services/reply";
+export {
+  snoozeMessageEffect,
+  unsnoozeMessageEffect,
+  wakeDueSnoozesEffect,
+} from "./services/snooze";
+export {
+  cancelScheduledEffect,
+  listScheduledEffect,
+  rescheduleEffect,
+  runDueScheduledSendsEffect,
+  scheduleSendEffect,
+} from "./services/scheduledSends";
+export { removeUploadEffect, sweepUploadsEffect, uploadAttachmentEffect } from "./services/uploads";
+export { harvestSentContactsEffect, suggestContactsEffect } from "./services/contacts";
+export { listSendAsEffect } from "./services/sendAs";
+export { deleteDraftEffect, saveDraftEffect } from "./services/drafts";
 export {
   fetchAndTriageEffect,
   syncAllEffect,

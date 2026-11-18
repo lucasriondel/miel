@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { runExit, expectFailureTag, expectSuccess } from "../testkit/runExit";
 import { GoogleAuth } from "./contracts";
 
@@ -61,9 +61,12 @@ mock.module("googleapis", () => ({
 
 // Import the live layer AFTER the mocks are registered.
 const { GoogleAuthLive } = await import("./GoogleAuth");
+const { makeTestStores } = await import("../testkit/stores");
 
+// Empty stores: no client saved in the app, so the environment's is in effect —
+// which is what every case below sets up.
 const run = <A, E>(eff: Effect.Effect<A, E, GoogleAuth>) =>
-  runExit(Effect.provide(eff, GoogleAuthLive));
+  runExit(Effect.provide(eff, Layer.provide(GoogleAuthLive, makeTestStores().layer)));
 
 // Required OAuth env for the consent/exchange happy paths.
 function setOAuthEnv(): void {

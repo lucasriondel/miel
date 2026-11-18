@@ -1,20 +1,22 @@
 import { describe, expect, test } from "bun:test";
+import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { ComposeWindow } from "./ComposeWindow";
 
-// The window's shape, which is a DESIGN.md matter rather than a behavioural one
-// (#96, and #85 §2/§3/§5 for the rules): a card at the shared radius taking its
-// depth from the shadow ramp, a hairline edge at reduced alpha, and title-bar
-// controls that press and clear the 40px hit floor. Asserted on the rendered
-// node's classes because that is where a class either lands or does not — the
-// behaviour these classes are attached to is next door in `replyWindow`.
+// The window's shape, which is a design matter rather than a behavioural one
+// (the redesign's "2 · Window states"): an open window is a 24px-cornered card
+// on the panel fill taking its depth from the top shadow ramp, a minimized one
+// is its 300px title bar on the bottom edge. Asserted on the rendered node's
+// classes because that is where a class either lands or does not — the
+// behaviour is next door in `composeWiring`.
 
-const renderWindow = (minimized = false) =>
+const renderWindow = (minimized = false, status?: ReactNode) =>
   render(
     <ComposeWindow
       title="Lunch?"
       label="Reply: Lunch?"
       minimized={minimized}
+      status={status}
       onMinimize={() => {}}
       onRestore={() => {}}
       onClose={() => {}}
@@ -25,49 +27,24 @@ const renderWindow = (minimized = false) =>
 
 const panel = () => screen.getByRole("region", { name: "Reply: Lunch?" });
 
-describe("the window surface", () => {
-  test("is a card at the shared radius, on the panel fill (§3)", () => {
+describe("the open window", () => {
+  test("is a card with the design's 24px corner, on the panel fill", () => {
     renderWindow();
 
-    expect(panel().className).toContain("rounded-3xl");
+    expect(panel().className).toContain("rounded-[24px]");
     expect(panel().className).toContain("bg-gousse-panel");
+    expect(panel().className).toContain("sm:w-[540px]");
   });
 
-  // §2: depth is a shadow ramp; the border is a hairline at reduced alpha and
-  // never carries the weight. The window is the highest floating layer here.
   test("takes depth from the top shadow ramp and edges with a hairline", () => {
     renderWindow();
 
     expect(panel().className).toContain("shadow-gousse-xl");
-    expect(panel().className).toMatch(/border border-gousse-line\/\d+/);
-    expect(panel().className).not.toContain("border-2");
-  });
-
-  // A fixed layer spanning the viewport would swallow clicks on the page it
-  // floats over; only the panel takes them back.
-  test("leaves the page beside it clickable", () => {
-    renderWindow();
-
-    expect(panel().parentElement!.className).toContain("pointer-events-none");
+    expect(panel().className).toContain("border-gousse-line");
     expect(panel().className).toContain("pointer-events-auto");
   });
-});
 
-describe("the title bar", () => {
-  test("gives each icon control a 40px target that presses (§5)", () => {
-    renderWindow();
-
-    for (const name of ["Minimize", "Close"]) {
-      const cls = screen.getByRole("button", { name }).className;
-      expect(cls).toContain("h-10");
-      expect(cls).toContain("w-10");
-      expect(cls).toContain("rounded-full");
-      expect(cls).toContain("active:scale-[0.96]");
-      expect(cls).not.toContain("transition-all");
-    }
-  });
-
-  test("names the way out in the caller's words", () => {
+  test("names the way out in the caller's words, and minimizes", () => {
     render(
       <ComposeWindow
         title="Lunch?"
@@ -82,30 +59,30 @@ describe("the title bar", () => {
     );
 
     expect(screen.getByRole("button", { name: "Discard" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Minimize" })).toBeDefined();
   });
 
-  test("swaps minimize for restore, and keeps the title either way", () => {
-    const view = renderWindow(true);
+  test("title-bar controls are round and press", () => {
+    renderWindow();
+
+    for (const name of ["Minimize", "Close"]) {
+      const cls = screen.getByRole("button", { name }).className;
+      expect(cls).toContain("rounded-full");
+      expect(cls).toContain("active:scale-[0.96]");
+      expect(cls).not.toContain("transition-all");
+    }
+  });
+});
+
+describe("the minimized window", () => {
+  test("is its title bar alone, with restore in place of minimize", () => {
+    renderWindow(true, <span aria-label="Unsent" />);
 
     expect(screen.getByRole("button", { name: "Restore" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Minimize" })).toBeNull();
     expect(screen.getByText("Lunch?")).toBeDefined();
+    expect(screen.getByLabelText("Unsent")).toBeDefined();
     expect(screen.queryByText("the form")).toBeNull();
-
-    view.unmount();
-    renderWindow(false);
-    expect(screen.getByText("the form")).toBeDefined();
+    expect(panel().className).toContain("rounded-t-[14px]");
   });
-});
-
-// §3's concentric rule: a `rounded-3xl` child inside a `rounded-3xl` card
-// repeats the parent's corner. The window is the card now, so its contents
-// separate with hairlines and pills instead.
-test("no child repeats the window's own corner", () => {
-  renderWindow();
-
-  const repeated = [...panel().querySelectorAll("*")].filter((node) =>
-    node.className.toString().includes("rounded-3xl"),
-  );
-  expect(repeated).toHaveLength(0);
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { SettingRow, SettingsCard } from "@/components/ui/setting-row";
 import { SavedFlash } from "@/components/ui/saved-flash";
+import { BatchNumberField } from "./BatchNumberField";
+import { SettingsPanel } from "./SettingsPanel";
 import { useUpdateTriageBatchSettings } from "../../api/mutations";
 import { apiErrorMessage } from "../../api/apiErrorMessage";
 import type { TriageBatchSettings as TriageBatchSettingsT } from "../../api/types";
@@ -10,9 +11,10 @@ interface Props {
 }
 
 /**
- * Triage-batching controls as two number rows in one card. Each field commits
- * on blur/Enter (free-text) and clamps to its min/max before saving; the whole
- * card shares one SavedFlash so the last write's result is visible.
+ * Triage-batching controls: two labelled number fields side by side in one card,
+ * each showing its range inside the field. Each commits on blur/Enter
+ * (free-text) and clamps to its min/max before saving; the card shares one
+ * SavedFlash on its heading so the last write's result is visible.
  */
 export const TriageBatchSettings = ({ value }: Props) => {
   const update = useUpdateTriageBatchSettings();
@@ -42,80 +44,29 @@ export const TriageBatchSettings = ({ value }: Props) => {
   );
 
   return (
-    <SettingsCard>
-      <SettingRow
-        title="Messages per batch"
-        description="How many messages go in each AI triage call (1–50)."
-        control={
-          <>
-            <NumberField
-              ariaLabel="Messages per batch"
-              value={batchSize}
-              min={1}
-              max={50}
-              disabled={update.isPending}
-              onChange={setBatchSize}
-              onCommit={(n) => commit({ batchSize: n, batchConcurrency })}
-            />
-            {flash}
-          </>
-        }
-      />
-      <SettingRow
-        title="Concurrent batches"
-        description="How many triage batches run at once (1–10)."
-        control={
-          <NumberField
-            ariaLabel="Concurrent batches"
-            value={batchConcurrency}
-            min={1}
-            max={10}
-            disabled={update.isPending}
-            onChange={setBatchConcurrency}
-            onCommit={(n) => commit({ batchSize, batchConcurrency: n })}
-          />
-        }
-      />
-    </SettingsCard>
+    <SettingsPanel title="Triage batching" action={flash} divided={false}>
+      <div className="grid gap-4 px-4 pt-0.5 pb-4 sm:grid-cols-2">
+        <BatchNumberField
+          label="Messages per batch"
+          hint="How many messages go in each AI triage call."
+          value={batchSize}
+          min={1}
+          max={50}
+          disabled={update.isPending}
+          onChange={setBatchSize}
+          onCommit={(n) => commit({ batchSize: n, batchConcurrency })}
+        />
+        <BatchNumberField
+          label="Batches at once"
+          hint="How many triage batches run at the same time."
+          value={batchConcurrency}
+          min={1}
+          max={10}
+          disabled={update.isPending}
+          onChange={setBatchConcurrency}
+          onCommit={(n) => commit({ batchSize, batchConcurrency: n })}
+        />
+      </div>
+    </SettingsPanel>
   );
 };
-
-interface NumberFieldProps {
-  ariaLabel: string;
-  value: number;
-  min: number;
-  max: number;
-  disabled?: boolean;
-  onChange: (n: number) => void;
-  onCommit: (n: number) => void;
-}
-
-const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
-
-const NumberField = ({
-  ariaLabel,
-  value,
-  min,
-  max,
-  disabled,
-  onChange,
-  onCommit,
-}: NumberFieldProps) => (
-  <input
-    type="number"
-    aria-label={ariaLabel}
-    min={min}
-    max={max}
-    disabled={disabled}
-    value={value}
-    onChange={(e) => onChange(Number(e.target.value))}
-    onBlur={() => onCommit(clamp(value, min, max))}
-    onKeyDown={(e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        onCommit(clamp(value, min, max));
-      }
-    }}
-    className="w-20 rounded-full border border-gousse-line bg-gousse-panel px-3.5 py-1.5 text-center text-sm tabular-nums text-gousse-ink transition-[border-color,box-shadow] focus:border-gousse-accent focus:outline-none focus:ring-2 focus:ring-gousse-accent/20 disabled:opacity-60"
-  />
-);

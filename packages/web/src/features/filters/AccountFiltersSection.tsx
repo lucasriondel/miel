@@ -95,9 +95,9 @@ export const AccountFiltersSection = ({ account, filters, labels }: Props) => {
     <section className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-gousse-muted">
-            <span>Active filters</span>
-            <span className="rounded-full bg-gousse-line/50 px-1.5 py-px text-[11px] tabular-nums">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-semibold text-gousse-ink">Active filters</span>
+            <span className="text-[11px] font-medium text-gousse-muted tabular-nums">
               {visibleFilters.length}
             </span>
           </div>

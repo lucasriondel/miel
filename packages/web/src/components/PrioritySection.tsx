@@ -60,7 +60,7 @@ export const PrioritySection = ({
   if (presence.length === 0 && headers.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col gap-2">
       <PresenceHeaders headers={headers}>
         {(count, state) => (
           <PriorityHeader
@@ -76,11 +76,10 @@ export const PrioritySection = ({
           />
         )}
       </PresenceHeaders>
-      {/* The card keeps its production shape exactly — the coloured heading and
-          its count chip stay outside it, and it stays a rounded, bordered,
-          shadowed panel. All that changed is its interior, which is now the
-          category subgroups rather than a flat run of rows (req. 8). */}
-      <div className="overflow-hidden rounded-xl border border-gousse-line bg-gousse-panel shadow-gousse-md">
+      {/* The coloured heading and its count stay outside the card; the card is
+          one white surface with a hairline, a 12px corner and the faintest
+          shadow, holding the category subgroups. */}
+      <div className="overflow-hidden rounded-xl border border-gousse-line bg-gousse-panel shadow-[0_1px_2px_rgb(20_32_46/0.04)]">
         <CategoryGroupList
           accountId={accountId}
           presence={presence}
@@ -128,11 +127,11 @@ const PriorityHeader = ({
     // The actions no longer wait for a hover (#144), so the row has to hold all
     // of it at any width: the heading is the only part allowed to give way, and
     // the gap tightens below `sm` to buy it a few characters back.
-    <header className="flex items-center gap-2 sm:gap-3">
+    <header className="flex h-6 items-center gap-2 pl-4">
       {/* The verdict is the colour of the heading (#141), not a pill in front of
           it — and the heading still says which priority it is, so the colour is
           emphasis rather than the only thing carrying the distinction. */}
-      <h2 className={`min-w-0 truncate text-base font-bold ${priorityInk(priority)}`}>
+      <h2 className={`min-w-0 truncate text-sm font-semibold ${priorityInk(priority)}`}>
         {titles[priority]}
       </h2>
       <SectionCount category={priority} count={count} />
@@ -151,7 +150,7 @@ const PriorityHeader = ({
         // the card, so the same 16px would land 1px wide of them: the card has
         // a 1px border, and that border is inside its width. Hence the extra
         // pixel rather than a bare `pr-4` — it is the border, not a nudge.
-        <div className="ml-auto flex shrink-0 items-center gap-1 pr-[calc(1rem+1px)]">
+        <div className="ml-auto flex shrink-0 items-center gap-1 pr-[calc(1rem+1px)] transition-opacity duration-150 pointer-fine:opacity-60 pointer-fine:hover:opacity-100 pointer-fine:focus-within:opacity-100">
           <CategorySelectButton
             category={categoryName(priority)}
             accountId={accountId}

@@ -2,7 +2,7 @@ import { ChevronDown } from "lucide-react";
 import type { LabelNode } from "./buildLabelTree";
 import { hueFromColor } from "./hueFromColor";
 import { LabelListRow } from "./LabelListRow";
-import { SidebarGlyph } from "@/components/ui/sidebar";
+import { labelSwatch } from "./labelSwatch";
 
 interface Props {
   node: LabelNode;
@@ -29,7 +29,7 @@ export const LabelTreeRow = ({
   const collapsed = hasChildren && isCollapsed(node.name);
   const selectable = node.label !== null;
   const active = selectable && selectedLabelId === node.label!.id;
-  const swatchColor = node.label?.colorBg ?? "#d1d5db";
+  const swatchColor = labelSwatch(node.label?.colorBg ?? null, node.label?.colorFg ?? null);
   // Same source as the swatch, so the row's left bar / bg / glyph always match
   // the dot rather than falling back to the generic accent.
   const hue = hueFromColor(swatchColor);
@@ -70,21 +70,21 @@ export const LabelTreeRow = ({
                   onToggleCollapse(node.name);
                 }
               }}
-              className="sidebar-chevron ml-auto grid h-5 w-5 shrink-0 place-items-center rounded-full text-gousse-muted transition-colors hover:bg-gousse-line/50 hover:text-gousse-ink"
+              className="sidebar-chevron ml-auto grid h-5 w-5 shrink-0 place-items-center rounded-md text-gousse-muted transition-colors hover:bg-gousse-fill hover:text-gousse-ink"
             >
               <ChevronDown className="h-3.5 w-3.5" aria-hidden />
             </span>
           ) : undefined
         }
       >
-        <SidebarGlyph>
+        <span className="grid h-3.5 w-3.5 shrink-0 place-items-center">
           <span
             aria-hidden
-            className="h-2.5 w-2.5 rounded-sm"
+            className="h-2 w-2 rounded-[2px]"
             style={{ backgroundColor: swatchColor }}
           />
-        </SidebarGlyph>
-        <span className="truncate">{node.leaf}</span>
+        </span>
+        <span className="min-w-0 flex-1 truncate">{node.leaf}</span>
       </LabelListRow>
 
       {hasChildren ? (

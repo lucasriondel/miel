@@ -31,17 +31,24 @@
  * fragments: Tailwind v4 scans source text, so a class built from a variable at
  * runtime compiles to no rule at all.
  */
+/*
+ * The redesign (`miel.figcraft`, UI System › Icon Button) draws these as 26px
+ * squares with a 6px corner and a fill on hover, not as pills: they sit in rows
+ * of quiet glyphs (section headers, the row action strip, the reader toolbar)
+ * where a circle reads as a badge. `sm` is 28px and `md` 32px — the design's 26
+ * rounded up to the hit areas §5 asks for.
+ */
 export type IconButtonSize = "sm" | "md";
 
 const SIZE: Record<IconButtonSize, string> = {
-  sm: "h-8 w-8",
-  md: "h-9 w-9",
+  sm: "h-7 w-7",
+  md: "h-8 w-8",
 };
 
 /** Icon glyph size for each button size, as a Tailwind class. */
 const ICON: Record<IconButtonSize, string> = {
-  sm: "h-4 w-4",
-  md: "h-[18px] w-[18px]",
+  sm: "h-3.5 w-3.5",
+  md: "h-4 w-4",
 };
 
 /** Icon glyph size in px, for the spinner that stands in while an action runs. */
@@ -55,9 +62,9 @@ const ICON_PX: Record<IconButtonSize, number> = {
  * the disabled treatment. Everything a variant is allowed to add sits after it.
  */
 const BASE =
-  "inline-flex items-center justify-center rounded-full text-gousse-muted transition-[background-color,color,transform] duration-150 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+  "inline-flex items-center justify-center rounded-md text-gousse-muted transition-[background-color,color,transform] duration-150 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
-const HOVER = "hover:bg-gousse-line/40 hover:text-gousse-ink";
+const HOVER = "hover:bg-gousse-fill hover:text-gousse-ink active:bg-gousse-line";
 const HOVER_DANGER = "hover:bg-gousse-high/10 hover:text-gousse-high";
 
 export interface IconButtonOptions {

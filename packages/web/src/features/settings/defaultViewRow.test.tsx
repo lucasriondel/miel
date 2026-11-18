@@ -19,6 +19,7 @@ const account = (id: string, email: string): Account => ({
   id,
   email,
   displayName: null,
+  nickname: null,
   avatarUrl: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   lastSyncedAt: null,
@@ -34,7 +35,7 @@ const renderRow = (accounts: Account[]) => {
       <DefaultViewRow />
     </QueryClientProvider>,
   );
-  return screen.getByLabelText<HTMLSelectElement>("Default view");
+  return screen.getByLabelText<HTMLSelectElement>("Open miel on");
 };
 
 const labels = (select: HTMLSelectElement) => [...select.options].map((o) => o.textContent);
@@ -42,7 +43,7 @@ const labels = (select: HTMLSelectElement) => [...select.options].map((o) => o.t
 describe("the default-view row", () => {
   test("offers 'last opened' and every connected account, last opened chosen", () => {
     const select = renderRow([account("a", "a@x.com"), account("b", "b@x.com")]);
-    expect(labels(select)).toEqual(["Last opened account", "a@x.com", "b@x.com"]);
+    expect(labels(select)).toEqual(["The last mailbox I opened", "a@x.com", "b@x.com"]);
     expect(select.value).toBe("last");
   });
 

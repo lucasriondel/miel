@@ -8,17 +8,20 @@ import type { MessageDetail } from "../../api/types";
 // plus a `Details` disclosure. This package has no DOM harness, so open/close
 // stays the browser's `<details>` and a manual criterion; what is asserted here
 // is which values sit at rest and which sit inside the disclosure, plus the
-// classes DESIGN.md legislates (§3 pill, §4 truncation and tabular numerals,
-// §5 press feedback and hit area).
+// classes DESIGN.md legislates (§4 truncation and tabular numerals, the
+// disclosure's hit area).
 
 const base: MessageDetail = {
   accountId: "acc-1",
   accountEmail: "me@example.com",
+  snoozedUntil: null,
   gmailMessageId: "m-1",
   gmailThreadId: "t-1",
   fromEmail: "bob@corp.example",
   fromName: "Bob Vance",
   toEmails: ["me@example.com"],
+  ccEmails: [],
+  replyAllCc: [],
   subject: "Refrigeration quote",
   snippet: null,
   bodyText: null,
@@ -68,8 +71,20 @@ describe("the resting header", () => {
     expect(rest).not.toContain("me@example.com");
   });
 
-  test("keeps the bottom hairline that separates it from the page", () => {
-    expect(render()).toMatch(/<header[^>]*class="[^"]*border-b/);
+  // The reader's header is part of the page (Main view › Reader): no hairline
+  // under it, the body follows after the shared gap.
+  test("draws no rule under itself — the reader is one surface", () => {
+    expect(render()).not.toMatch(/<header[^>]*class="[^"]*border-b/);
+  });
+
+  test("puts a banner between the title and the sender when given one", () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <MessageDetailHeader message={base} banner={<p>BANNER</p>} />
+      </QueryClientProvider>,
+    );
+    expect(html.indexOf("BANNER")).toBeGreaterThan(html.indexOf("<h1"));
+    expect(html.indexOf("BANNER")).toBeLessThan(html.indexOf("Bob Vance"));
   });
 
   test("truncates the sender address rather than wrapping it, full value on hover (§4)", () => {
@@ -131,20 +146,20 @@ describe("the Details disclosure", () => {
     expect(behindDetails(render({ toEmails: [] }))).toContain("—");
   });
 
-  test("sits on the shared rounded-3xl card, never the old rounded-xl", () => {
+  test("sits on the shared rounded-xl card", () => {
     const behind = behindDetails(render());
-    expect(behind).toContain("rounded-3xl");
-    expect(behind).not.toContain("rounded-xl");
+    expect(behind).toContain("rounded-xl border border-gousse-line");
+    expect(behind).not.toContain("rounded-3xl");
   });
 
-  test("is a pill control with a 40px hit height and press feedback (§3, §5)", () => {
+  test("is a quiet text control with a 32px hit height and a fill on hover", () => {
     const html = render();
     const [summary] = summaryClasses(html);
     expect(summary).toBeDefined();
     expect(html).toContain("Details");
-    expect(summary).toContain("rounded-full");
-    expect(summary).toContain("min-h-10");
-    expect(summary).toContain("active:scale-[0.96]");
+    expect(summary).toContain("rounded-md");
+    expect(summary).toContain("min-h-8");
+    expect(summary).toContain("hover:bg-gousse-fill");
     expect(summary).not.toContain("transition-all");
   });
 

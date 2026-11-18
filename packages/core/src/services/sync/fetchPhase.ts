@@ -5,11 +5,12 @@ import type { ProviderUnavailableError } from "../../errors";
 import type { GrantError } from "./steps";
 import type { NormalizedMessage, RunTrigger } from "./types";
 import type { SyncServerEventT } from "../../schemas/syncEvents";
-import { resolveSyncRange, type DateRange } from "../../util/time";
+import { resolveSyncRange, sentQueryFor, type DateRange } from "../../util/time";
 import { GmailService } from "./services";
 import type { Claude } from "../../claude/Claude";
-import type { LabelStore, PromoStore } from "../../stores/contracts";
+import type { ContactStore, LabelStore, PromoStore } from "../../stores/contracts";
 import { extractPromosForMessagesEffect } from "../promoCodes";
+import { harvestSentContactsEffect } from "../contacts";
 import { createDebug } from "../../util/debug";
 import {
   stepValidateAccount,
@@ -41,6 +42,8 @@ export interface FetchPhaseResult {
   labelsByGmailId: Map<string, LabelRow>;
   normalized: NormalizedMessage[];
   filtersSynced: number;
+  /** Promo codes extracted from this run's new mail. */
+  promosFound: number;
   messagesFetchedRef: Ref.Ref<number>;
   messagesNewRef: Ref.Ref<number>;
   errorsRef: Ref.Ref<string[]>;
@@ -55,7 +58,7 @@ export const fetchPhase = (
   | MessageSearchError
   | GrantError
   | ProviderUnavailableError,
-  GmailService | LabelStore | Claude | PromoStore
+  GmailService | LabelStore | Claude | PromoStore | ContactStore
 > =>
   Effect.gen(function* () {
     const account = yield* stepValidateAccount(opts.accountEmail);
@@ -122,6 +125,22 @@ export const fetchPhase = (
       log: opts.log,
     });
 
+    // Who the account writes to, for the compose window's suggestions: the
+    // sent mail in the same window, headers only, nothing added to the inbox.
+    // Best-effort — a sync is not failed for a convenience.
+    const gmail = yield* GmailService;
+    yield* harvestSentContactsEffect({
+      accountId: account.id,
+      accountEmail: account.email,
+      query: sentQueryFor(resolved.query),
+      max: opts.max,
+      gmail,
+    }).pipe(
+      Effect.catch((err) =>
+        Effect.sync(() => debug.warn("sent contacts not harvested", { message: err.message })),
+      ),
+    );
+
     yield* Ref.set(messagesFetchedRef, hits.length);
     yield* Ref.set(messagesNewRef, normalized.length);
 
@@ -135,6 +154,7 @@ export const fetchPhase = (
         labelsByGmailId: new Map<string, LabelRow>(),
         normalized,
         filtersSynced,
+        promosFound: 0,
         messagesFetchedRef,
         messagesNewRef,
         errorsRef,
@@ -172,6 +192,7 @@ export const fetchPhase = (
       labelsByGmailId,
       normalized,
       filtersSynced,
+      promosFound: promos.extracted,
       messagesFetchedRef,
       messagesNewRef,
       errorsRef,

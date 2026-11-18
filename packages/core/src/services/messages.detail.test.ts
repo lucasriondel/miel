@@ -71,6 +71,27 @@ describe("getMessageDetailEffect", () => {
     expect(detail?.attachments.map((a) => a.filename)).toEqual(["inv.pdf"]);
   });
 
+  // Reply-all needs the original's Cc, which has no column: it is parsed off the
+  // stored headers, and the default Cc is derived once, here, for every client.
+  test("parses the Cc off the stored headers and derives reply-all's Cc", async () => {
+    Object.assign(stores.mailbox.messages[0], {
+      toEmails: ["me@example.com", "bob@example.com"],
+      rawHeaders: { cc: "Carol <carol@example.com>, me@example.com" },
+    });
+
+    const detail = await stores.run(getMessageDetailEffect(REF));
+
+    expect(detail?.ccEmails).toEqual(["carol@example.com", "me@example.com"]);
+    expect(detail?.replyAllCc).toEqual(["bob@example.com", "carol@example.com"]);
+  });
+
+  test("has an empty reply-all Cc for a two-person exchange", async () => {
+    const detail = await stores.run(getMessageDetailEffect(REF));
+
+    expect(detail?.ccEmails).toEqual([]);
+    expect(detail?.replyAllCc).toEqual([]);
+  });
+
   test("has no triage history, and no latest triage, before it is triaged", async () => {
     const detail = await stores.run(getMessageDetailEffect(REF));
 
@@ -117,6 +138,7 @@ describe("the connected accounts", () => {
       id: "33333333-3333-4333-8333-333333333333",
       email: "another@example.com",
       displayName: null,
+      nickname: null,
       avatarUrl: null,
       createdAt: new Date("2026-02-01T00:00:00.000Z"),
       lastSyncedAt: new Date("2026-03-01T00:00:00.000Z"),

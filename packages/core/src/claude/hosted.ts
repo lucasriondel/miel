@@ -40,6 +40,8 @@ export type HostedGenerate = (args: {
   readonly prompt: string;
   /** The task's JSON Schema, verbatim — `unknown` because ai-sdk only forwards it. */
   readonly jsonSchema: unknown;
+  /** Aborted when the run is interrupted — a draft the user stopped. */
+  readonly signal?: AbortSignal;
 }) => Promise<unknown>;
 
 /**
@@ -66,6 +68,7 @@ export const generateHostedLive: HostedGenerate = async (args) => {
     system: args.system,
     prompt: args.prompt,
     schema: jsonSchema(args.jsonSchema as Parameters<typeof jsonSchema>[0]),
+    abortSignal: args.signal,
   });
   return result.object;
 };
@@ -109,8 +112,11 @@ export const runHosted = <Output>(args: {
     // that keeps it out of the error it might come back quoted in.
     const apiKey = Redacted.value(args.apiKey);
     const payload = yield* Effect.tryPromise({
-      try: () =>
+      // The signal Effect hands the promise is aborted when the fiber is
+      // interrupted, so a stopped draft stops the vendor request with it.
+      try: (signal) =>
         args.generate({
+          signal,
           vendor: args.vendor,
           modelId: args.modelId,
           apiKey,

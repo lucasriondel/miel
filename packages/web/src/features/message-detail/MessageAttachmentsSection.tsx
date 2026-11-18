@@ -15,8 +15,8 @@ export const MessageAttachmentsSection = ({ message }: Props) => {
   if (attachments.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gousse-muted">
+    <section className="flex flex-col gap-2">
+      <h2 className="text-xs font-semibold text-gousse-muted">
         Attachments{attachments.length > 1 ? ` · ${attachments.length}` : ""}
       </h2>
       <DetailCard>
@@ -24,7 +24,7 @@ export const MessageAttachmentsSection = ({ message }: Props) => {
           {attachments.map((attachment, index) => (
             <li
               key={attachment.attachmentId}
-              className={index === 0 ? undefined : "border-t border-gousse-line/60"}
+              className={index === 0 ? undefined : "border-t border-gousse-fill"}
             >
               <AttachmentRow
                 accountId={message.accountId}

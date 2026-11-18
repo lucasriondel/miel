@@ -19,8 +19,10 @@
 import { Effect, Layer } from "effect";
 import { runPromiseRethrow } from "../util/effect";
 import {
+  ContactStore,
   LabelStore,
   MessageStore,
+  OutboxStore,
   PromoStore,
   SecretStore,
   SettingsStore,
@@ -32,6 +34,12 @@ import {
 // The mailbox aggregates' fakes (#136) share one dataset, so they live in their
 // own module; `makeTestStores` composes them with these two.
 import { makeFakeMailbox, type FakeMailbox, type MailboxSeed } from "./mailbox";
+import {
+  makeFakeContacts,
+  makeFakeOutbox,
+  type FakeContacts,
+  type FakeOutbox,
+} from "./composeStores";
 
 /** How an unreachable Postgres presents itself to a caller. */
 const OUTAGE = () => new Error("ECONNREFUSED 127.0.0.1:5432");
@@ -69,7 +77,11 @@ export interface TestStores {
    * under test wrote.
    */
   readonly mailbox: FakeMailbox;
-  /** Both tags, ready for `Effect.provide`. */
+  /** Staged uploads and scheduled sends. */
+  readonly outbox: FakeOutbox;
+  /** Who each account has written to. */
+  readonly contacts: FakeContacts;
+  /** Every tag, ready for `Effect.provide`. */
   readonly layer: Layer.Layer<Stores>;
   /** `Effect.provide(eff, layer)` — the effect, with its stores satisfied. */
   readonly provide: <A, E>(eff: Effect.Effect<A, E, Stores>) => Effect.Effect<A, E>;
@@ -135,6 +147,8 @@ export function makeTestStores(seed?: {
   const settings = makeSettingsStore(seed?.settings);
   const secrets = makeSecretStore(seed?.secrets);
   const mailbox = makeFakeMailbox(seed?.mailbox);
+  const outbox = makeFakeOutbox();
+  const contacts = makeFakeContacts();
   const layer = Layer.mergeAll(
     Layer.succeed(SettingsStore, settings),
     Layer.succeed(SecretStore, secrets),
@@ -142,12 +156,16 @@ export function makeTestStores(seed?: {
     Layer.succeed(TriageStore, mailbox.triageStore),
     Layer.succeed(LabelStore, mailbox.labelStore),
     Layer.succeed(PromoStore, mailbox.promoStore),
+    Layer.succeed(OutboxStore, outbox),
+    Layer.succeed(ContactStore, contacts),
   );
   const provide = <A, E>(eff: Effect.Effect<A, E, Stores>) => Effect.provide(eff, layer);
   return {
     settings,
     secrets,
     mailbox,
+    outbox,
+    contacts,
     layer,
     provide,
     run: (eff) => runPromiseRethrow(provide(eff)),

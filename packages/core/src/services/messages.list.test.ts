@@ -87,6 +87,18 @@ describe("listMessagesEffect", () => {
     expect(subjects((await list({ limit: 10, includeRemoved: true })).items)).toEqual(["newest"]);
   });
 
+  // The Done view: Gmail's archive, read from the other side.
+  test("answers only the archived messages when asked for the Done view", async () => {
+    stores.mailbox.messages[0].isArchived = true;
+    Object.assign(stores.mailbox.messages[1], { isArchived: true, isTrashed: true });
+
+    expect(subjects((await list({ limit: 10, archivedOnly: true })).items)).toEqual(["oldest"]);
+    // Trashed mail stays out of Done unless asked for, as it does from the inbox.
+    expect(
+      subjects((await list({ limit: 10, archivedOnly: true, includeTrashed: true })).items),
+    ).toEqual(["middle", "oldest"]);
+  });
+
   test("filters to the messages carrying a label", async () => {
     stores.mailbox.add.label({
       id: "label-invoices",

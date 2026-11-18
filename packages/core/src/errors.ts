@@ -76,9 +76,17 @@ export class GmailParseError extends Data.TaggedError("GmailParseError")<{
   readonly cause: unknown;
 }> {}
 
-/** `users.messages.send` (reply) specifically failed. */
+/**
+ * `users.messages.send` (a reply or a new message) specifically failed.
+ *
+ * `detail` is Gmail's own reason ("Invalid To header"), read off the response
+ * and scrubbed of anything token-shaped at construction (`gmailRefusalDetail`),
+ * so the boundary can pass it on: a send the user watched fail is owed the
+ * reason, and a tagged error's `message` is empty.
+ */
 export class GmailSendError extends Data.TaggedError("GmailSendError")<{
   readonly cause: unknown;
+  readonly detail?: string;
 }> {}
 
 /** `users.labels.create` failed (includes the "label already exists" case). */
@@ -325,3 +333,62 @@ export type ClaudeError =
   // Since #125 the service resolves the task's provider before it picks a
   // transport, so "this task cannot run at all" is one of its failures.
   | ProviderNotRunnableError;
+
+// ── Compose, schedule, snooze ───────────────────────────────────────────────
+
+/**
+ * Why a compose-side request was refused before anything reached Gmail — a
+ * reason code the boundary maps to a status, and a sentence it may show.
+ *
+ * One class rather than nine because every one of them is the same kind of
+ * answer: the request named something that does not exist or cannot be done,
+ * and nothing was sent, scheduled or changed.
+ */
+export type ComposeRefusal =
+  /** The attachments of one message add up to more than Gmail accepts. */
+  | "attachment_too_large"
+  /** An upload id that is not this account's, or no longer exists. */
+  | "upload_not_found"
+  /** A forward kept an attachment id the original does not carry. */
+  | "attachment_not_found"
+  /** A From address that is not one of the account's verified send-as aliases. */
+  | "send_as_not_allowed"
+  /** A new message, or a forward, with nobody on its To line. */
+  | "no_recipients"
+  /** The message a reply, forward, snooze or quote names is not stored. */
+  | "message_not_found"
+  /** The account named is not connected. */
+  | "account_not_found"
+  /** A scheduled send that does not exist. */
+  | "scheduled_not_found"
+  /** A scheduled send that has already gone out (or is going) and cannot be changed. */
+  | "scheduled_not_editable"
+  /** A time that has already passed. */
+  | "time_in_past";
+
+export class ComposeRefusedError extends Data.TaggedError("ComposeRefusedError")<{
+  readonly reason: ComposeRefusal;
+  readonly message: string;
+}> {}
+
+/**
+ * An AI draft the user stopped (Esc, or the window's Stop) before it finished.
+ * The generation was interrupted server-side — the CLI subprocess killed, the
+ * vendor request aborted — so nothing is still spending on it.
+ */
+export class GenerationCancelledError extends Data.TaggedError("GenerationCancelledError")<{
+  readonly requestId: string | null;
+}> {}
+
+/**
+ * The Google OAuth client entered in the app was refused before it was stored:
+ * a field missing or malformed, or a redirect URI that does not end in the
+ * callback path the API serves. `field` names which.
+ */
+export class InvalidGoogleOAuthConfigError extends Data.TaggedError(
+  "InvalidGoogleOAuthConfigError",
+)<{
+  readonly field: "clientId" | "clientSecret" | "redirectUri";
+  readonly reason: "missing" | "invalid" | "wrong_callback_path";
+  readonly message: string;
+}> {}

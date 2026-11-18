@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { formatAddressList, invalidAddresses, parseAddressList } from "./recipients";
+import {
+  addressOf,
+  formatAddressList,
+  invalidAddresses,
+  parseAddressList,
+  recipientInitials,
+  recipientLabel,
+  splitTyped,
+} from "./recipients";
 
 // The compose window's To and Cc are one text field each, the way every mail
 // client writes them, so the list the API is sent is a parse of what was typed
@@ -58,5 +66,31 @@ describe("invalidAddresses", () => {
     expect(invalidAddresses("alice@example.com, bo")).toEqual([]);
     expect(invalidAddresses("alice@example.com, bo,")).toEqual(["bo"]);
     expect(invalidAddresses("alice@example.com, bo, ")).toEqual(["bo"]);
+  });
+});
+
+describe("the chip editor's commit", () => {
+  test("commits nothing until a separator is typed, and keeps the caret's text as is", () => {
+    expect(splitTyped("ali")).toEqual({ committed: [], rest: "ali" });
+    expect(splitTyped("alice@example.com, bo")).toEqual({
+      committed: ["alice@example.com"],
+      rest: "bo",
+    });
+    expect(splitTyped("a@b.c; d@e.f,")).toEqual({ committed: ["a@b.c", "d@e.f"], rest: "" });
+  });
+
+  test("labels a chip by the typed name, then a known name, then the address", () => {
+    expect(recipientLabel("Bob <bob@example.com>", {})).toBe("Bob");
+    expect(recipientLabel("claire@example.com", { "claire@example.com": "Claire Martin" })).toBe(
+      "Claire Martin",
+    );
+    expect(recipientLabel("x@example.com", {})).toBe("x@example.com");
+    expect(addressOf("Bob <bob@example.com>")).toBe("bob@example.com");
+  });
+
+  test("draws two initials", () => {
+    expect(recipientInitials("Claire Martin")).toBe("CM");
+    expect(recipientInitials("claire.martin@example.com")).toBe("CM");
+    expect(recipientInitials("bob@example.com")).toBe("BO");
   });
 });

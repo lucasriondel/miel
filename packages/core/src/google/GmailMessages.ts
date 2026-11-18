@@ -4,23 +4,48 @@
  * `search` → `messages.list(q)`; `get` → `messages.get(format=full)` whose
  * response IS the `payload` tree the existing `GogMessageRaw` schema models, so
  * downstream body/attachment extraction (`util/gmailPayload`) works unchanged;
- * `send` → `messages.send(raw, threadId)` for in-thread replies.
+ * `send` → `messages.send(raw, threadId)` for in-thread replies, or
+ * `messages.send(raw)` with no thread for a new message.
  */
 import { Effect, Layer } from "effect";
 import { google } from "googleapis";
 import { GmailParseError, GmailSendError } from "../errors";
 import { GogMessageRaw } from "../schemas/gmail";
 import { createDebug } from "../util/debug";
-import { toGmailError } from "./gmailErrors";
-import { buildRawMessage } from "./rfc822";
+import { gmailRefusalDetail, toGmailError } from "./gmailErrors";
+import { buildMimeMessage, buildRawMessage, type Rfc822Input } from "./rfc822";
 import {
   GmailMessages,
   GoogleAuth,
   refKey,
   type GmailMessagesImpl,
   type SearchHit,
+  type SendMessageInput,
   type SendResult,
 } from "./contracts";
+
+/** The MIME builder's input for an outgoing message. */
+export const mimeInputOf = (msg: SendMessageInput): Rfc822Input => ({
+  to: msg.to,
+  cc: msg.cc,
+  bcc: msg.bcc,
+  from: msg.from,
+  subject: msg.subject,
+  body: msg.body,
+  html: msg.html,
+  attachments: msg.attachments,
+  inReplyTo: msg.inReplyToHeader,
+  messageId: msg.messageId,
+});
+
+/**
+ * How the message travels. A message with attachments goes through Gmail's
+ * media upload (`message/rfc822`), which takes up to 35 MB; the JSON `raw`
+ * field is for the small ones, and is what every send without a file has
+ * always used.
+ */
+export const usesMediaUpload = (msg: SendMessageInput): boolean =>
+  (msg.attachments?.length ?? 0) > 0;
 
 const debug = createDebug("google:messages");
 
@@ -73,22 +98,28 @@ const impl: GmailMessagesImpl = {
       const key = refKey(ref);
       const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
-      const raw = buildRawMessage({
-        to: msg.to,
-        cc: msg.cc,
-        subject: msg.subject,
-        body: msg.body,
-        inReplyTo: msg.inReplyToHeader,
-      });
+      const input = mimeInputOf(msg);
       const res = yield* Effect.tryPromise({
         try: () =>
-          gmail.users.messages.send({
-            userId: "me",
-            requestBody: { raw, threadId: msg.threadId },
-          }),
-        catch: (cause) => new GmailSendError({ cause }),
+          usesMediaUpload(msg)
+            ? gmail.users.messages.send({
+                userId: "me",
+                requestBody: msg.threadId ? { threadId: msg.threadId } : {},
+                media: { mimeType: "message/rfc822", body: buildMimeMessage(input) },
+              })
+            : gmail.users.messages.send({
+                userId: "me",
+                // No threadId is a new message: Gmail starts a thread for it.
+                requestBody: msg.threadId
+                  ? { raw: buildRawMessage(input), threadId: msg.threadId }
+                  : { raw: buildRawMessage(input) },
+              }),
+        catch: (cause) => new GmailSendError({ cause, detail: gmailRefusalDetail(cause) }),
       });
-      const result: SendResult = { messageId: res.data.id ?? "" };
+      const result: SendResult = {
+        messageId: res.data.id ?? "",
+        threadId: res.data.threadId ?? msg.threadId ?? "",
+      };
       debug("send done", { ref: key, sentMessageId: result.messageId });
       return result;
     }),
@@ -125,7 +156,36 @@ const impl: GmailMessagesImpl = {
       debug.trace("getAttachment done", { ref: key, messageId, attachmentId, size });
       return { data: decoded, size };
     }),
+
+  metadata: (ref, messageId, headerNames) => metadata(ref, messageId, headerNames),
 };
+
+const metadata: GmailMessagesImpl["metadata"] = (ref, messageId, headerNames) =>
+  Effect.gen(function* () {
+    const key = refKey(ref);
+    const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
+    const gmail = google.gmail({ version: "v1", auth });
+    const res = yield* Effect.tryPromise({
+      try: () =>
+        gmail.users.messages.get({
+          userId: "me",
+          id: messageId,
+          format: "metadata",
+          metadataHeaders: [...headerNames],
+        }),
+      catch: (err) => toGmailError("messages.get(metadata)", key, err),
+    });
+    const headers: Record<string, string> = {};
+    for (const h of res.data.payload?.headers ?? []) {
+      if (h.name && typeof h.value === "string") headers[h.name.toLowerCase()] = h.value;
+    }
+    return {
+      id: res.data.id ?? messageId,
+      threadId: res.data.threadId ?? "",
+      internalDate: new Date(Number(res.data.internalDate ?? Date.now())),
+      headers,
+    };
+  });
 
 function decodeBase64UrlToBytes(input: string): Uint8Array {
   const padded = input.replace(/-/g, "+").replace(/_/g, "/");

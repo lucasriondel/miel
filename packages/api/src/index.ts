@@ -1,5 +1,6 @@
 import {
   createDebug,
+  createDueWorkLoop,
   createScheduler,
   getEnv,
   markStaleRunsFailed,
@@ -65,6 +66,14 @@ const scheduler = createScheduler();
 // timings without owning this boot module.
 registerScheduler(scheduler);
 scheduler.start();
+
+// Work that falls due at a time rather than on the sync schedule: scheduled
+// sends, snoozes waking, and the sweep of unspent uploads. Always on — a snooze
+// wakes and a scheduled mail goes whether or not automatic sync is enabled — and
+// stateless, so anything that fell due while the API was down runs on its first
+// tick.
+const dueWork = createDueWorkLoop();
+dueWork.start();
 
 const server = Bun.serve<SyncSocketData>({
   port: listenPort,

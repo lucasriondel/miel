@@ -24,7 +24,7 @@ const initialsFor = (name: string | null, email: string): string => {
 export const SenderAvatar = ({ name, email }: Props) => (
   <span
     aria-hidden
-    className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-full bg-gousse-line/50 text-xs font-bold tracking-wide text-gousse-muted"
+    className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gousse-primary/10 text-[13px] font-semibold text-gousse-primary"
   >
     {initialsFor(name, email)}
   </span>

@@ -12,10 +12,10 @@ interface Props<T extends string | number> {
 }
 
 /**
- * A pill segmented control matching the app's floating-island language: a
- * `bg-line/35` track holding options; the active one lifts onto a panel chip.
- * Used for the theme picker and the automatic-sync interval where a small,
- * fixed set of choices reads better than a dropdown.
+ * The segmented control the redesign uses for every small fixed choice (theme,
+ * remote images, run interval): a fill-coloured track with an 8px corner, the
+ * chosen option lifted onto a white chip with the small shadow. Same shape as
+ * the inbox's Week / Month / Year switch.
  */
 export function Segmented<T extends string | number>({
   options,
@@ -28,7 +28,7 @@ export function Segmented<T extends string | number>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="inline-flex gap-1 rounded-full bg-gousse-line/35 p-1"
+      className="inline-flex gap-0.5 rounded-lg bg-gousse-fill p-0.5"
     >
       {options.map((opt) => {
         const on = opt.value === value;
@@ -45,10 +45,10 @@ export function Segmented<T extends string | number>({
             aria-checked={on}
             disabled={disabled}
             onClick={() => onChange(opt.value)}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] active:scale-[0.96] disabled:opacity-60 ${
+            className={`h-[26px] rounded-md px-3 text-xs transition-[background-color,color,box-shadow] disabled:opacity-60 ${
               on
-                ? "bg-gousse-panel text-gousse-ink shadow-gousse-sm"
-                : "text-gousse-muted hover:text-gousse-ink"
+                ? "bg-gousse-panel font-semibold text-gousse-ink shadow-gousse-sm"
+                : "font-medium text-gousse-muted hover:text-gousse-ink"
             }`}
           >
             {opt.label}

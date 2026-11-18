@@ -129,3 +129,30 @@ export function parseInternalDate(v: string | number | undefined): Date {
   if (Number.isFinite(ms)) return new Date(ms);
   return new Date();
 }
+
+/**
+ * An address-list header as people: each entry's address and display name.
+ * Commas inside a quoted display name ("Martin, Claire" <c@x>) do not split.
+ */
+export function parseNamedAddressList(
+  value: string | undefined,
+): { email: string; name: string | null }[] {
+  if (!value) return [];
+  const entries: string[] = [];
+  let current = "";
+  let quoted = false;
+  let angled = false;
+  for (const ch of value) {
+    if (ch === '"') quoted = !quoted;
+    else if (ch === "<" && !quoted) angled = true;
+    else if (ch === ">" && !quoted) angled = false;
+    if (ch === "," && !quoted && !angled) {
+      entries.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  entries.push(current);
+  return entries.map((entry) => parseFromHeader(entry)).filter((p) => p.email.includes("@"));
+}

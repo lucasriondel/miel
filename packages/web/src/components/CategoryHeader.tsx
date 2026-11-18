@@ -1,5 +1,4 @@
-import type { CSSProperties } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { ListedMessage } from "../api/types";
 import { CategorySelectButton } from "../features/select/CategorySelectButton";
 import { CategorySenderRun } from "./CategorySenderRun";
@@ -46,17 +45,18 @@ export const CategoryHeader = ({
   const meta = getSystemLabelMeta(category);
   const Icon = meta?.Icon;
   const name = meta?.label ?? category;
+  // The colours come from the group around this header (`categoryStyle`):
   // `CATEGORY_PERSONAL` has no hue of its own — it is the absence of a category
-  // as much as one — so it falls back to the muted token and reads as the
-  // quietest band, which is right for the group most messages land in.
-  const style = meta?.hue ? ({ "--hue": meta.hue } as CSSProperties) : undefined;
-
+  // as much as one — so it reads as the quietest band, an ink tint with a
+  // muted glyph, which is right for the group most messages land in.
   return (
+    // `px-4` matches a message row's own, so this header's actions and the row
+    // actions below it end on the same right edge. Collapsed, the band is 4px
+    // taller: it then carries the run of senders as its summary line.
     <div
-      style={style}
-      // `pr-4` matches a message row's own `px-4`, so this header's actions and
-      // the row actions below it end on the same right edge.
-      className="category-group-header group/category flex items-center gap-2 py-2 pl-3 pr-4 sm:gap-2.5"
+      className={`category-group-header group/category flex items-center gap-2 px-4 ${
+        collapsed ? "h-9" : "h-8"
+      }`}
     >
       <button
         type="button"
@@ -68,26 +68,26 @@ export const CategoryHeader = ({
         // what pressing it does.
         aria-label={collapsed ? `Expand ${name}` : `Collapse ${name}`}
         title={collapsed ? `Expand ${name}` : `Collapse ${name}`}
-        // No padding of its own: the header row owns the height (T1's 8px), so
-        // the toggle fills it rather than adding to it.
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        // No padding of its own: the header row owns the height, so the toggle
+        // fills it rather than adding to it.
+        className="flex h-full min-w-0 flex-1 items-center gap-2 text-left"
       >
-        <ChevronDown
-          aria-hidden
-          className={`category-group-ink h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
-            collapsed ? "-rotate-90" : ""
-          }`}
-        />
-        {Icon ? <Icon className="category-group-glyph h-4 w-4 shrink-0" aria-hidden /> : null}
-        <span className="category-group-ink shrink-0 text-[11px] font-bold uppercase tracking-[0.07em]">
-          {name}
-        </span>
-        <span className="category-group-ink category-group-count inline-flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-bold leading-none tabular-nums">
+        {Icon ? <Icon className="category-group-glyph h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
+        <span className="category-group-ink shrink-0 text-xs font-semibold">{name}</span>
+        <span className="category-group-count shrink-0 text-xs font-medium tabular-nums">
           {messages.length}
         </span>
         {/* Only while collapsed: an open group is already showing these senders
             in its rows, so repeating them above would be noise. */}
-        {collapsed ? <CategorySenderRun senders={senders} /> : null}
+        {collapsed ? <CategorySenderRun senders={senders} /> : <span className="flex-1" />}
+        <ChevronRight
+          aria-hidden
+          className={`h-3.5 w-3.5 shrink-0 text-gousse-muted transition-[transform,opacity] duration-200 ${
+            collapsed
+              ? ""
+              : "rotate-90 pointer-fine:opacity-0 pointer-fine:group-hover/category:opacity-100"
+          }`}
+        />
       </button>
       {/* Reachable at every width and on every device — the rule #144 set, kept
           whole. These were once `hidden` below `sm` and `opacity-0` above it

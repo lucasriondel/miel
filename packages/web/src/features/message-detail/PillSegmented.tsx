@@ -36,7 +36,7 @@ export function PillSegmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={cn("inline-flex items-center gap-1 rounded-full bg-gousse-line/30 p-1", className)}
+      className={cn("inline-flex h-7 items-center rounded-lg bg-gousse-fill p-0.5", className)}
     >
       {options.map((opt) => {
         const on = opt.value === value;
@@ -52,9 +52,9 @@ export function PillSegmented<T extends string>({
             aria-checked={on}
             disabled={disabled}
             onClick={() => onChange(opt.value)}
-            className={`rounded-full px-3.5 py-1.5 text-xs transition-[background-color,color,transform] active:scale-[0.96] disabled:opacity-60 ${
+            className={`h-6 rounded-md px-2.5 text-xs transition-colors duration-150 disabled:opacity-60 ${
               on
-                ? "bg-gousse-accent/15 font-bold text-gousse-ink"
+                ? "bg-gousse-panel font-semibold text-gousse-ink shadow-gousse-sm"
                 : "font-medium text-gousse-muted hover:text-gousse-ink"
             }`}
           >

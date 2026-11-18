@@ -19,7 +19,12 @@
 import { REPLY_BODY_TRUNCATION } from "../claudeUsage";
 import { getEnv } from "../env";
 import type { PromoExtractInputT } from "../schemas/promo";
-import type { ReplyGenInputT } from "../schemas/reply";
+import type {
+  NewMailGenInputT,
+  PreviousDraftT,
+  ReplyGenInputT,
+  ReplyTaskInputT,
+} from "../schemas/reply";
 import type { TriageInputT } from "../schemas/triage";
 
 /** Everything both triage variants say, in order, minus the closing messages. */
@@ -124,7 +129,48 @@ export function buildPromoExtractPrompt(input: PromoExtractInputT): string {
   ].join("\n");
 }
 
-export function buildReplyPrompt(input: ReplyGenInputT): string {
+/**
+ * The `reply` task's one prompt, for an answer or for a new mail. The branch is
+ * on what the input carries: only an answer has a received body to inline.
+ */
+export function buildReplyPrompt(input: ReplyTaskInputT): string {
+  return "body" in input ? buildAnswerPrompt(input) : buildNewMailPrompt(input);
+}
+
+/**
+ * The refinement paragraph: the draft the compose window holds, which the
+ * instruction is applied to. Empty when there is nothing to refine, so a first
+ * draft's prompt is what it always was.
+ */
+function previousDraftLines(draft: PreviousDraftT | undefined): string[] {
+  if (!draft) return [];
+  return [
+    "",
+    "Current draft (revise this draft according to the instruction; keep what the instruction does not ask to change):",
+    `Subject: ${draft.subject ?? ""}`,
+    draft.body,
+  ];
+}
+
+function buildNewMailPrompt(input: NewMailGenInputT): string {
+  return [
+    "You draft a new email — it answers no earlier message. Return strict JSON matching the schema: { subject, body }.",
+    "",
+    `Sending from: ${input.sender}`,
+    `To: ${JSON.stringify(input.to)}`,
+    `Subject so far: ${input.subject ?? ""}`,
+    "",
+    "User instruction for the email:",
+    input.userInstruction,
+    ...previousDraftLines(input.previousDraft),
+    "",
+    "Guidelines:",
+    "- Subject: keep the subject so far when there is one; otherwise write a short, specific subject.",
+    "- Body: plain text, no signature block (the user adds their own), no greeting placeholders like [Name]. Be concise and match the user's instruction.",
+  ].join("\n");
+}
+
+function buildAnswerPrompt(input: ReplyGenInputT): string {
   return [
     "You draft a reply email. Return strict JSON matching the schema: { subject, body }.",
     "",
@@ -137,6 +183,7 @@ export function buildReplyPrompt(input: ReplyGenInputT): string {
     "",
     "User instruction for the reply:",
     input.userInstruction,
+    ...previousDraftLines(input.previousDraft),
     "",
     "Guidelines:",
     "- Subject: keep the original subject prefixed with 'Re: ' unless one is already present.",

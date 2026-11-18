@@ -23,7 +23,7 @@ const { hostedJsonSchema } = await import("./hosted");
 import { BODY_BEARING_TASKS } from "../claudeUsage";
 import { MODEL_TASKS, type ModelTask } from "../providerModels";
 import type { PromoExtractInputT } from "../schemas/promo";
-import type { ReplyGenInputT } from "../schemas/reply";
+import type { NewMailGenInputT, ReplyGenInputT } from "../schemas/reply";
 import type { TriageInputT } from "../schemas/triage";
 
 const TRIAGE: TriageInputT = {
@@ -148,9 +148,63 @@ describe("the task table", () => {
     );
   });
 
+  // Drafting a new mail is the reply task with no message behind it, so it is
+  // held to the same rules as the reply row — one prompt for both transports,
+  // no local API — and it inlines no received body, which is why the published
+  // body-bearing list does not move for it.
+  test("a new mail drafted on the reply task inlines no body and names no local API", () => {
+    const NEW_MAIL: NewMailGenInputT = {
+      sender: "user@example.com",
+      to: ["claire@example.com"],
+      subject: null,
+      userInstruction: "Push dinner to 9, I'll book.",
+    };
+    const spec = claudeTaskSpec("reply");
+    const cli = spec.cliPrompt(NEW_MAIL);
+
+    expect(cli).toBe(spec.hostedPrompt(NEW_MAIL));
+    expect(cli).toContain("Push dinner to 9, I'll book.");
+    expect(cli).toContain("claire@example.com");
+    expect(cli).not.toContain("Original body");
+    expect(cli).not.toContain("curl");
+    expect(cli).not.toContain("localhost");
+    expect(cli).not.toContain(process.env.API_SECRET);
+  });
+
   test("each task asks the hosted transport for its own output in its own words", () => {
     const instructions = MODEL_TASKS.map((t) => claudeTaskSpec(t).hostedInstruction);
 
     expect(new Set(instructions).size).toBe(MODEL_TASKS.length);
+  });
+});
+
+// A refinement ("Shorter", "Warmer") carries the compose window's draft. That
+// draft is the user's own text, so a new mail refined still inlines no received
+// body and still names no local API — the published list does not move.
+describe("refining a draft on the reply task", () => {
+  const DRAFT = { subject: "Dinner", body: "A long paragraph about pushing dinner to nine." };
+
+  test("the draft is in the prompt, for an answer and for a new mail, on both transports", () => {
+    const spec = claudeTaskSpec("reply");
+    const answer = spec.cliPrompt({ ...REPLY, previousDraft: DRAFT });
+    const fresh = spec.cliPrompt({
+      sender: "user@example.com",
+      to: [],
+      subject: null,
+      userInstruction: "Shorter",
+      previousDraft: DRAFT,
+    });
+    for (const prompt of [answer, fresh]) {
+      expect(prompt).toContain("Current draft");
+      expect(prompt).toContain(DRAFT.body);
+      expect(prompt).not.toContain("curl");
+      expect(prompt).not.toContain(process.env.API_SECRET);
+    }
+    expect(fresh).not.toContain("Original body");
+    expect(spec.hostedPrompt({ ...REPLY, previousDraft: DRAFT })).toBe(answer);
+  });
+
+  test("with no draft, the prompt says nothing about one", () => {
+    expect(claudeTaskSpec("reply").cliPrompt(REPLY)).not.toContain("Current draft");
   });
 });

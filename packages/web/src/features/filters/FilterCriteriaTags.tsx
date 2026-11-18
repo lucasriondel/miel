@@ -31,7 +31,7 @@ export const FilterCriteriaTags = ({ criteria }: Props) => {
       {rows.map((r) => (
         <span
           key={`${r.label}:${r.value}`}
-          className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-gousse-line/25 px-3 py-1 text-xs shadow-[inset_0_0_0_1px_rgb(var(--gousse-line)/0.8)]"
+          className="inline-flex min-w-0 items-center gap-1.5 rounded-md bg-gousse-fill px-2 py-0.5 text-xs"
         >
           <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-gousse-muted">
             {r.label}

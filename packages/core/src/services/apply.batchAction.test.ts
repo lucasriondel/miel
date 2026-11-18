@@ -39,6 +39,20 @@ describe("gmailLabelDeltasForBatchAction", () => {
     });
   });
 
+  test("unarchive adds INBOX back — archive read backwards", () => {
+    expect(gmailLabelDeltasForBatchAction({ action: "unarchive" })).toEqual({
+      add: ["INBOX"],
+      remove: [],
+    });
+  });
+
+  test("untrash lifts TRASH and adds INBOX — trash read backwards", () => {
+    expect(gmailLabelDeltasForBatchAction({ action: "untrash" })).toEqual({
+      add: ["INBOX"],
+      remove: ["TRASH"],
+    });
+  });
+
   test("label adds the label it names and removes nothing", () => {
     expect(gmailLabelDeltasForBatchAction({ action: "label", gmailLabelId: "Label_7" })).toEqual({
       add: ["Label_7"],

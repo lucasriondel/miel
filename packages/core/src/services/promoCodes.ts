@@ -40,7 +40,9 @@ import {
   type NewPromoCode,
   type PromoFields,
   type PromoCodeWithAccount,
+  type PromoMailSummary,
   type StoredPromoCode,
+  type SuggestedPromoCode,
 } from "../stores/contracts";
 import { runWithStores } from "../stores/postgres";
 import { createDebug } from "../util/debug";
@@ -269,6 +271,15 @@ export interface PromoSuggestion {
   terms: string | null;
   expiresAt: string | null;
   merchant: string | null;
+  /**
+   * The mail it was read out of — subject, sender and date, what a "To review"
+   * card shows beside the code. Metadata of a mail still in the inbox, never a
+   * body and never a copy: the copy is the save's.
+   */
+  subject: string | null;
+  fromName: string | null;
+  fromEmail: string;
+  internalDate: string;
 }
 
 export interface ListPromoSuggestionsArgs {
@@ -283,7 +294,7 @@ export interface ListPromoSuggestionsArgs {
   now?: Date;
 }
 
-const suggestion = (row: StoredPromoCode): PromoSuggestion => ({
+const suggestion = (row: StoredPromoCode, mail: PromoMailSummary): PromoSuggestion => ({
   id: row.id,
   accountId: row.accountId,
   gmailMessageId: row.gmailMessageId,
@@ -292,6 +303,10 @@ const suggestion = (row: StoredPromoCode): PromoSuggestion => ({
   terms: row.terms,
   expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
   merchant: row.merchant,
+  subject: mail.subject,
+  fromName: mail.fromName,
+  fromEmail: mail.fromEmail,
+  internalDate: mail.internalDate.toISOString(),
 });
 
 /**
@@ -358,7 +373,7 @@ export const listPromoSuggestionsEffect = (
       }),
     );
 
-    return rows.filter((row) => stillValid(row, now)).map(suggestion);
+    return rows.filter((row) => stillValid(row, now)).map((row) => suggestion(row, row.mail));
   });
 
 // Promise facade for the API/CLI boundary.
@@ -382,11 +397,12 @@ export async function listPromoSuggestions(
  * till should have to remember it in order to see their codes. So the page is
  * global and the account is information on the row.
  *
- * What is deliberately absent is the copy of the mail. The save denormalised
+ * What is deliberately absent is the mail's *bodies*. The save denormalised
  * subject, sender, date and both bodies onto the row so a saved promo outlives
- * the Gmail original it trashed; a *list* that carried them would send every
- * saved mail's HTML to draw a table of five short fields. Reading the original
- * is one promo at a time and gets its own read when it lands.
+ * the Gmail original it trashed; a *list* that carried the bodies would send
+ * every saved mail's HTML to draw a table of short fields. The subject, sender
+ * and date are short and are what the list shows beside a code, so they are
+ * here; reading the original is one promo at a time, behind its own read.
  */
 export interface PromoListing {
   id: string;
@@ -399,6 +415,18 @@ export interface PromoListing {
   terms: string | null;
   expiresAt: string | null;
   merchant: string | null;
+  /** When the user saved it ("Saved Oct 27"); null on a suggestion. */
+  savedAt: string | null;
+  /**
+   * The mail's subject, sender and date — a few short fields, never a body. A
+   * saved row answers them from the copy its save took; a suggestion from its
+   * mail, which is still in the inbox. Null only on a saved row written before
+   * the copy existed.
+   */
+  subject: string | null;
+  fromName: string | null;
+  fromEmail: string | null;
+  internalDate: string | null;
 }
 
 /** The page's two sections, each already in the order it is read in. */
@@ -416,7 +444,15 @@ export interface ListSavedPromosArgs {
   now?: Date;
 }
 
-const savedPromo = (row: PromoCodeWithAccount): PromoListing => ({
+const listing = (
+  row: PromoCodeWithAccount,
+  mail: {
+    subject: string | null;
+    fromName: string | null;
+    fromEmail: string | null;
+    internalDate: Date | null;
+  },
+): PromoListing => ({
   id: row.id,
   accountId: row.accountId,
   accountEmail: row.accountEmail,
@@ -426,7 +462,18 @@ const savedPromo = (row: PromoCodeWithAccount): PromoListing => ({
   terms: row.terms,
   expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
   merchant: row.merchant,
+  savedAt: row.savedAt ? row.savedAt.toISOString() : null,
+  subject: mail.subject,
+  fromName: mail.fromName,
+  fromEmail: mail.fromEmail,
+  internalDate: mail.internalDate ? mail.internalDate.toISOString() : null,
 });
+
+/** A saved row reads its mail off the copy its save took. */
+const savedPromo = (row: PromoCodeWithAccount): PromoListing => listing(row, row);
+
+/** A suggestion reads its mail off the inbox row it is still attached to. */
+const suggestedPromo = (row: SuggestedPromoCode): PromoListing => listing(row, row.mail);
 
 /**
  * Soonest deadline first, with the open-ended offers after every dated one —
@@ -511,7 +558,7 @@ export const listSuggestedPromosEffect = (
     const now = args.now ?? new Date();
     const rows = yield* PromoStore.use((svc) => svc.unsaved({}));
 
-    return distinctByCode(rows.filter((row) => stillValid(row, now))).map(savedPromo);
+    return distinctByCode(rows.filter((row) => stillValid(row, now))).map(suggestedPromo);
   });
 
 // Promise facade for the API/CLI boundary.
@@ -972,7 +1019,7 @@ export const extractPromosForMessageEffect = (
       extracted: stored.length,
     });
 
-    return { promos: stored.map(suggestion), found: stored.length > 0 };
+    return { promos: stored.map((row) => suggestion(row, message)), found: stored.length > 0 };
   });
 
 // Promise facade for the API boundary. `ClaudeLive` is provided here rather

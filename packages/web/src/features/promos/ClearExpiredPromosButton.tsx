@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { AppButton } from "../../components/AppButton";
 import { useClearExpiredPromos } from "../../api/mutations";
 
 interface Props {
@@ -28,10 +28,14 @@ export const ClearExpiredPromosButton = ({ count }: Props) => {
 
   if (!confirming) {
     return (
-      <Button variant="ghost" onClick={() => setConfirming(true)}>
-        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-xs font-medium text-gousse-muted transition-colors hover:bg-gousse-fill hover:text-gousse-ink"
+      >
         Clear expired
-      </Button>
+        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+      </button>
     );
   }
 
@@ -52,17 +56,23 @@ export const ClearExpiredPromosButton = ({ count }: Props) => {
       <span className="text-xs text-gousse-muted">
         Delete {count} expired {count === 1 ? "code" : "codes"}?
       </span>
-      <Button
-        variant="danger"
+      <AppButton
+        tone="danger"
+        size="sm"
         onClick={() => clear.mutate(undefined, { onSettled: () => setConfirming(false) })}
         disabled={clear.isPending}
       >
-        {clear.isPending ? <Spinner /> : null}
+        {clear.isPending ? <Spinner size={14} /> : null}
         Delete
-      </Button>
-      <Button variant="ghost" onClick={() => setConfirming(false)} disabled={clear.isPending}>
+      </AppButton>
+      <AppButton
+        tone="ghost"
+        size="sm"
+        onClick={() => setConfirming(false)}
+        disabled={clear.isPending}
+      >
         Cancel
-      </Button>
+      </AppButton>
     </div>
   );
 };

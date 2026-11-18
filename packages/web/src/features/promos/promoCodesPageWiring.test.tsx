@@ -1,6 +1,7 @@
 // The Promo Codes page (#162), rendered as a user meets it: the page is mounted
 // for real, the one request that leaves is its own, and what is asserted is the
-// order the rows are read in.
+// order the rows are read in — then what the reader beside the list shows and
+// does once a promo is opened (`miel.figcraft`, Promo codes › List + reader).
 //
 // `fetch` is the seam rather than the api client, so the endpoint the page asks
 // for is part of what is asserted. Any request the suite has not seeded is
@@ -40,6 +41,11 @@ const promo = (over: Partial<PromoListing> = {}): PromoListing => ({
   terms: "orders over £50, excl. sale",
   expiresAt: "2026-12-24T23:59:59.999Z",
   merchant: "Zara",
+  savedAt: "2026-09-01T10:00:00.000Z",
+  subject: "Weekend sale",
+  fromName: "Zara",
+  fromEmail: "news@zara.example",
+  internalDate: "2026-09-01T09:00:00.000Z",
   ...over,
 });
 
@@ -192,6 +198,10 @@ afterEach(() => {
   });
 });
 
+/** A detection nobody has acted on: the same row shape, with no save yet. */
+const suggestion = (over: Partial<PromoListing> = {}): PromoListing =>
+  promo({ id: "sug-1", savedAt: null, ...over });
+
 const mountPage = (page: SavedPromosPage, detections: PromoListing[] = []) => {
   answer = page;
   suggested = detections;
@@ -218,19 +228,24 @@ const sectionNamed = async (name: string) => {
 };
 const active = () => screen.queryByRole("region", { name: "Active promo codes" });
 const expired = () => screen.queryByRole("region", { name: "Expired promo codes" });
-const suggestedSection = () => screen.queryByRole("region", { name: "Suggested promo codes" });
+const toReview = () => screen.queryByRole("region", { name: "Promo codes to review" });
+const reader = () => screen.queryByRole("complementary", { name: "Promo reader" });
 
-/** What each row of a section says, in the order the rows are read. */
-const rowsOf = (section: HTMLElement) =>
-  within(section)
-    .getAllByRole("row")
-    // The header row is the one made of column headers.
-    .filter((row) => within(row).queryAllByRole("columnheader").length === 0)
-    .map((row) =>
-      within(row)
-        .getAllByRole("cell")
-        .map((cell) => cell.textContent?.trim() ?? ""),
-    );
+/** Each card or row of a section, in the order it is read. */
+const itemsOf = (section: HTMLElement) =>
+  Array.from(section.querySelectorAll<HTMLElement>("li, article"));
+/** What each card or row says, in reading order. */
+const textsOf = (section: HTMLElement) => itemsOf(section).map((item) => item.textContent ?? "");
+/** The names the cards and rows are announced by — "Zara 20% off". */
+const namesOf = (section: HTMLElement) =>
+  itemsOf(section).map((item) => item.getAttribute("aria-label") ?? "");
+
+/** Opens the `index`th card or row of a section in the reader. */
+const openItem = async (section: HTMLElement, index = 0) => {
+  fireEvent.click(within(section).getAllByRole("button", { name: /^open /i })[index]!);
+  await waitFor(() => expect(reader()).not.toBeNull());
+  return reader()!;
+};
 
 /** The paths the page read, whichever order the two queries resolved in. */
 const paths = () => urls.map((u) => new URL(u).pathname);
@@ -249,7 +264,7 @@ describe("what the page asks for", () => {
   // shows six cards, and the detections past that cap are reachable here. Its
   // read names no account and no period either.
   test("and every account's suggestions, with no account and no period", async () => {
-    mountPage({ active: [], expired: [] }, [promo({ id: "sug-1" })]);
+    mountPage({ active: [], expired: [] }, [suggestion()]);
 
     await waitFor(() => expect(urls).toHaveLength(2));
     const url = new URL(urls.find((u) => u.includes("/promo-codes/suggested"))!);
@@ -257,27 +272,48 @@ describe("what the page asks for", () => {
     expect(url.search).toBe("");
   });
 
-  test("says so plainly when there is nothing saved and nothing suggested", async () => {
+  test("says so plainly when there is nothing saved and nothing to review", async () => {
     mountPage({ active: [], expired: [] });
 
     await waitFor(() => expect(urls).toHaveLength(2));
-    expect(await screen.findByText(/no saved promo codes/i)).not.toBeNull();
+    expect(await screen.findByText(/no promo codes yet/i)).not.toBeNull();
     expect(active()).toBeNull();
     expect(expired()).toBeNull();
-    expect(screen.queryByRole("region", { name: "Suggested promo codes" })).toBeNull();
+    expect(toReview()).toBeNull();
+    // The way back is always there; Sync needs a mailbox the layout names, and a
+    // page mounted alone has none.
+    expect(screen.getByRole("link", { name: /back to inbox/i })).not.toBeNull();
+  });
+
+  // Suggestions and nothing kept is a page with something to do, not an empty
+  // one: the saved half says what saving would do.
+  test("says nothing is saved yet when there are only suggestions", async () => {
+    mountPage({ active: [], expired: [] }, [suggestion()]);
+
+    const saved = await sectionNamed("Saved promo codes");
+    expect(within(saved).getByText(/nothing saved yet/i)).not.toBeNull();
+    expect(screen.queryByText(/no promo codes yet/i)).toBeNull();
   });
 });
 
-describe("the suggested section", () => {
-  test("shows a detection's fields and the mailbox it arrived in", async () => {
-    mountPage({ active: [], expired: [] }, [promo({ id: "sug-1" })]);
+describe("the to-review section", () => {
+  test("shows a detection's offer, code, deadline and terms on its card", async () => {
+    mountPage({ active: [], expired: [] }, [suggestion()]);
 
-    const row = rowsOf(await sectionNamed("Suggested promo codes"))[0]!;
-    expect(row).toContain("Zara");
-    expect(row).toContain("20% off");
-    expect(row).toContain("WEEKEND20");
-    expect(row).toContain("orders over £50, excl. sale");
-    expect(row).toContain("me@example.com");
+    const card = textsOf(await sectionNamed("Promo codes to review"))[0]!;
+    expect(card).toContain("Zara");
+    expect(card).toContain("20% off");
+    expect(card).toContain("WEEKEND20");
+    expect(card).toContain("orders over £50, excl. sale");
+    // The mail it was found in, by subject.
+    expect(card).toContain("Weekend sale");
+  });
+
+  test("names the mailbox in the reader", async () => {
+    mountPage({ active: [], expired: [] }, [suggestion()]);
+
+    const opened = await openItem(await sectionNamed("Promo codes to review"));
+    expect(within(opened).getByText(/not saved yet · me@example\.com/i)).not.toBeNull();
   });
 
   // Nothing at all rather than an empty heading: a user with no pending
@@ -286,69 +322,112 @@ describe("the suggested section", () => {
     mountPage({ active: [promo()], expired: [] });
 
     await sectionNamed("Active promo codes");
-    expect(suggestedSection()).toBeNull();
+    expect(toReview()).toBeNull();
   });
 
   // The detections the inbox's six cards left out are the reason this exists,
   // so there is no cap here: a heavy newsletter week is fully readable.
   test("lists more detections than the inbox section would show", async () => {
     const many = Array.from({ length: 9 }, (_, i) =>
-      promo({ id: `sug-${i}`, gmailMessageId: `mail-${i}`, code: `CODE${i}` }),
+      suggestion({ id: `sug-${i}`, gmailMessageId: `mail-${i}`, code: `CODE${i}` }),
     );
     mountPage({ active: [], expired: [] }, many);
 
-    expect(rowsOf(await sectionNamed("Suggested promo codes"))).toHaveLength(9);
+    expect(itemsOf(await sectionNamed("Promo codes to review"))).toHaveLength(9);
   });
 
-  // The same one gesture the card above the inbox offers: the promo is saved
-  // with its copy of the mail, and the mail is trashed.
-  test("saving one sends the save and moves the row down to the saved ones", async () => {
-    mountPage({ active: [], expired: [] }, [promo({ id: "sug-1" })]);
+  // Removing a detection would be a dismissal, which this feature does not
+  // have; the guesses become corrigible once the promo is kept.
+  test("offers no dismissal and no editor", async () => {
+    mountPage({ active: [], expired: [] }, [suggestion()]);
 
-    const section = await sectionNamed("Suggested promo codes");
-    fireEvent.click(within(section).getByRole("button", { name: /save/i }));
+    const section = await sectionNamed("Promo codes to review");
+    expect(within(section).queryByRole("button", { name: /delete|dismiss/i })).toBeNull();
+    const opened = await openItem(section);
+    expect(within(opened).queryByRole("button", { name: /edit promo code/i })).toBeNull();
+    expect(within(opened).queryByRole("button", { name: /delete promo code/i })).toBeNull();
+  });
+
+  // The same one gesture the chip on the inbox row offers: the promo is saved
+  // with its copy of the mail, and the mail is trashed.
+  test("saving one sends the save and moves it down to the saved ones", async () => {
+    mountPage({ active: [], expired: [] }, [suggestion()]);
+
+    const section = await sectionNamed("Promo codes to review");
+    fireEvent.click(within(section).getByRole("button", { name: /^save$/i }));
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toMatchObject({ method: "POST", path: "/api/promo-codes/sug-1/save" });
-    // The row leaves on the click, and the saved sections are re-read — which
+    // The card leaves on the click, and the saved sections are re-read — which
     // section it lands in is the server's rule, not this page's.
-    await waitFor(() => expect(suggestedSection()).toBeNull());
+    await waitFor(() => expect(toReview()).toBeNull());
     await sectionNamed("Active promo codes");
   });
 
-  test("puts the row back when the save is refused", async () => {
-    mountPage({ active: [], expired: [] }, [promo({ id: "sug-1" })]);
-    const section = await sectionNamed("Suggested promo codes");
+  // "Save" on its face, the trash in its tooltip: a save that silently deleted
+  // a message would be a surprise no undo makes up for.
+  test("says the save also trashes the mail", async () => {
+    mountPage({ active: [], expired: [] }, [suggestion()]);
+
+    const section = await sectionNamed("Promo codes to review");
+    const save = within(section).getByRole("button", { name: /^save$/i });
+    expect(save.getAttribute("title")).toMatch(/trash/i);
+  });
+
+  test("puts the card back when the save is refused", async () => {
+    mountPage({ active: [], expired: [] }, [suggestion()]);
+    const section = await sectionNamed("Promo codes to review");
     refuseWrites = true;
 
-    fireEvent.click(within(section).getByRole("button", { name: /save/i }));
+    fireEvent.click(within(section).getByRole("button", { name: /^save$/i }));
 
     await waitFor(() => expect(sent).toHaveLength(1));
-    // Refused means nothing happened, and the row saying so is the only way the
+    // Refused means nothing happened, and the card saying so is the only way the
     // user learns it: a card that stayed gone would read as a save that landed.
-    await waitFor(() => expect(suggestedSection()).not.toBeNull());
-    expect(rowsOf(suggestedSection()!)).toHaveLength(1);
+    await waitFor(() => expect(toReview()).not.toBeNull());
+    expect(itemsOf(toReview()!)).toHaveLength(1);
+  });
+
+  // Nothing of the mail is kept until the save, so the reader reads nothing:
+  // it says where the mail still is instead.
+  test("reads no copy of the mail before it is saved", async () => {
+    mountPage({ active: [], expired: [] }, [suggestion()]);
+
+    const opened = await openItem(await sectionNamed("Promo codes to review"));
+    expect(
+      within(opened)
+        .getByRole("link", { name: /open the email/i })
+        .getAttribute("href"),
+    ).toBe("/account/acc-1/messages/mail-1");
+    expect(urls).toHaveLength(2);
   });
 });
 
 describe("the active section", () => {
-  test("shows the promo's fields and the account it arrived in", async () => {
+  test("shows the promo's offer, terms and code", async () => {
     mountPage({ active: [promo()], expired: [] });
 
-    const row = rowsOf(await sectionNamed("Active promo codes"))[0]!;
+    const row = textsOf(await sectionNamed("Active promo codes"))[0]!;
     expect(row).toContain("Zara");
     expect(row).toContain("20% off");
     expect(row).toContain("WEEKEND20");
     expect(row).toContain("orders over £50, excl. sale");
-    expect(row).toContain("me@example.com");
-    // The stored instant is the end of Christmas Eve, UTC; the cell says that
-    // day and not the next one. (The month's spelling is the runtime locale's.)
-    expect(row.some((cell) => /\b24\b/.test(cell) && cell.includes("2026"))).toBe(true);
   });
 
-  // The account is a column, not a gate: nobody standing at a till should have
-  // to remember which inbox a code came in, so every account is on screen at
-  // once and there is nothing to pick first.
+  // The stored instant is the end of Christmas Eve, UTC; the reader says that
+  // day and not the next one. (The month's spelling is the runtime locale's.)
+  test("reads the deadline as the UTC day it is the end of", async () => {
+    mountPage({ active: [promo()], expired: [] });
+
+    const opened = await openItem(await sectionNamed("Active promo codes"));
+    const until = within(opened).getByText("Valid until").nextElementSibling!.textContent ?? "";
+    expect(until).toMatch(/\b24\b/);
+    expect(until).toContain("2026");
+  });
+
+  // The account is said, not a gate: nobody standing at a till should have to
+  // remember which inbox a code came in, so every account is on screen at once
+  // and there is nothing to pick first. With two mailboxes the row names which.
   test("shows every account's promos at once, with no account filter to satisfy", async () => {
     mountPage({
       active: [
@@ -358,9 +437,9 @@ describe("the active section", () => {
       expired: [],
     });
 
-    const rows = rowsOf(await sectionNamed("Active promo codes"));
+    const rows = textsOf(await sectionNamed("Active promo codes"));
     expect(rows).toHaveLength(2);
-    expect(rows.flat().join(" ")).toContain("other@example.com");
+    expect(rows.join(" ")).toContain("other@example.com");
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
@@ -376,15 +455,15 @@ describe("the active section", () => {
       expired: [],
     });
 
-    const merchants = rowsOf(await sectionNamed("Active promo codes")).map((row) => row[0]);
-    expect(merchants).toEqual(["Soon", "Later", "Open"]);
+    const names = namesOf(await sectionNamed("Active promo codes"));
+    expect(names).toEqual(["Soon 20% off", "Later 20% off", "Open 20% off"]);
   });
 
   test("names no deadline the mail never stated", async () => {
     mountPage({ active: [promo({ expiresAt: null, code: null, terms: null })], expired: [] });
 
-    const row = rowsOf(await sectionNamed("Active promo codes"))[0]!;
-    expect(row.some((cell) => cell === "No end date")).toBe(true);
+    const row = textsOf(await sectionNamed("Active promo codes"))[0]!;
+    expect(row).toContain("No end date");
     expect(row).not.toContain("WEEKEND20");
   });
 
@@ -396,7 +475,7 @@ describe("the active section", () => {
       expired: [],
     });
 
-    expect(rowsOf(await sectionNamed("Active promo codes"))).toHaveLength(2);
+    expect(itemsOf(await sectionNamed("Active promo codes"))).toHaveLength(2);
   });
 });
 
@@ -408,12 +487,12 @@ describe("the expired section", () => {
     });
 
     const found = await sectionNamed("Expired promo codes");
-    expect(rowsOf(found)[0]![0]).toBe("Lapsed");
+    expect(namesOf(found)[0]).toBe("Lapsed 20% off");
     // DOCUMENT_POSITION_FOLLOWING: the expired section comes after the active one.
     expect(active()!.compareDocumentPosition(found) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(within(found).getByRole("table").parentElement!.className).toContain("opacity");
+    expect(within(found).getByRole("list").hasAttribute("data-faded")).toBe(true);
   });
 
   // No empty heading left behind on a page whose promos are all still good.
@@ -425,17 +504,18 @@ describe("the expired section", () => {
   });
 
   // Nothing here clears itself: the record of what a shop offered stays until
-  // the user takes it away, so a lapsed row carries exactly the controls a live
-  // one does — including the one that removes it (#164), which is the only thing
-  // anywhere that does.
+  // the user takes it away, so a lapsed promo carries exactly the controls a
+  // live one does — including the one that removes it (#164), which is the only
+  // thing anywhere that does.
   test("keeps the lapsed ones until the user removes one", async () => {
     mountPage({ active: [], expired: [promo({ id: "lapsed" })] });
 
     const found = await sectionNamed("Expired promo codes");
     expect(within(found).getByRole("button", { name: /delete promo code/i })).not.toBeNull();
-    expect(within(found).getByRole("button", { name: /edit promo code/i })).not.toBeNull();
-    // Nothing was asked of the server beyond the page's own read: a promo does
-    // not expire off this page, it is deleted off it.
+    const opened = await openItem(found);
+    expect(within(opened).getByRole("button", { name: /edit promo code/i })).not.toBeNull();
+    // Nothing was asked of the server beyond the page's reads: a promo does not
+    // expire off this page, it is deleted off it.
     expect(sent).toEqual([]);
   });
 
@@ -456,7 +536,7 @@ describe("the expired section", () => {
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toMatchObject({ method: "DELETE", path: "/api/promo-codes/saved/expired" });
     await waitFor(() => expect(expired()).toBeNull());
-    expect(rowsOf(active()!)[0]![0]).toBe("Live");
+    expect(namesOf(active()!)[0]).toBe("Live 20% off");
   });
 
   test("asks nothing of the server when the confirm is cancelled", async () => {
@@ -498,7 +578,20 @@ describe("taking the code", () => {
 
     // The page's own two reads, and nothing else — no save, no flag, no timestamp.
     expect(urls).toHaveLength(2);
-    expect(rowsOf(await sectionNamed("Active promo codes"))[0]).toContain("WEEKEND20");
+    expect(sent).toEqual([]);
+    expect(textsOf(await sectionNamed("Active promo codes"))[0]).toContain("WEEKEND20");
+    // Taking the code does not open the promo either.
+    expect(reader()).toBeNull();
+  });
+
+  test("copies from the reader's ticket too", async () => {
+    mountPage({ active: [promo()], expired: [] });
+
+    const opened = await openItem(await sectionNamed("Active promo codes"));
+    const ticket = within(opened).getByRole("region", { name: "Promo" });
+    fireEvent.click(within(ticket).getByRole("button", { name: /copy code/i }));
+
+    await waitFor(() => expect(copied).toEqual(["WEEKEND20"]));
   });
 
   // A browser that refuses the clipboard is the one case where the click did
@@ -523,7 +616,8 @@ describe("taking the code", () => {
   test("offers nothing to copy when the row carries no code", async () => {
     mountPage({ active: [promo({ code: null })], expired: [] });
 
-    await sectionNamed("Active promo codes");
+    const opened = await openItem(await sectionNamed("Active promo codes"));
+    expect(opened).not.toBeNull();
     expect(screen.queryByRole("button", { name: /copy code/i })).toBeNull();
   });
 });
@@ -534,13 +628,13 @@ describe("taking the code", () => {
 // deletes it, hides it or breaks its page. What went away (#168) is the *copy*
 // that presented it as a normal kind of promo: the page no longer explains an
 // offer that needs no code, because it no longer produces one.
-describe("a saved row that carries no code", () => {
+describe("a saved promo that carries no code", () => {
   const legacy = () => promo({ code: null });
 
-  test("still renders, with an unstated cell and no claim about the offer", async () => {
+  test("still renders, with an unstated slot and no claim about the offer", async () => {
     mountPage({ active: [legacy()], expired: [] });
 
-    const row = rowsOf(await sectionNamed("Active promo codes"))[0]!;
+    const row = textsOf(await sectionNamed("Active promo codes"))[0]!;
     expect(row).toContain("Zara");
     expect(row).toContain("20% off");
     expect(row).toContain("orders over £50, excl. sale");
@@ -553,20 +647,16 @@ describe("a saved row that carries no code", () => {
   test("still opens the copy of the mail the save took", async () => {
     mountPage({ active: [legacy()], expired: [] });
 
-    const section = await sectionNamed("Active promo codes");
-    fireEvent.click(within(section).getByRole("button", { name: /view email/i }));
-
-    const dialog = await screen.findByRole("dialog");
-    expect(await within(dialog).findByText(/your 20% weekend/i)).not.toBeNull();
+    const opened = await openItem(await sectionNamed("Active promo codes"));
+    expect(await within(opened).findByText(/your 20% weekend/i)).not.toBeNull();
   });
 
-  // The rule is that a code cannot be *cleared*; a row that never had one is
+  // The rule is that a code cannot be *cleared*; a promo that never had one is
   // still corrigible in its other four fields, or it could not be fixed at all.
   test("is still correctable, and the patch names no code", async () => {
     mountPage({ active: [legacy()], expired: [] });
 
-    const section = await sectionNamed("Active promo codes");
-    fireEvent.click(within(section).getByRole("button", { name: /edit promo code/i }));
+    await startEditing();
     type(/merchant/i, "Zara Home");
     saveEdit();
 
@@ -576,7 +666,7 @@ describe("a saved row that carries no code", () => {
       path: "/api/promo-codes/promo-1",
       body: { merchant: "Zara Home" },
     });
-    await waitFor(() => expect(rowsOf(active()!)[0]).toContain("Zara Home"));
+    await waitFor(() => expect(textsOf(active()!)[0]).toContain("Zara Home"));
   });
 
   test("is still the user's to remove", async () => {
@@ -588,7 +678,7 @@ describe("a saved row that carries no code", () => {
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toMatchObject({ method: "DELETE", path: "/api/promo-codes/promo-1" });
-    await waitFor(() => expect(screen.queryByText(/no saved promo codes/i)).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText(/no promo codes yet/i)).not.toBeNull());
   });
 });
 
@@ -596,30 +686,37 @@ describe("a saved row that carries no code", () => {
 // still there after Gmail purged the original the save trashed.
 describe("reading the mail it came from", () => {
   const openMail = async () => {
-    const section = await sectionNamed("Active promo codes");
-    fireEvent.click(within(section).getByRole("button", { name: /view email/i }));
-    return screen.findByRole("dialog");
+    const opened = await openItem(await sectionNamed("Active promo codes"));
+    return within(opened).getByRole("region", { name: "Original email copy" });
   };
+
+  test("asks for nothing until a promo is opened", async () => {
+    mountPage({ active: [promo(), promo({ id: "promo-2" })], expired: [] });
+
+    await sectionNamed("Active promo codes");
+    await waitFor(() => expect(urls).toHaveLength(2));
+    expect(paths().some((p) => p.endsWith("/original"))).toBe(false);
+  });
 
   test("asks for the promo's own copy, by the promo's id", async () => {
     mountPage({ active: [promo()], expired: [] });
 
-    const dialog = await openMail();
+    const copy = await openMail();
 
     // The mail is named nowhere in the request: the copy hangs off the promo,
     // and `mail-1` may no longer exist anywhere.
     await waitFor(() => expect(urls).toHaveLength(3));
     expect(paths().some((p) => p.endsWith("/promo-codes/promo-1/original"))).toBe(true);
-    expect(await within(dialog).findByText(/your 20% weekend/i)).not.toBeNull();
-    expect(within(dialog).getByText(/zara/i)).not.toBeNull();
+    expect(await within(copy).findByText(/your 20% weekend/i)).not.toBeNull();
+    expect(within(copy).getByText(/newsletter@email\.zara\.com/)).not.toBeNull();
   });
 
   test("renders the mail as it looked", async () => {
     mountPage({ active: [promo()], expired: [] });
 
-    const dialog = await openMail();
+    const copy = await openMail();
 
-    const frame = (await within(dialog).findByTitle("message-body")) as HTMLIFrameElement;
+    const frame = (await within(copy).findByTitle("message-body")) as HTMLIFrameElement;
     expect(frame.getAttribute("srcdoc")).toContain("WEEKEND20 — 20% off, ends Sunday");
   });
 
@@ -627,46 +724,63 @@ describe("reading the mail it came from", () => {
     original = mail({ bodyHtml: null });
     mountPage({ active: [promo()], expired: [] });
 
-    const dialog = await openMail();
+    const copy = await openMail();
 
-    expect(await within(dialog).findByText(/ends Sunday/)).not.toBeNull();
-    expect(within(dialog).queryByTitle("message-body")).toBeNull();
+    expect(await within(copy).findByText(/ends Sunday/)).not.toBeNull();
+    expect(within(copy).queryByTitle("message-body")).toBeNull();
   });
 
   test("says so plainly when the mail carried no body at all", async () => {
     original = mail({ bodyHtml: null, bodyText: null });
     mountPage({ active: [promo()], expired: [] });
 
-    const dialog = await openMail();
+    const copy = await openMail();
 
-    expect(await within(dialog).findByText(/no body/i)).not.toBeNull();
+    expect(await within(copy).findByText(/no body/i)).not.toBeNull();
   });
 
   // The copy is a record and only the extracted guesses are corrigible, so
-  // there is nothing in here to type into and nothing to save.
+  // there is nothing in it to type into and nothing to save.
   test("is a record: nothing in it can be edited", async () => {
     mountPage({ active: [promo()], expired: [] });
 
-    const dialog = await openMail();
-    await within(dialog).findByText(/your 20% weekend/i);
+    const copy = await openMail();
+    await within(copy).findByText(/your 20% weekend/i);
 
-    expect(within(dialog).queryAllByRole("textbox")).toEqual([]);
-    const controls = within(dialog)
-      .queryAllByRole("button")
-      .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
-    expect(controls.some((name) => /save|edit|delete/i.test(name))).toBe(false);
+    expect(within(copy).queryAllByRole("textbox")).toEqual([]);
+    expect(within(copy).queryAllByRole("button")).toEqual([]);
   });
 
   test("closes again, asking for nothing more", async () => {
     mountPage({ active: [promo()], expired: [] });
 
-    const dialog = await openMail();
-    await within(dialog).findByText(/your 20% weekend/i);
-    fireEvent.click(within(dialog).getByRole("button", { name: /close/i }));
+    const copy = await openMail();
+    await within(copy).findByText(/your 20% weekend/i);
+    fireEvent.click(screen.getByRole("button", { name: /close promo/i }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    // The page's two reads and the one the dialog made; closing asks for nothing.
+    await waitFor(() => expect(reader()).toBeNull());
+    // The page's two reads and the one the reader made; closing asks for nothing.
     expect(urls).toHaveLength(3);
+  });
+});
+
+describe("stepping through the page", () => {
+  test("goes from to-review to saved in the order the page is read", async () => {
+    mountPage({ active: [promo({ merchant: "Kept" })], expired: [] }, [
+      suggestion({ merchant: "Waiting" }),
+    ]);
+
+    const opened = await openItem(await sectionNamed("Promo codes to review"));
+    expect(within(opened).getByText("1 of 2")).not.toBeNull();
+    expect(within(opened).getByRole("button", { name: /previous promo/i })).toHaveProperty(
+      "disabled",
+      true,
+    );
+
+    fireEvent.click(within(opened).getByRole("button", { name: /next promo/i }));
+
+    await waitFor(() => expect(within(reader()!).getByText("2 of 2")).not.toBeNull());
+    expect(within(reader()!).getByRole("region", { name: "Promo" }).textContent).toContain("Kept");
   });
 });
 
@@ -677,13 +791,14 @@ const box = (name: RegExp) => screen.getByRole("textbox", { name });
 const type = (name: RegExp, value: string) => fireEvent.change(box(name), { target: { value } });
 const saveEdit = () => fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
-describe("correcting what the extraction guessed", () => {
-  const startEditing = async () => {
-    const section = await sectionNamed("Active promo codes");
-    fireEvent.click(within(section).getByRole("button", { name: /edit promo code/i }));
-    return section;
-  };
+/** Opens the first active promo and its editor. */
+const startEditing = async () => {
+  const opened = await openItem(await sectionNamed("Active promo codes"));
+  fireEvent.click(within(opened).getByRole("button", { name: /edit promo code/i }));
+  return opened;
+};
 
+describe("correcting what the extraction guessed", () => {
   test("opens every one of the five fields, and none of the mail's", async () => {
     mountPage({ active: [promo()], expired: [] });
     await startEditing();
@@ -719,9 +834,9 @@ describe("correcting what the extraction guessed", () => {
       body: { discount: "25% off", merchant: "Zara Home" },
     });
 
-    await waitFor(() => expect(rowsOf(active()!)[0]).toContain("Zara Home"));
-    expect(rowsOf(active()!)[0]).toContain("25% off");
-    // And the row is a row again — the boxes are gone.
+    await waitFor(() => expect(textsOf(active()!)[0]).toContain("Zara Home"));
+    expect(textsOf(active()!)[0]).toContain("25% off");
+    // And the ticket is a ticket again — the boxes are gone.
     expect(screen.queryAllByRole("textbox")).toEqual([]);
   });
 
@@ -736,11 +851,11 @@ describe("correcting what the extraction guessed", () => {
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.body).toEqual({ terms: null });
-    await waitFor(() => expect(rowsOf(active()!)[0]).not.toContain("orders over £50, excl. sale"));
+    await waitFor(() => expect(textsOf(active()!)[0]).not.toContain("orders over £50, excl. sale"));
   });
 
   // A deadline crosses as the day someone picked, never as an instant, and comes
-  // back stored as the end of that day — so the cell names the day it was given.
+  // back stored as the end of that day — so the ticket names the day it was given.
   test("sends an edited expiry as a calendar day", async () => {
     mountPage({ active: [promo()], expired: [] });
     await startEditing();
@@ -750,11 +865,10 @@ describe("correcting what the extraction guessed", () => {
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.body).toEqual({ expiresAt: "2026-10-31" });
-    await waitFor(() =>
-      expect(
-        rowsOf(active()!)[0]!.some((cell) => /\b31\b/.test(cell) && cell.includes("2026")),
-      ).toBe(true),
-    );
+    await waitFor(() => {
+      const until = within(reader()!).getByText("Valid until").nextElementSibling!.textContent;
+      expect(until).toMatch(/\b31\b/);
+    });
   });
 
   // The headline is what makes a row a promo at all: it is the one field of the
@@ -774,7 +888,7 @@ describe("correcting what the extraction guessed", () => {
   // promo row is a code someone copies at a checkout, and since #166 none is
   // written without one — so clearing it would make by hand the shape the
   // extraction stopped producing. Correcting it is exactly what this is for.
-  test("will not save a code cleared off the row, but takes a corrected one", async () => {
+  test("will not save a code cleared off the promo, but takes a corrected one", async () => {
     mountPage({ active: [promo()], expired: [] });
     await startEditing();
 
@@ -800,11 +914,11 @@ describe("correcting what the extraction guessed", () => {
 
     await waitFor(() => expect(screen.queryAllByRole("textbox")).toEqual([]));
     expect(sent).toEqual([]);
-    expect(rowsOf(active()!)[0]).toContain("Zara");
+    expect(textsOf(active()!)[0]).toContain("Zara");
   });
 
-  // A save that changed nothing is nothing to send: the answer would be the row
-  // as it already is.
+  // A save that changed nothing is nothing to send: the answer would be the
+  // promo as it already is.
   test("sends nothing when nothing was typed", async () => {
     mountPage({ active: [promo()], expired: [] });
     await startEditing();
@@ -816,7 +930,7 @@ describe("correcting what the extraction guessed", () => {
 
   // Nothing was written, so there is nothing to put back — what the user needs
   // is to be told the correction did not take.
-  test("says so when the server refuses the edit, and keeps the row as it was", async () => {
+  test("says so when the server refuses the edit, and keeps the promo as it was", async () => {
     mountPage({ active: [promo()], expired: [] });
     await startEditing();
     refuseWrites = true;
@@ -825,20 +939,20 @@ describe("correcting what the extraction guessed", () => {
     saveEdit();
 
     await waitFor(() => expect(screen.queryByText(/could not save the changes/i)).not.toBeNull());
-    expect(rowsOf(active()!)[0]).toContain("Zara");
+    expect(textsOf(active()!)[0]).toContain("Zara");
   });
 
-  // Two rows being corrected are two independent corrections; opening one must
-  // not throw away typing in the other.
-  test("edits one row without disturbing the next", async () => {
+  // The edit belongs to the open promo: stepping to another one leaves it,
+  // unsaved, rather than carrying the boxes over to a different promo.
+  test("is left, unsaved, when another promo is opened", async () => {
     mountPage({ active: [promo(), promo({ id: "promo-2", merchant: "Uniqlo" })], expired: [] });
+    const opened = await startEditing();
 
-    const section = await sectionNamed("Active promo codes");
-    const editButtons = within(section).getAllByRole("button", { name: /edit promo code/i });
-    fireEvent.click(editButtons[0]!);
-    fireEvent.click(within(section).getAllByRole("button", { name: /edit promo code/i })[0]!);
+    type(/merchant/i, "Not this");
+    fireEvent.click(within(opened).getByRole("button", { name: /next promo/i }));
 
-    expect(screen.getAllByRole("textbox", { name: /merchant/i })).toHaveLength(2);
+    await waitFor(() => expect(screen.queryAllByRole("textbox")).toEqual([]));
+    expect(sent).toEqual([]);
   });
 });
 
@@ -859,7 +973,7 @@ describe("removing a saved promo", () => {
 
     expect(await screen.findByText(/delete this code\?/i)).not.toBeNull();
     expect(sent).toEqual([]);
-    expect(rowsOf(active()!)).toHaveLength(1);
+    expect(itemsOf(active()!)).toHaveLength(1);
   });
 
   test("takes the row once confirmed, and the page no longer lists it", async () => {
@@ -870,7 +984,7 @@ describe("removing a saved promo", () => {
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toMatchObject({ method: "DELETE", path: "/api/promo-codes/promo-1" });
-    await waitFor(() => expect(screen.queryByText(/no saved promo codes/i)).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText(/no promo codes yet/i)).not.toBeNull());
   });
 
   test("takes nothing when the confirmation is dismissed", async () => {
@@ -881,7 +995,7 @@ describe("removing a saved promo", () => {
 
     await waitFor(() => expect(screen.queryByText(/delete this code\?/i)).toBeNull());
     expect(sent).toEqual([]);
-    expect(rowsOf(active()!)).toHaveLength(1);
+    expect(itemsOf(active()!)).toHaveLength(1);
   });
 
   test("takes the row it was asked for and no other", async () => {
@@ -896,8 +1010,19 @@ describe("removing a saved promo", () => {
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.path).toEndWith("/promo-codes/promo-2");
-    await waitFor(() => expect(rowsOf(active()!)).toHaveLength(1));
-    expect(rowsOf(active()!)[0]).toContain("Zara");
+    await waitFor(() => expect(itemsOf(active()!)).toHaveLength(1));
+    expect(textsOf(active()!)[0]).toContain("Zara");
+  });
+
+  test("closes the reader when the open promo is the one removed", async () => {
+    mountPage({ active: [promo(), promo({ id: "promo-2", merchant: "Uniqlo" })], expired: [] });
+
+    const opened = await openItem(await sectionNamed("Active promo codes"));
+    fireEvent.click(within(opened).getByRole("button", { name: /delete promo code/i }));
+    fireEvent.click(within(opened).getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    await waitFor(() => expect(reader()).toBeNull());
   });
 
   test("says so when the server refuses, and the row stays", async () => {
@@ -910,7 +1035,7 @@ describe("removing a saved promo", () => {
     await waitFor(() =>
       expect(screen.queryByText(/could not delete the promo code/i)).not.toBeNull(),
     );
-    expect(rowsOf(active()!)).toHaveLength(1);
+    expect(itemsOf(active()!)).toHaveLength(1);
   });
 });
 
@@ -925,6 +1050,7 @@ describe("the route and the way in", () => {
     id: MINE,
     email: "me@example.com",
     displayName: "Me",
+    nickname: null,
     avatarUrl: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     lastSyncedAt: null,
@@ -963,7 +1089,7 @@ describe("the route and the way in", () => {
     mountApp();
 
     // The redirect runs once the accounts are in hand; the page is still here.
-    await screen.findByText(/no saved promo codes/i);
+    await screen.findByText(/no promo codes yet/i);
     await waitFor(() => expect(screen.getByTestId("where").textContent).toBe("/promo-codes"));
   });
 

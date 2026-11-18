@@ -18,7 +18,9 @@ interface Thumb {
 }
 
 /**
- * Pill segmented control with a sliding thumb behind the active option.
+ * Segmented control (UI System › Segmented Control): a `--gousse-fill` track
+ * with a 2px inset and a white 6px-cornered thumb sliding behind the active
+ * option.
  * The thumb position is measured from the live button geometry so it stays
  * correct across font/label changes.
  */
@@ -44,12 +46,12 @@ export const SegmentedToggle = <T extends string>({
       ref={containerRef}
       role="tablist"
       aria-label={ariaLabel}
-      className="relative inline-flex items-center gap-0.5 rounded-full"
+      className="relative inline-flex h-7 items-center rounded-lg bg-gousse-fill p-0.5"
     >
       {thumb && (
         <span
           aria-hidden
-          className="absolute bottom-0 left-0 top-0 z-0 rounded-full bg-gousse-ink shadow-gousse-sm transition-[transform,width] duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)]"
+          className="absolute top-0.5 bottom-0.5 left-0 z-0 rounded-md bg-gousse-panel shadow-gousse-sm transition-[transform,width] duration-200 ease-out motion-reduce:transition-none"
           style={{ width: thumb.width, transform: `translateX(${thumb.left}px)` }}
         />
       )}
@@ -66,8 +68,10 @@ export const SegmentedToggle = <T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(opt.value)}
-            className={`relative z-[1] rounded-full px-3.5 py-1.5 text-[12.5px] font-bold transition-colors duration-200 ${
-              active ? "text-gousse-bg" : "text-gousse-muted hover:text-gousse-ink"
+            className={`relative z-[1] h-6 rounded-md px-2.5 text-xs transition-colors duration-150 ${
+              active
+                ? "font-semibold text-gousse-ink"
+                : "font-medium text-gousse-muted hover:text-gousse-ink"
             }`}
           >
             {opt.label}

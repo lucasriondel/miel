@@ -1,5 +1,5 @@
 import { useTheme } from "../theme/useTheme";
-import { SettingRow } from "@/components/ui/setting-row";
+import { SettingsRow } from "./SettingsRow";
 import { Segmented } from "./Segmented";
 
 const OPTIONS = [
@@ -11,7 +11,7 @@ const OPTIONS = [
 export const ThemeRow = () => {
   const { theme, setTheme } = useTheme();
   return (
-    <SettingRow
+    <SettingsRow
       title="Theme"
       description="Switch between light and dark."
       control={<Segmented ariaLabel="Theme" options={OPTIONS} value={theme} onChange={setTheme} />}

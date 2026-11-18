@@ -7,6 +7,7 @@ const NOW = new Date("2026-08-11T12:00:00.000Z").getTime();
 const message = (over: Partial<ListedMessage> = {}): ListedMessage => ({
   accountId: "acc1",
   accountEmail: "me@example.com",
+  snoozedUntil: null,
   gmailMessageId: "m1",
   gmailThreadId: "t1",
   fromEmail: "noreply@github.com",

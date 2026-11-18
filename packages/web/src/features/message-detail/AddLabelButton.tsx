@@ -56,7 +56,7 @@ export const AddLabelButton = ({ message }: Props) => {
           onClick={toggle}
           className={badgeClasses(
             { variant: "suggested", interactive: true },
-            "hover:border-solid hover:bg-gousse-line/40 hover:text-gousse-ink",
+            "h-5 gap-1 border-gousse-border px-2 py-0 text-[11px] font-semibold shadow-none sm:px-2 sm:py-0 hover:border-solid hover:bg-gousse-hover hover:text-gousse-ink",
           )}
         >
           <Plus className="h-3 w-3" aria-hidden />

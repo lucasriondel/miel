@@ -49,6 +49,9 @@ const detection = (
       {
         accountId,
         gmailMessageId,
+        subject: "Weekend sale",
+        fromName: "Zara",
+        fromEmail: "news@zara.example",
         internalDate: over.internalDate ?? new Date("2026-09-01T09:00:00.000Z"),
       },
     ],
@@ -74,7 +77,7 @@ const suggestions = (
   stores.run(listPromoSuggestionsEffect({ accountId: ACCOUNT, now: NOW, ...args }));
 
 describe("the suggestions the inbox section reads", () => {
-  test("carries the four fields a card shows, plus the code itself", async () => {
+  test("carries the four fields a card shows, the code, and the mail it came from", async () => {
     const stores = seed([detection("p1")]);
 
     expect(await suggestions(stores)).toEqual([
@@ -87,6 +90,10 @@ describe("the suggestions the inbox section reads", () => {
         terms: "orders over £50",
         merchant: "Zara",
         expiresAt: expiring("2026-12-24").toISOString(),
+        subject: "Weekend sale",
+        fromName: "Zara",
+        fromEmail: "news@zara.example",
+        internalDate: "2026-09-01T09:00:00.000Z",
       },
     ]);
   });

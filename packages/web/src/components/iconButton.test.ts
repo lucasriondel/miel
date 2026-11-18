@@ -6,20 +6,20 @@ import { iconButtonClass, iconButtonIconClass, iconButtonIconPx } from "./iconBu
 // sixth spelling is that every one of them now comes from here.
 
 describe("iconButtonClass", () => {
-  // §3: "a control that could be `rounded-lg` or `rounded-full` should be
-  // `rounded-full`". An icon button is square, so it is the control that rule
-  // is about — and `rounded-lg` is what three of the five actually had.
-  test("is a pill, never the square-ish radius it replaced", () => {
-    expect(iconButtonClass()).toContain("rounded-full");
-    expect(iconButtonClass()).not.toContain("rounded-lg");
-    expect(iconButtonClass({ size: "md" })).toContain("rounded-full");
+  // The redesign (UI System › Icon Button) draws a square with a 6px corner,
+  // not a pill: these sit in strips of quiet glyphs where a circle reads as a
+  // badge.
+  test("is a 6px-cornered square, never a pill", () => {
+    expect(iconButtonClass()).toContain("rounded-md");
+    expect(iconButtonClass()).not.toContain("rounded-full");
+    expect(iconButtonClass({ size: "md" })).toContain("rounded-md");
   });
 
-  // §5: both sizes clear the 32px hit-area floor. The two exist for density,
-  // not decoration, so neither may drop under it.
-  test("offers two hit areas and both clear the 32px floor", () => {
-    expect(iconButtonClass({ size: "sm" })).toContain("h-8 w-8");
-    expect(iconButtonClass({ size: "md" })).toContain("h-9 w-9");
+  // The design's 26px, rounded up: 28px in dense strips, 32px where the user
+  // goes deliberately. The two exist for density, not decoration.
+  test("offers two hit areas, 28px and 32px", () => {
+    expect(iconButtonClass({ size: "sm" })).toContain("h-7 w-7");
+    expect(iconButtonClass({ size: "md" })).toContain("h-8 w-8");
   });
 
   test("defaults to the dense size", () => {
@@ -59,8 +59,8 @@ describe("iconButtonClass", () => {
 
 describe("icon sizing", () => {
   test("pairs a glyph with each button size", () => {
-    expect(iconButtonIconClass("sm")).toBe("h-4 w-4");
-    expect(iconButtonIconClass("md")).toBe("h-[18px] w-[18px]");
+    expect(iconButtonIconClass("sm")).toBe("h-3.5 w-3.5");
+    expect(iconButtonIconClass("md")).toBe("h-4 w-4");
   });
 
   // The spinner that stands in for a running action takes a number, not a

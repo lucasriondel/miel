@@ -104,10 +104,10 @@ const UNREAD: MessageLabel = {
   colorFg: null,
 };
 
-// The detail page reads nothing off the layout — the top bar is the layout's
-// own now, and its controls arrive through `PageTopBar`, which renders them in
-// place when no bar is mounted above. An empty context keeps that true: a page
-// that started destructuring one would throw here rather than get a stub.
+// The reader reads one thing off the route above it — the list's reading order,
+// for its pager — and treats a context without one as "no list beside me". An
+// empty context keeps that true: a reader that started requiring more would
+// throw here rather than get a stub.
 const LAYOUT = {};
 
 const unreadMessage = (over: Partial<MessageDetail> = {}) =>
@@ -255,7 +255,7 @@ describe("the inbox row behind the page", () => {
     );
     // happy-dom loads no stylesheet, so weight has no computed value here; the
     // class the row bolds with is the only thing a render can be asked.
-    return () => within(view.container).getByText("Lunch").className.includes("font-bold");
+    return () => within(view.container).getByText("Lunch").className.includes("font-semibold");
   };
 
   test("is no longer bold once the message is open", async () => {

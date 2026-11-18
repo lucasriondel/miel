@@ -1,5 +1,6 @@
 import { Select } from "@/components/ui/select";
-import { SettingRow } from "@/components/ui/setting-row";
+import { SettingsRow } from "./SettingsRow";
+import { SETTINGS_SELECT } from "./settingsFields";
 import { useAccounts } from "../../api/queries";
 import {
   pinnedAccountId,
@@ -25,18 +26,18 @@ export const DefaultViewRow = () => {
     pinned !== null && accounts.data !== undefined && !accounts.data.some((a) => a.id === pinned);
 
   return (
-    <SettingRow
-      title="Default view"
+    <SettingsRow
+      title="Open miel on"
       description="Which mailbox the app opens on."
       control={
         <Select
-          aria-label="Default view"
+          aria-label="Open miel on"
           disabled={!accounts.data}
           value={preference}
-          className="w-56 disabled:opacity-60"
+          className={`w-[220px] ${SETTINGS_SELECT}`}
           onChange={(e) => setPreference(e.target.value as DefaultViewPreference)}
         >
-          <option value="last">Last opened account</option>
+          <option value="last">The last mailbox I opened</option>
           {accounts.data?.map((a) => (
             <option key={a.id} value={pinnedAccountPreference(a.id)}>
               {a.email}

@@ -1,7 +1,7 @@
 /**
  * Layer composition for the Google + Claude backend.
  *
- * `GoogleStack` merges the six Gmail resource services and provides them with a
+ * `GoogleStack` merges the seven Gmail resource services and provides them with a
  * single `GoogleAuthLive` (so the `GoogleAuth` requirement on each Gmail method
  * is satisfied once). `AppLive` adds the Claude service. Provide `AppLive` at the
  * API/CLI/sync boundary and every `*Effect` resolves its dependencies.
@@ -12,6 +12,7 @@ import { GmailMessagesLive } from "./GmailMessages";
 import { GmailLabelsLive } from "./GmailLabels";
 import { GmailFiltersLive } from "./GmailFilters";
 import { GmailThreadsLive } from "./GmailThreads";
+import { GmailDraftsLive } from "./GmailDrafts";
 import { GmailModifyLive } from "./GmailModify";
 import { GmailProfileLive } from "./GmailProfile";
 import { ClaudeLive } from "../claude/Claude";
@@ -25,6 +26,7 @@ export const GoogleStack = Layer.mergeAll(
   GmailLabelsLive,
   GmailFiltersLive,
   GmailThreadsLive,
+  GmailDraftsLive,
   GmailModifyLive,
   GmailProfileLive,
   GoogleAuthLive, // also exported so the OAuth routes can use consentUrl/exchangeCode

@@ -1,5 +1,6 @@
-import { Button } from "@/components/ui/button";
+import { AppButton } from "../../components/AppButton";
 import { Input } from "@/components/ui/input";
+import { SETTINGS_INPUT } from "./settingsFields";
 import { keepsStoredValue } from "./worpHeaderDraft";
 import type { HeaderDraftRow } from "./worpHeaderDraft";
 
@@ -39,7 +40,7 @@ export const WorpHeaderRow = ({ row, problem, disabled, onChange, onRemove }: Pr
           spellCheck={false}
           disabled={disabled}
           onChange={(e) => onChange({ name: e.target.value })}
-          className="flex-1 font-mono"
+          className={`flex-1 font-mono ${SETTINGS_INPUT}`}
         />
         <Input
           type="password"
@@ -50,11 +51,11 @@ export const WorpHeaderRow = ({ row, problem, disabled, onChange, onRemove }: Pr
           spellCheck={false}
           disabled={disabled}
           onChange={(e) => onChange({ value: e.target.value })}
-          className="flex-1 font-mono"
+          className={`flex-1 font-mono ${SETTINGS_INPUT}`}
         />
-        <Button variant="ghost" disabled={disabled} onClick={onRemove} aria-label="Remove header">
+        <AppButton tone="ghost" disabled={disabled} onClick={onRemove} aria-label="Remove header">
           ✕
-        </Button>
+        </AppButton>
       </div>
       {problem ? <span className="text-xs text-gousse-high">{problem}</span> : null}
     </div>

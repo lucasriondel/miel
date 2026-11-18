@@ -43,19 +43,15 @@ export const ConfirmationCodePanel = ({ detection, onDelete, isDeleting = false 
 
   return (
     <DetailCard elevation="md">
-      <header className="flex items-center gap-3 border-b border-gousse-line/60 px-5 py-3.5">
-        <CheckCircle className="h-5 w-5 shrink-0 text-gousse-low" aria-hidden />
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gousse-muted">
-          Verification Items
-        </h2>
+      <header className="flex h-10 items-center gap-2 border-b border-gousse-line px-4">
+        <CheckCircle className="h-3.5 w-3.5 shrink-0 text-gousse-low" aria-hidden />
+        <h2 className="text-xs font-semibold text-gousse-ink">Verification Items</h2>
         {detection.description && (
-          <span className="truncate text-xs font-medium text-gousse-muted opacity-75">
-            {detection.description}
-          </span>
+          <span className="truncate text-xs text-gousse-muted">{detection.description}</span>
         )}
       </header>
 
-      <div className="divide-y divide-gousse-line/60">
+      <div className="divide-y divide-gousse-fill">
         {detection.codes.map((code, index) => (
           <ConfirmationCodeRow
             key={index}
@@ -67,15 +63,15 @@ export const ConfirmationCodePanel = ({ detection, onDelete, isDeleting = false 
       </div>
 
       {onDelete && (
-        <div className="flex items-center justify-between gap-3 border-t border-gousse-line/60 bg-gousse-bg/30 px-5 py-3">
-          <span className="text-xs font-medium text-gousse-muted">Handled this confirmation?</span>
+        <div className="flex items-center justify-between gap-3 border-t border-gousse-line bg-gousse-hover px-4 py-2.5">
+          <span className="text-xs text-gousse-muted">Handled this confirmation?</span>
           <button
             type="button"
             onClick={handleDelete}
             disabled={isDeleting}
-            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-gousse-line/60 bg-gousse-panel px-4 text-xs font-bold text-gousse-muted transition-[background-color,color,transform] hover:bg-gousse-high/10 hover:text-gousse-high active:scale-[0.96] disabled:opacity-50"
+            className="inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg border border-gousse-border bg-gousse-panel px-3 text-xs font-semibold text-gousse-ink transition-colors hover:border-gousse-high-border hover:bg-gousse-high-bg hover:text-gousse-high-text disabled:cursor-progress disabled:opacity-60"
           >
-            {isDeleting ? <Spinner size={16} /> : <Trash2 className="h-4 w-4" aria-hidden />}
+            {isDeleting ? <Spinner size={14} /> : <Trash2 className="h-3.5 w-3.5" aria-hidden />}
             {isDeleting ? "Deleting…" : "Delete message"}
           </button>
         </div>

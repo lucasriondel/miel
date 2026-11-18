@@ -12,7 +12,14 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { SecretStore, SettingsStore } from "../stores/contracts";
-import { promoStoreContract, secretStoreContract, settingsStoreContract } from "./storeContract";
+import {
+  contactStoreContract,
+  mailboxSnoozeContract,
+  outboxStoreContract,
+  promoStoreContract,
+  secretStoreContract,
+  settingsStoreContract,
+} from "./storeContract";
 import { makeTestStores } from "./stores";
 
 settingsStoreContract("the in-memory settings store", () => makeTestStores().layer);
@@ -39,6 +46,44 @@ promoStoreContract("the in-memory promo store", async () => {
     },
   };
 });
+
+mailboxSnoozeContract("the in-memory mailbox", async () => {
+  const fresh = makeTestStores();
+  let n = 0;
+  return {
+    layer: fresh.layer,
+    account: async () => {
+      const id = `account-${++n}`;
+      fresh.mailbox.add.account({ id, email: `${id}@example.com` });
+      return { id, email: `${id}@example.com` };
+    },
+    message: async ({ accountId, internalDate, isArchived }) => {
+      const gmailMessageId = `m${++n}`;
+      const row = fresh.mailbox.add.message({
+        accountId,
+        gmailMessageId,
+        internalDate,
+        isArchived,
+      });
+      return { accountId, gmailMessageId, gmailThreadId: row.gmailThreadId };
+    },
+  };
+});
+
+const accountWorld = async () => {
+  const fresh = makeTestStores();
+  let n = 0;
+  return {
+    layer: fresh.layer,
+    account: async () => {
+      const id = `account-${++n}`;
+      fresh.mailbox.add.account({ id, email: `${id}@example.com` });
+      return { id, email: `${id}@example.com` };
+    },
+  };
+};
+outboxStoreContract("the in-memory outbox", accountWorld);
+contactStoreContract("the in-memory contacts", accountWorld);
 
 let stores = makeTestStores();
 

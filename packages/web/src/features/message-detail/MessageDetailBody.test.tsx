@@ -22,11 +22,14 @@ import {
 const message = (over: Partial<MessageDetail>): MessageDetail => ({
   accountId: "acc-1",
   accountEmail: "me@example.com",
+  snoozedUntil: null,
   gmailMessageId: "msg-1",
   gmailThreadId: "thr-1",
   fromEmail: "sender@example.com",
   fromName: "Sender",
   toEmails: ["me@example.com"],
+  ccEmails: [],
+  replyAllCc: [],
   subject: "Subject",
   snippet: "snippet",
   bodyText: null,
@@ -84,46 +87,49 @@ describe("which surface each kind of message lands on", () => {
   });
 });
 
-// §2/§3: card radius, depth from a shadow ramp, hairline at reduced alpha.
+// The redesign reads the body as the page itself: plain text sits on the
+// reader with no card; mail HTML keeps a frame (it paints its own white page),
+// and the placeholder is a dashed card.
 const surfaceOf = (html: string, tag: "pre" | "iframe" | "div") =>
   html.match(new RegExp(`<${tag}\\b[^>]*class="([^"]*)"`))?.[1] ?? "";
 
 describe("the three body surfaces", () => {
-  test("the plain-text view sits on the shared card surface", () => {
+  test("the plain-text view is body text on the page, not a card", () => {
     const cls = surfaceOf(render(withText), "pre");
-    expect(cls).toContain("rounded-3xl");
-    expect(cls).toContain("shadow-gousse-md");
-    expect(cls).toMatch(/border border-gousse-line\/\d+/);
+    expect(cls).toContain("text-gousse-body");
+    expect(cls).toContain("leading-[22px]");
+    expect(cls).toContain("font-sans");
+    expect(cls).not.toContain("border");
+    expect(cls).not.toContain("shadow");
   });
 
-  test("the iframe sits on the shared card surface", () => {
+  test("the iframe sits on the shared card surface, white in both themes", () => {
     const cls = surfaceOf(render(withHtml), "iframe");
-    expect(cls).toContain("rounded-3xl");
-    expect(cls).toContain("shadow-gousse-md");
-    expect(cls).toMatch(/border border-gousse-line\/\d+/);
+    expect(cls).toContain("rounded-xl");
+    expect(cls).toContain("border border-gousse-line");
+    expect(cls).toContain("bg-white");
   });
 
   test("the placeholder keeps its dashed edge on the shared surface", () => {
     const cls = surfaceOf(render({}), "div");
-    expect(cls).toContain("rounded-3xl");
+    expect(cls).toContain("rounded-xl");
     expect(cls).toContain("border-dashed");
-    expect(cls).toContain("shadow-gousse-sm");
   });
 
-  test("no surface keeps the old rounded-xl or a gradient wash", () => {
+  test("no surface keeps the old rounded-3xl or a gradient wash", () => {
     for (const html of [render(withText), render(withHtml), render({})]) {
-      expect(html).not.toContain("rounded-xl");
+      expect(html).not.toContain("rounded-3xl");
       expect(html).not.toContain("bg-gradient");
     }
   });
 });
 
 describe("the block heading", () => {
-  test("is a muted section label, never accent (§4)", () => {
+  // The body has no visible heading (the reader draws none), but it is still
+  // a named region for assistive tech.
+  test("is there for a screen reader only", () => {
     const html = render(withText);
-    expect(html).toMatch(/<h2[^>]*class="[^"]*text-gousse-muted[^"]*"[^>]*>\s*Message Body/);
-    expect(html).toContain("uppercase");
-    expect(html).not.toContain("text-gousse-accent");
+    expect(html).toMatch(/<h2[^>]*class="sr-only"[^>]*>\s*Message Body/);
   });
 });
 
@@ -136,14 +142,11 @@ describe("the HTML/Text switch", () => {
     expect(render(withHtml)).not.toContain('role="radiogroup"');
   });
 
-  test("is the pill segmented control with an accent/15 active fill (§1, §3)", () => {
+  test("is the segmented control: a filled track, the active thumb lifted in white", () => {
     const html = render(both);
-    expect(html).toContain("bg-gousse-accent/15");
-    // Never the square track with a hard accent fill this block used to carry.
-    expect(html).not.toContain("bg-gousse-accent text-white");
-    for (const cls of buttonClasses(html).filter((c) => c.includes("px-3.5"))) {
-      expect(cls).toContain("rounded-full");
-    }
+    expect(html).toContain("rounded-lg bg-gousse-fill");
+    expect(html).toContain("bg-gousse-panel font-semibold text-gousse-ink");
+    expect(html).not.toContain("bg-gousse-accent");
   });
 
   test("exposes the selected segment to assistive tech", () => {
@@ -163,10 +166,10 @@ describe("the remote-images toggle", () => {
     expect(render(withText)).not.toContain("Show remote images");
   });
 
-  test("is a pill exposing its off state to assistive tech (§3)", () => {
+  test("is a secondary button exposing its off state to assistive tech", () => {
     hidingRemoteImages();
     const html = render(withRemoteImages);
-    const [toggle] = buttonClasses(html).filter((c) => c.includes("rounded-full"));
+    const [toggle] = buttonClasses(html).filter((c) => c.includes("border-gousse-border"));
     expect(toggle).toBeDefined();
     expect(html).toContain('aria-pressed="false"');
   });
@@ -179,16 +182,15 @@ describe("the remote-images toggle", () => {
   });
 });
 
-describe("interaction (§5)", () => {
-  test("presses every control with active:scale-[0.96] and a named transition", () => {
+describe("interaction", () => {
+  test("transitions every control's colours, never transition-all", () => {
     hidingRemoteImages();
     const classes = buttonClasses(render({ ...withText, ...withRemoteImages }));
     // Two segments plus the images toggle.
     expect(classes.length).toBe(3);
     for (const cls of classes) {
-      expect(cls).toContain("active:scale-[0.96]");
+      expect(cls).toContain("transition-colors");
       expect(cls).not.toContain("transition-all");
-      expect(cls).toMatch(/transition-\[/);
     }
   });
 });

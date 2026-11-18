@@ -5,6 +5,7 @@ import { errorHandler } from "./middleware/error";
 import { requestLog } from "./middleware/requestLog";
 import { accountsRoutes } from "./routes/accounts";
 import { authRoutes } from "./routes/auth";
+import { composeRoutes } from "./routes/compose";
 import { googleOAuthCallbackRoutes, googleOAuthStartRoutes } from "./routes/googleOAuth";
 import { filtersRoutes } from "./routes/filters";
 import { labelsRoutes } from "./routes/labels";
@@ -29,7 +30,7 @@ export function createApp(opts: { webOrigin?: string } = {}) {
       // which reads as a broken API rather than a missing variable.
       origin: [origin, "https://miel.localhost"],
       allowHeaders: ["Authorization", "Content-Type"],
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     }),
   );
   app.use("*", requestLog());
@@ -47,6 +48,7 @@ export function createApp(opts: { webOrigin?: string } = {}) {
   app.route("/auth", googleOAuthStartRoutes);
   app.route("/labels", labelsRoutes);
   app.route("/messages", messagesRoutes);
+  app.route("/compose", composeRoutes);
   app.route("/filters", filtersRoutes);
   app.route("/promo-codes", promoCodesRoutes);
   app.route("/logs", logsRoutes);

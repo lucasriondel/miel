@@ -87,8 +87,8 @@ const RowLabel = ({ name, colorBg, colorFg }: RowLabelProps) => {
           ? { backgroundColor: colorBg ?? undefined, color: colorFg ?? undefined }
           : undefined
       }
-      className={`inline-flex max-w-[9.375rem] items-center truncate rounded-full px-[0.5625rem] py-px text-[11px] font-bold shadow-gousse-sm ${
-        hasColor ? "" : "bg-gousse-line/50 text-gousse-muted"
+      className={`inline-flex h-5 max-w-[9.375rem] items-center truncate rounded-full px-2 text-[11px] font-semibold ${
+        hasColor ? "" : "bg-gousse-fill text-gousse-muted"
       }`}
     >
       {name}

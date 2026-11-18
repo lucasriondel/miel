@@ -67,7 +67,7 @@ export const CodeLedgerRow = ({ item, onOpenMessage, onDismiss }: Props) => {
           <button
             type="button"
             onClick={() => window.open(entry.code.value, "_blank", "noreferrer,noopener")}
-            className="inline-flex shrink-0 items-center gap-[7px] rounded-lg border border-gousse-line bg-gousse-bg px-[11px] py-1 text-[12.5px] font-semibold text-gousse-ink transition-[background-color,border-color,transform] hover:border-gousse-muted/50 hover:bg-gousse-line/40 active:scale-[0.97]"
+            className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-gousse-border bg-gousse-panel px-2 text-xs font-semibold text-gousse-ink transition-[background-color,border-color,transform] hover:border-gousse-muted/50 hover:bg-gousse-line/40 active:scale-[0.97]"
           >
             Log in
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
@@ -81,9 +81,9 @@ export const CodeLedgerRow = ({ item, onOpenMessage, onDismiss }: Props) => {
           {!isLink && (
             <LedgerIconButton label={copied ? "Copied" : "Copy code"} onClick={handleCopy}>
               {copied ? (
-                <Check className="h-4 w-4 text-gousse-low" aria-hidden />
+                <Check className="h-3.5 w-3.5 text-gousse-low" aria-hidden />
               ) : (
-                <Copy className="h-4 w-4" aria-hidden />
+                <Copy className="h-3.5 w-3.5" aria-hidden />
               )}
             </LedgerIconButton>
           )}
@@ -91,7 +91,7 @@ export const CodeLedgerRow = ({ item, onOpenMessage, onDismiss }: Props) => {
             label="Open message"
             onClick={() => onOpenMessage(entry.accountId, entry.gmailMessageId)}
           >
-            <Mail className="h-4 w-4" aria-hidden />
+            <Mail className="h-3.5 w-3.5" aria-hidden />
           </LedgerIconButton>
           <LedgerIconButton
             label="Delete message"
@@ -99,10 +99,14 @@ export const CodeLedgerRow = ({ item, onOpenMessage, onDismiss }: Props) => {
             disabled={trash.isPending}
             danger
           >
-            {trash.isPending ? <Spinner size={16} /> : <Trash2 className="h-4 w-4" aria-hidden />}
+            {trash.isPending ? (
+              <Spinner size={14} />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            )}
           </LedgerIconButton>
           <LedgerIconButton label="Dismiss" onClick={() => onDismiss(item.id)}>
-            <X className="h-4 w-4" aria-hidden />
+            <X className="h-3.5 w-3.5" aria-hidden />
           </LedgerIconButton>
         </>
       }

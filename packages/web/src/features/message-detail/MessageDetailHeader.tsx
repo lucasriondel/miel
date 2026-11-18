@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { MessageDetail } from "../../api/types";
 import { MessageLabels } from "../../components/MessageLabels";
 import { AddLabelButton } from "./AddLabelButton";
@@ -6,14 +7,17 @@ import { SenderLine } from "./SenderLine";
 
 interface Props {
   message: MessageDetail;
+  /** Between the title and the sender: the reader's priority banner. */
+  banner?: ReactNode;
 }
 
-export const MessageDetailHeader = ({ message }: Props) => {
+export const MessageDetailHeader = ({ message, banner }: Props) => {
   return (
-    <header className="flex flex-col gap-3 border-b border-gousse-line/50 pb-6">
-      <h1 className="text-2xl font-bold text-gousse-ink text-balance leading-tight">
+    <header className="flex flex-col gap-5">
+      <h1 className="text-[26px] leading-[1.2] font-bold tracking-[-0.01em] text-balance text-gousse-ink">
         {message.subject?.trim() || "(no subject)"}
       </h1>
+      {banner}
       <SenderLine message={message} />
       {/* The row used to ask whether it had a badge to draw and render nothing
           when it had none. Since #167 it always has something: `MessageLabels`

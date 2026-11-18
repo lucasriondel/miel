@@ -171,3 +171,43 @@ describe("the provider-unavailable event reaches the user (#127)", () => {
     );
   });
 });
+
+const run = (account: string, fetched: number, promosFound?: number) => ({
+  account,
+  fetched,
+  triaged: fetched,
+  filtersSynced: 0,
+  ...(promosFound === undefined ? {} : { promosFound }),
+  errors: [],
+});
+
+// A20: one line for the whole run — the new mail over every account, and the
+// codes found in it, with the way to review them.
+describe("the sync-done toast", () => {
+  test("counts new mail and codes, and Review goes to the promo codes", async () => {
+    const ws = startSync();
+
+    act(() => {
+      ws.receive({
+        type: "sync.finished",
+        runs: [run(ACCOUNT, 10, 2), run("other@example.com", 4, 1)],
+      });
+    });
+
+    await screen.findByText("Sync done · 14 new, 3 codes to review");
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/promo-codes"));
+  });
+
+  test("with no codes, says only the new mail and offers nothing", async () => {
+    const ws = startSync();
+
+    act(() => {
+      // An API older than A20 sends no `promosFound`; it reads as none.
+      ws.receive({ type: "sync.finished", runs: [run(ACCOUNT, 14)] });
+    });
+
+    await screen.findByText("Sync done · 14 new");
+    expect(screen.queryByRole("button", { name: "Review" })).toBeNull();
+  });
+});

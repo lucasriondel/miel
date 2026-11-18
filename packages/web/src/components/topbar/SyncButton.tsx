@@ -1,4 +1,3 @@
-import { Sheen } from "@/components/ui/sheen";
 import {
   formatRangeLabel,
   RANGE_MODE_NOUNS,
@@ -19,10 +18,10 @@ const ReloadIcon = ({ spin }: { spin: boolean }) => (
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2.5"
+    strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
-    className={`h-[17px] w-[17px] ${spin ? "animate-spin" : ""}`}
+    className={`h-3.5 w-3.5 ${spin ? "animate-spin" : ""}`}
     aria-hidden
   >
     <path d="M21 12a9 9 0 1 1-3-6.7" />
@@ -39,7 +38,7 @@ const ReloadIcon = ({ spin }: { spin: boolean }) => (
  * itself anyway.
  */
 const PeriodNoun = ({ mode }: { mode: RangeMode }) => (
-  <span className="relative grid justify-items-center">
+  <span className="relative grid justify-items-start">
     {RANGE_MODE_NOUNS.map((noun) => (
       <span
         key={noun}
@@ -78,13 +77,12 @@ export const SyncButton = ({ range, isRunning, onSync, disabled }: Props) => (
     onClick={onSync}
     disabled={disabled || isRunning}
     aria-label={`Sync ${formatRangeLabel(range)}`}
-    className={`group relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-gradient-to-br from-gousse-accent to-gousse-accent/80 px-3 py-2.5 text-[13.5px] font-bold text-white shadow-[0_6px_16px_rgb(var(--gousse-accent)/0.32)] transition-[filter,transform] duration-150 hover:brightness-[1.04] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-70 sm:px-4 ${
-      isRunning ? "sync-running" : ""
-    }`}
+    className="relative inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-gousse-primary pr-2.5 pl-[9px] text-xs font-semibold text-gousse-on-primary transition-colors duration-150 hover:bg-gousse-primary-hover active:bg-gousse-primary-pressed disabled:cursor-not-allowed disabled:opacity-70"
   >
-    <Sheen />
     <ReloadIcon spin={isRunning} />
-    <span className="relative hidden sm:inline">Sync</span>
-    <PeriodNoun mode={range.mode} />
+    <span className="flex items-center gap-[0.25em]">
+      <span className="relative hidden sm:inline">{isRunning ? "Syncing" : "Sync"}</span>
+      <PeriodNoun mode={range.mode} />
+    </span>
   </button>
 );
