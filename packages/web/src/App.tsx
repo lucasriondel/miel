@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Sidebar } from "./components/Sidebar";
+import { AppSidebar } from "./components/sidebar/AppSidebar";
+import type { SidebarPlace } from "./components/sidebar/SidebarMailboxNav";
 import { useDateRange, type DateRange, type RangeMode } from "./features/sync/useDateRange";
 import { useFocusSync } from "./features/sync/useFocusSync";
-import { useAccounts } from "./api/queries";
+import { useAccounts, useAllMessages, useSuggestedPromos } from "./api/queries";
 import { useConnectResult } from "./hooks/useConnectResult";
 import { OnboardingGate } from "./features/onboarding/OnboardingGate";
 import { TriageActivityProvider } from "./contexts/TriageActivityContext";
 import { useScrollRestoration } from "./hooks/useScrollRestoration";
-import { AppShell, AppMain, TopBar, AppContent } from "@/components/ui/app-shell";
-import { TopBarNodeProvider } from "./features/shell/PageTopBar";
+import { ScrollRegionContext } from "./features/shell/scrollRegion";
+import { SidebarToggleContext } from "./features/shell/sidebarToggle";
+import { ComposeProvider, useCompose } from "./features/compose/ComposeProvider";
+import { inboxSearch } from "./features/inbox/inboxLocation";
+import { mailboxFromSearch, type Mailbox } from "./features/inbox/mailbox";
+import { isTypingTarget } from "./features/shell/isTypingTarget";
 import {
   readDefaultViewPreference,
   readLastAccountId,
@@ -30,17 +35,26 @@ export interface LayoutContext {
   goToday: () => void;
   setViewMode: (mode: RangeMode) => void;
   selectedAccountEmail: string | undefined;
+  /** Which list the inbox page shows: the inbox, or Done (Gmail's archive). */
+  mailbox: Mailbox;
 }
 
 /** Tailwind's `sm` breakpoint, below which `SidebarShell` renders as a drawer. */
 const DRAWER_VIEWPORT = "(max-width: 639px)";
 const isDrawerViewport = () => window.matchMedia(DRAWER_VIEWPORT).matches;
 
-export const App = () => {
+export const App = () => (
+  <ComposeProvider>
+    <AppLayout />
+  </ComposeProvider>
+);
+
+const AppLayout = () => {
   const accounts = useAccounts();
   const { accountId: routeAccountId } = useParams<{ accountId?: string }>();
   const navigate = useNavigate();
-  const { pathname, key: locationKey } = useLocation();
+  const { pathname, search, key: locationKey } = useLocation();
+  const compose = useCompose();
   const [params] = useSearchParams();
   // On the layout, not on a page: the OAuth callback lands on whichever page
   // the connect started from. A failure that left us with zero accounts comes
@@ -61,16 +75,13 @@ export const App = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => isDrawerViewport() || localStorage.getItem("miel.sidebar.collapsed") === "1",
   );
-  // The app's one scrolling element, `AppContent`. Nothing above it scrolls,
-  // so returning from a message — or from a delete that leaves one — comes
-  // back to the offset the list was left at (#95). Held as state through a
-  // callback ref rather than a ref object: the top bar renders before the
-  // region and needs a re-render once there is a node to watch.
+  // The page's scrolling body, which each page's `PageLayout` hands up through
+  // `ScrollRegionContext`: returning from a message — or from a delete that
+  // leaves one — comes back to the offset the list was left at (#95). State,
+  // not a ref, so restoration re-binds when a page swaps its body.
   const [contentNode, setContentNode] = useState<HTMLElement | null>(null);
   useScrollRestoration(contentNode);
-  // The slot inside the bar that pages portal their controls into — see the
-  // note where it is rendered for why it is a slot and not the bar itself.
-  const [barNode, setBarNode] = useState<HTMLElement | null>(null);
+  const mailbox = mailboxFromSearch(search);
   const onToggleSidebar = useCallback(() => {
     setSidebarCollapsed((c) => {
       const next = !c;
@@ -112,6 +123,33 @@ export const App = () => {
 
   useFocusSync(selectedAccount?.email);
 
+  // The sidebar's two counts: unread mail in the period on screen (the same
+  // read the inbox makes, so it costs nothing extra while no label is picked)
+  // and the promo codes waiting to be reviewed.
+  const periodMessages = useAllMessages({
+    accountId: selectedAccountId,
+    internalDateFrom: range.start.toISOString(),
+    internalDateTo: range.end.toISOString(),
+  });
+  const inboxCount = periodMessages.items.filter((m) =>
+    m.labels.some((l) => l.name === "UNREAD"),
+  ).length;
+  const promoCount = useSuggestedPromos().data?.items.length;
+
+  // `C` opens a new message from the mailbox on screen — unless the keystroke
+  // is someone typing.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.key !== "c" && e.key !== "C") return;
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      compose.openNew(selectedAccountId);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [compose, selectedAccountId]);
+
   // Shift+U cycles accounts. It only navigates: the effect above derives
   // `selectedAccountId` from the route, and setting the state here as well ran
   // ahead of the URL — that effect then saw the old route and put the old
@@ -145,6 +183,7 @@ export const App = () => {
       goToday,
       setViewMode,
       selectedAccountEmail: selectedAccount?.email,
+      mailbox,
     }),
     [
       selectedAccountId,
@@ -157,64 +196,96 @@ export const App = () => {
       goToday,
       setViewMode,
       selectedAccount?.email,
+      mailbox,
     ],
   );
 
+  // Picking a label filters the inbox (not Done) and keeps the period.
   const handleSelectLabel = useCallback(
     (id: string | undefined) => {
       setSelectedLabelId(id);
       if (!selectedAccountId) return;
-      const query = id ? `?label=${encodeURIComponent(id)}` : "";
-      navigate(`/account/${selectedAccountId}${query}`);
+      navigate(
+        `/account/${selectedAccountId}${scopedSearch(search, { label: id ?? null, mailbox: null })}`,
+      );
     },
-    [selectedAccountId, navigate],
+    [selectedAccountId, navigate, search],
   );
+
+  const handleSelectAccount = useCallback(
+    (id: string) => navigate(`/account/${id}`, { replace: true }),
+    [navigate],
+  );
+
+  const accountScope = selectedAccountId ? `/account/${selectedAccountId}` : undefined;
+  const current: SidebarPlace = pathname.startsWith("/promo-codes")
+    ? "promo-codes"
+    : pathname.startsWith("/settings")
+      ? "settings"
+      : pathname.startsWith("/logs")
+        ? "logs"
+        : pathname.endsWith("/filters")
+          ? "filters"
+          : mailbox === "done"
+            ? "done"
+            : selectedLabelId
+              ? null
+              : "inbox";
 
   return (
     <TriageActivityProvider>
       {/* Mounted on the layout, so the gate covers every route below it. */}
       <OnboardingGate error={gateError} onRetry={clearGateError} />
-      <AppShell>
-        <Sidebar
-          selectedAccountId={selectedAccountId}
-          selectedLabelId={selectedLabelId}
-          onSelectLabel={handleSelectLabel}
-          collapsed={sidebarCollapsed}
-          onToggle={onToggleSidebar}
-        />
-        <AppMain>
-          {/* The bar is the layout's; each page fills it through `PageTopBar`.
-              Its one child here is the slot that content portals into, and it
-              exists so the collapsed sidebar's open button — which the bar
-              renders ahead of its children — stays leftmost. A portal appends
-              to its container, so portalling into the `<header>` put the page's
-              controls wherever the DOM happened to be when they mounted: with
-              the sidebar open there is no trigger yet, and collapsing later
-              appended it *after* them, at the far right. A slot pins the order.
-              `display: contents` so `TopBarStart`/`TopBarEnd` stay flex items
-              of the bar itself — their `ml-auto` and the centred period nav's
-              absolute positioning both resolve against the header.
-
-              The wider gap is the trigger's alone: the bar's default `gap-2`
-              leaves two round controls (the open button, the account
-              switcher's avatar) reading as one clump, and the switcher's own
-              `-ml-1.5` — which aligns its avatar with the content below when
-              the trigger is absent — closes the rest of it. */}
-          <TopBar
+      <SidebarToggleContext.Provider value={sidebarCollapsed ? onToggleSidebar : undefined}>
+        <div className="flex h-screen w-full overflow-hidden bg-gousse-bg text-gousse-ink">
+          <AppSidebar
+            account={selectedAccount}
+            selectedLabelId={selectedLabelId}
+            onSelectLabel={handleSelectLabel}
+            onSelectAccount={handleSelectAccount}
+            onCompose={() => compose.openNew(selectedAccountId)}
             collapsed={sidebarCollapsed}
             onToggle={onToggleSidebar}
-            scrollNode={contentNode}
-            className={sidebarCollapsed ? "gap-4" : undefined}
-          >
-            <div ref={setBarNode} className="contents" />
-          </TopBar>
-          <AppContent ref={setContentNode} className="flex flex-col overflow-x-hidden">
-            <TopBarNodeProvider value={barNode}>
+            inboxHref={
+              accountScope
+                ? `${accountScope}${scopedSearch(search, { label: null, mailbox: null })}`
+                : undefined
+            }
+            doneHref={
+              accountScope
+                ? `${accountScope}${scopedSearch(search, { label: null, mailbox: "done" })}`
+                : undefined
+            }
+            current={current}
+            inboxCount={inboxCount}
+            promoCount={promoCount}
+          />
+          {/* Each page draws its own header above its own scroll body; the
+              layout only learns which node that body is, for restoration. */}
+          <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <ScrollRegionContext.Provider value={setContentNode}>
               <Outlet context={outletContext} />
-            </TopBarNodeProvider>
-          </AppContent>
-        </AppMain>
-      </AppShell>
+            </ScrollRegionContext.Provider>
+          </main>
+        </div>
+      </SidebarToggleContext.Provider>
     </TriageActivityProvider>
   );
+};
+
+/**
+ * The inbox's scope params from `search`, with `label` and `mailbox` set (or
+ * cleared with `null`) — how the sidebar's links keep the period on screen.
+ */
+const scopedSearch = (
+  search: string,
+  patch: { label: string | null; mailbox: Mailbox | null },
+): string => {
+  const params = new URLSearchParams(inboxSearch(search));
+  if (patch.label) params.set("label", patch.label);
+  else params.delete("label");
+  if (patch.mailbox === "done") params.set("mailbox", "done");
+  else params.delete("mailbox");
+  const query = params.toString();
+  return query ? `?${query}` : "";
 };

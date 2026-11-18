@@ -20,12 +20,13 @@ export const router = createBrowserRouter(
       children: [
         { index: true, element: <InboxPage /> },
         {
+          // The list and the reader are one screen: an open message is the
+          // inbox's child route, drawn in the reader column beside the list
+          // (`InboxPage` renders the `Outlet`), so the list stays mounted —
+          // and keeps its scroll — while messages are read one after another.
           path: "account/:accountId",
           element: <InboxPage />,
-        },
-        {
-          path: "account/:accountId/messages/:gmailMessageId",
-          element: <MessageDetailPage />,
+          children: [{ path: "messages/:gmailMessageId", element: <MessageDetailPage /> }],
         },
         { path: "account/:accountId/filters", element: <FiltersPage /> },
         // Top-level, beside logs and settings: a saved promo belongs to no

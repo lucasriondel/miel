@@ -23,7 +23,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { AccountPicker } from "../../components/AccountPicker";
-import { AccountSwitcher } from "../../components/topbar/AccountSwitcher";
+import { SidebarAccountSwitcher } from "../../components/sidebar/SidebarAccountSwitcher";
 import { AccountsManager } from "../settings/AccountsManager";
 import { AutomaticSyncManager } from "../settings/AutomaticSyncManager";
 import { queryKeys } from "../../api/queries";
@@ -77,7 +77,7 @@ const mount = (ui: ReactElement, seed: Seed = {}) => {
 
 const accountPicker: ReactElement = <AccountPicker value={undefined} onChange={() => {}} />;
 const accountSwitcher: ReactElement = (
-  <AccountSwitcher selectedAccountId={undefined} onSelectAccount={() => {}} />
+  <SidebarAccountSwitcher selectedAccountId={undefined} onSelectAccount={() => {}} />
 );
 const accountsCard: ReactElement = <AccountsManager />;
 const automaticSyncCard: ReactElement = <AutomaticSyncManager />;
@@ -85,7 +85,7 @@ const automaticSyncCard: ReactElement = <AutomaticSyncManager />;
 /** Each surface that can be reached with an account list of zero. */
 const ZERO_ACCOUNT_SURFACES: Array<{ name: string; ui: ReactElement }> = [
   { name: "the account picker", ui: accountPicker },
-  { name: "the topbar account switcher", ui: accountSwitcher },
+  { name: "the sidebar account switcher", ui: accountSwitcher },
   { name: "the settings accounts card", ui: accountsCard },
   { name: "the automatic-sync card", ui: automaticSyncCard },
 ];
@@ -117,12 +117,10 @@ describe("fallbacks the gate makes unreachable", () => {
     expect(screen.queryByText(/no accounts/i)).toBeNull();
   });
 
-  test("the topbar account switcher renders nothing at all", () => {
+  test("the sidebar account switcher renders nothing at all", () => {
     const view = mount(
-      <AccountSwitcher selectedAccountId={undefined} onSelectAccount={() => {}} />,
-      {
-        accounts: [],
-      },
+      <SidebarAccountSwitcher selectedAccountId={undefined} onSelectAccount={() => {}} />,
+      { accounts: [] },
     );
 
     // Not an empty state — nothing. Its remaining guard is for a
@@ -147,16 +145,13 @@ describe("what must survive", () => {
     mount(<AccountsManager />, { accounts: [] });
 
     expect(screen.getByText("No accounts yet")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Connect with Google" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Connect a Gmail account" })).toBeDefined();
   });
 
   test("surviving zero-account copy points at the Google flow", () => {
     mount(<AccountsManager />, { accounts: [] });
 
-    expect(screen.getByText("Connect a Gmail account below to start syncing it.")).toBeDefined();
-    expect(
-      screen.getByText("Connect another Gmail account with Google to start syncing it."),
-    ).toBeDefined();
+    expect(screen.getByText("Connect a Gmail account to start syncing it.")).toBeDefined();
   });
 
   test("a failed accounts request still reads as an error, not as empty", async () => {

@@ -1,12 +1,12 @@
-import { AlertTriangle, Check, Info, Loader2, X } from "lucide-react";
+import { Check, CircleAlert, Info, Loader2 } from "lucide-react";
 
 type ToastIconType = "success" | "error" | "info" | "warning" | "loading";
 
 const GLYPHS = {
   success: Check,
-  error: X,
+  error: CircleAlert,
   info: Info,
-  warning: AlertTriangle,
+  warning: CircleAlert,
   loading: Loader2,
 } as const;
 
@@ -20,8 +20,8 @@ export const ToastIcon = ({ type }: { type: ToastIconType }) => {
   const Glyph = GLYPHS[type];
   return (
     <Glyph
-      className={`h-4 w-4 ${type === "loading" ? "animate-spin motion-reduce:animate-none" : ""}`}
-      strokeWidth={2.5}
+      className={`h-3.5 w-3.5 ${type === "loading" ? "animate-spin motion-reduce:animate-none" : ""}`}
+      strokeWidth={2}
       aria-hidden="true"
     />
   );

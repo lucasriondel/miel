@@ -55,9 +55,8 @@ describe("the four ways off a message", () => {
 });
 
 /**
- * Every file that is only ever mounted on the message-detail page. The topbar
- * folder is deliberately excluded past the detail-only back button: the inbox
- * shares it, and switching accounts from there *is* a navigation to an inbox.
+ * Every file that is only ever mounted on the message-detail page (the reader).
+ * Its back button lives in the page itself now, beside the actions.
  */
 const surfaceFiles = (): Array<[string, string]> => {
   const dir = join(web, "features", "message-detail");
@@ -70,10 +69,6 @@ const surfaceFiles = (): Array<[string, string]> => {
   return [
     ["pages/MessageDetailPage.tsx", detailPage],
     ["components/MessageActions.tsx", messageActions],
-    [
-      "components/topbar/BackToInboxButton.tsx",
-      read("components", "topbar", "BackToInboxButton.tsx"),
-    ],
     ...detailOnly,
   ];
 };

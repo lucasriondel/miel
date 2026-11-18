@@ -1,12 +1,13 @@
 /**
- * The layout's frame (#95, and the app-shell move).
+ * The layout's frame (#95, and the redesign's shell).
  *
  * Three things a page relies on the layout for, rendered rather than read off
- * the source: the content column has exactly one scrolling element and the top
- * bar sits outside it (so the bar never scrolls away and `useScrollRestoration`
- * has one offset to save); a page's `PageTopBar` lands its controls inside that
- * bar; and the offset the region was left at comes back on a history pop. The
- * decisions inside the restoration itself are `hooks/useScrollRestoration.test.ts`'s.
+ * the source: a page's header sits above its own body, which is the content
+ * column's one scrolling element (so the header never scrolls away and
+ * `useScrollRestoration` has one offset to save); the header leaves with its
+ * page; and the offset the body was left at comes back on a history pop, onto
+ * the body the page draws again. The decisions inside the restoration itself
+ * are `hooks/useScrollRestoration.test.ts`'s.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -15,7 +16,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CREDENTIAL_PROVIDERS } from "@miel/core/providerModels";
 import { App, type LayoutContext } from "./App";
 import { queryKeys } from "./api/queries";
-import { PageTopBar } from "./features/shell/PageTopBar";
+import { PageHeader } from "./features/shell/PageHeader";
+import { PageLayout } from "./features/shell/PageLayout";
 import {
   DEFAULT_VIEW_STORAGE_KEY,
   LAST_ACCOUNT_STORAGE_KEY,
@@ -79,14 +81,15 @@ const seeded = (accounts: Account[] = [ACCOUNT]) => {
   return qc;
 };
 
-/** A page that puts one control on the bar and one link in its body. */
+/** A page with one control in its header and two links in its body. */
 const ProbePage = ({ name }: { name: string }) => {
   const navigate = useNavigate();
   return (
-    <>
-      <PageTopBar>
-        <button type="button">{`${name} action`}</button>
-      </PageTopBar>
+    <PageLayout
+      header={
+        <PageHeader title={name} trailing={<button type="button">{`${name} action`}</button>} />
+      }
+    >
       <div style={{ height: 4000 }} data-testid={`${name}-body`}>
         <button type="button" onClick={() => navigate("/settings")}>
           go to settings
@@ -95,7 +98,7 @@ const ProbePage = ({ name }: { name: string }) => {
           go back
         </button>
       </div>
-    </>
+    </PageLayout>
   );
 };
 
@@ -117,51 +120,52 @@ const renderApp = () =>
 const scrollRegions = (root: ParentNode) => root.querySelectorAll(".overflow-y-auto");
 
 describe("the layout's frame", () => {
-  test("the content column has one scrolling element, and the bar sits outside it", async () => {
+  test("a page's body is the column's one scrolling element, with its header outside it", async () => {
     renderApp();
     const main = await screen.findByRole("main");
     const regions = scrollRegions(main);
     expect(regions).toHaveLength(1);
     const region = regions[0]!;
-    expect(region.contains(screen.getByTestId("inbox-body"))).toBe(true);
-    const bar = screen.getByRole("banner");
-    expect(main.contains(bar)).toBe(true);
-    expect(region.contains(bar)).toBe(false);
+    expect(region.contains(await screen.findByTestId("inbox-body"))).toBe(true);
+    const header = screen.getByRole("heading", { name: "inbox" }).closest("header")!;
+    expect(main.contains(header)).toBe(true);
+    expect(region.contains(header)).toBe(false);
+    expect(header.contains(screen.getByRole("button", { name: "inbox action" }))).toBe(true);
   });
 
-  test("a page's PageTopBar lands its controls inside the bar", async () => {
+  test("a page's header leaves with its page", async () => {
     renderApp();
-    const bar = await screen.findByRole("banner");
-    await waitFor(() =>
-      expect(bar.contains(screen.getByRole("button", { name: "inbox action" }))).toBe(true),
-    );
-    // And leaves with the page: the settings page fills the same bar.
+    await screen.findByRole("button", { name: "inbox action" });
     fireEvent.click(screen.getByRole("button", { name: "go to settings" }));
-    await waitFor(() =>
-      expect(bar.contains(screen.getByRole("button", { name: "settings action" }))).toBe(true),
-    );
+    await screen.findByRole("button", { name: "settings action" });
     expect(screen.queryByRole("button", { name: "inbox action" })).toBeNull();
+    expect(scrollRegions(screen.getByRole("main"))).toHaveLength(1);
   });
 
-  test("the offset the region was left at comes back on a history pop", async () => {
+  test("the offset the body was left at comes back on a history pop", async () => {
     renderApp();
     const main = await screen.findByRole("main");
-    const region = scrollRegions(main)[0] as HTMLElement;
     await screen.findByTestId("inbox-body");
     // happy-dom lays nothing out, and the restore waits for the region to be
     // tall enough to hold the offset before applying it — so give it a height.
-    Object.defineProperty(region, "scrollHeight", { value: 4000, configurable: true });
-    Object.defineProperty(region, "clientHeight", { value: 600, configurable: true });
+    const sized = () => {
+      const region = scrollRegions(main)[0] as HTMLElement;
+      Object.defineProperty(region, "scrollHeight", { value: 4000, configurable: true });
+      Object.defineProperty(region, "clientHeight", { value: 600, configurable: true });
+      return region;
+    };
 
-    region.scrollTop = 120;
-    fireEvent.scroll(region);
+    const inbox = sized();
+    inbox.scrollTop = 120;
+    fireEvent.scroll(inbox);
     fireEvent.click(screen.getByRole("button", { name: "go to settings" }));
     await screen.findByTestId("settings-body");
-    expect(region.scrollTop).toBe(0);
+    expect(sized().scrollTop).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: "go back" }));
     await screen.findByTestId("inbox-body");
-    await waitFor(() => expect(region.scrollTop).toBe(120));
+    const back = sized();
+    await waitFor(() => expect(back.scrollTop).toBe(120));
   });
 });
 
