@@ -77,14 +77,20 @@ describe("the order an operator performs them in", () => {
     expect(client).toBeGreaterThan(consent);
   });
 
-  test("registers the redirect URI on the client, then fills in the environment", () => {
+  test("registers the redirect URI on the client, then hands the three values to miel", () => {
     const redirect = stepMatching(/redirect URI/i);
     const env = stepMatching(/GOOGLE_CLIENT_SECRET/);
     expect(redirect).toBeGreaterThan(stepMatching(/Web application/));
     expect(env).toBeGreaterThan(redirect);
-    // The variables are read once at startup, so the walkthrough has to end
-    // with the restart or the gate the reader is looking at never clears.
-    expect(GOOGLE_OAUTH_SETUP_STEPS.at(-1)!.detail).toMatch(/restart/i);
+    const last = GOOGLE_OAUTH_SETUP_STEPS.at(-1)!;
+    // The app's own form is the way in, and it needs no restart; the
+    // environment is the fallback, which is read once at startup and does.
+    expect(last.title).toMatch(/into miel/);
+    expect(last.detail).toMatch(/no restart/i);
+    expect(last.detail).toMatch(/restart the API/);
+    // Saving a different client later disconnects every mailbox — the one
+    // consequence a reader cannot discover until it has happened.
+    expect(last.detail).toMatch(/reconnect/);
   });
 });
 

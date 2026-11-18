@@ -82,7 +82,7 @@ Open **https://miel.localhost/app** and click *Connect with Google*, then open *
 
 | Key | How to get it |
 | --- | --- |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | An OAuth client of your own, made once in the Google Cloud console — [Creating the Google OAuth client](#creating-the-google-oauth-client) walks through it. The redirect URI already defaults to the local one. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | Optional. An OAuth client of your own, made once in the Google Cloud console — [Creating the Google OAuth client](#creating-the-google-oauth-client) walks through it. It is normally pasted into the app's first-run setup instead; these are the fallback an install with no client saved uses. The redirect URI already defaults to the local one. |
 | `API_SECRET` / `VITE_API_SECRET` | any random string — **the two must match** (the web app sends it as a bearer token) |
 | `TOKEN_ENCRYPTION_KEY` | `openssl rand -base64 32`. Optional in dev, required in production. |
 
@@ -99,7 +99,9 @@ miel signs into Gmail with an OAuth client of *yours* — there is no shared one
 3. **Configure the OAuth consent screen.** *APIs & Services → OAuth consent screen*, user type **External**. Leave it in **Testing** — personal use needs no verification review — and add every Gmail address you plan to connect as a test user, under *Audience*. An address that is not listed ends the consent flow in `access_denied`.
 4. **Create an OAuth client ID of type Web application.** *APIs & Services → Credentials → Create credentials → OAuth client ID*, application type **Web application**. It is the only type with somewhere to register the callback URL below; the name is only shown on the consent screen.
 5. **Register the redirect URI on that client.** Add `http://localhost:5531/auth/google/callback` under *Authorized redirect URIs* for a local run, and for a deployment the same `/auth/google/callback` path on the public origin the API is reached at (`DEPLOY.md` §2 has the deployed form — both URIs can live on one client). It must match `GOOGLE_REDIRECT_URI` **byte for byte** — scheme, host, path, no trailing slash — or Google refuses the sign-in with `redirect_uri_mismatch` before miel is reached at all.
-6. **Copy the client ID and secret into `.env`, then restart the API.** Client id → `GOOGLE_CLIENT_ID`, client secret → `GOOGLE_CLIENT_SECRET`, the URI you just registered → `GOOGLE_REDIRECT_URI`. The three are read once at startup, so restart the API; the first-run setup step clears itself on its next check.
+6. **Paste the client ID, secret and redirect URI into miel.** The first-run setup's *Google* step asks for all three; save, and the next sign-in uses them — no restart. They are stored in Postgres, the secret encrypted with `TOKEN_ENCRYPTION_KEY`. To keep them in the environment instead, set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI` in `.env` and restart the API — a client saved in the app always takes precedence over those, so an existing `.env` setup keeps working until someone saves one.
+
+**Changing the client disconnects every mailbox.** A Google grant belongs to the client that issued it, so once a different client ID is in effect each connected account has to *Connect with Google* again. The setup step says how many accounts that is before you save; nothing is deleted, so putting the old client back revives them.
 
 `invalid_client` at the consent screen means the id or the secret is wrong; `redirect_uri_mismatch` means step 5 is. Both are Google's own errors, raised before the browser comes back, so nothing in miel's logs explains them.
 
@@ -145,8 +147,9 @@ bun run src/index.ts sync --since 7d
 The root `docker-compose.yml` builds and runs the whole stack — Postgres, `@miel/api`, `@miel/web` — in one shot. This is the fastest way to self-host without installing Bun locally.
 
 ```bash
-cp .env.example .env    # GOOGLE_CLIENT_ID/SECRET, API_SECRET/VITE_API_SECRET (must match),
-                        # TOKEN_ENCRYPTION_KEY — no AI credential goes here
+cp .env.example .env    # API_SECRET/VITE_API_SECRET (must match), TOKEN_ENCRYPTION_KEY —
+                        # no AI credential goes here, and the Google client is
+                        # entered in the app (the GOOGLE_* keys are a fallback)
 
 docker compose up -d --build
 ```
@@ -159,7 +162,7 @@ This is a separate file from `docker-compose.dev.yml`, which only starts Postgre
 
 ## Deploying
 
-`DEPLOY.md` documents the Dokploy setup used for the hosted instance (per-service deploys, Traefik path routing, Cloudflare Access). Production also needs `WEB_ORIGIN`, a production `GOOGLE_REDIRECT_URI`, and a real `TOKEN_ENCRYPTION_KEY`.
+`DEPLOY.md` documents the Dokploy setup used for the hosted instance (per-service deploys, Traefik path routing, Cloudflare Access). Production also needs `WEB_ORIGIN` and a real `TOKEN_ENCRYPTION_KEY`, and a Google client whose redirect URI is the production one — entered in the app, or as `GOOGLE_REDIRECT_URI` and its two siblings.
 
 ## Contributing
 

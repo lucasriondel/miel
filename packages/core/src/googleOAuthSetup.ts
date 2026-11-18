@@ -35,7 +35,12 @@ export const GOOGLE_OAUTH_CALLBACK_PATH = "/auth/google/callback";
  */
 export const DEV_GOOGLE_REDIRECT_URI = `http://localhost:5531${GOOGLE_OAUTH_CALLBACK_PATH}`;
 
-/** The three variables the API reads at startup, in the order they are set. */
+/**
+ * The three variables the API falls back to when no client was saved in the app,
+ * in the order they are set. The app's own Google step (stored in the database)
+ * takes precedence over them; they remain for a deployment configured before
+ * that, and for an operator who would rather keep the client in `.env`.
+ */
 export const GOOGLE_OAUTH_ENV_KEYS = [
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
@@ -82,11 +87,11 @@ export const GOOGLE_OAUTH_SETUP_STEPS: readonly GoogleOAuthSetupStep[] = [
   },
   {
     title: "Register the redirect URI on that client",
-    detail: `Add ${DEV_GOOGLE_REDIRECT_URI} under Authorized redirect URIs for a local run, and for a deployment the same ${GOOGLE_OAUTH_CALLBACK_PATH} path on the public origin the API is reached at. It must match GOOGLE_REDIRECT_URI byte for byte — scheme, host, path, no trailing slash — or Google refuses the sign-in with redirect_uri_mismatch before miel is reached at all.`,
+    detail: `Add ${DEV_GOOGLE_REDIRECT_URI} under Authorized redirect URIs for a local run, and for a deployment the same ${GOOGLE_OAUTH_CALLBACK_PATH} path on the public origin the API is reached at. It must match the redirect URI miel is given (the Redirect URI field in the next step, or GOOGLE_REDIRECT_URI) byte for byte — scheme, host, path, no trailing slash — or Google refuses the sign-in with redirect_uri_mismatch before miel is reached at all.`,
   },
   {
-    title: "Copy the client ID and secret into .env, then restart the API",
+    title: "Paste the client ID, secret and redirect URI into miel",
     detail:
-      "Put the client id in GOOGLE_CLIENT_ID and the client secret in GOOGLE_CLIENT_SECRET in the .env file at the root of the deployment, and set GOOGLE_REDIRECT_URI to the URI you just registered. The three are read once at startup, so restart the API — the setup step clears itself on its next check.",
+      "In miel's Google setup step, paste the client id, the client secret and the redirect URI you just registered, and save. They are stored in the database, the secret encrypted, and the next sign-in uses them — no restart. To keep them in the environment instead, put them in GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI in the .env file and restart the API; a client saved in the app always takes precedence over those. Changing the client later disconnects every mailbox, because a Google grant belongs to the client that issued it: each one has to reconnect.",
   },
 ];

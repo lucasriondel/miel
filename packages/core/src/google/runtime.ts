@@ -8,8 +8,9 @@
  * exchangeCode / profileFromToken) and `runWithApp` for anything that touches
  * the Gmail services or Claude.
  */
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { runPromiseRethrow } from "../util/effect";
+import { StoresLive } from "../stores/postgres";
 import { GoogleAuthLive } from "./GoogleAuth";
 import { AppLive } from "./layers";
 import {
@@ -42,7 +43,9 @@ type AppServices =
 
 /** Run an effect needing only `GoogleAuth`. */
 export function runWithGoogleAuth<A, E>(eff: Effect.Effect<A, E, GoogleAuth>): Promise<A> {
-  return runPromiseRethrow(Effect.provide(eff, GoogleAuthLive));
+  // The OAuth client is read from the stores (database first, environment as
+  // the fallback), so they go under the layer.
+  return runPromiseRethrow(Effect.provide(eff, Layer.provide(GoogleAuthLive, StoresLive)));
 }
 
 /** Run an effect needing any of the Google services and/or Claude. */

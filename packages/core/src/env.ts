@@ -17,14 +17,21 @@ const EnvSchema = z.object({
   // has not pasted does not exist and the Claude service fails with
   // ClaudeTokenMissingError at call time. See
   // docs/adr/0001-provider-credentials-in-postgres.md.
-  // In-app Google OAuth (Web application client). Required in production; in dev
-  // they default to empty and GoogleAuth surfaces OAuthConfigError at use-time.
-  GOOGLE_CLIENT_ID: isProd ? z.string().min(1) : z.string().default(""),
-  GOOGLE_CLIENT_SECRET: isProd ? z.string().min(1) : z.string().default(""),
+  // In-app Google OAuth (Web application client). Optional everywhere: the
+  // client is normally entered in the app (onboarding's Google step, stored in
+  // `app_settings` + `encrypted_secrets`, see services/googleOAuthConfig.ts), and
+  // these are only the fallback an install with nothing stored uses — which is
+  // how a deployment configured before that keeps working untouched. Unset, and
+  // with nothing stored, GoogleAuth surfaces OAuthConfigError at use-time.
+  GOOGLE_CLIENT_ID: z.string().default(""),
+  GOOGLE_CLIENT_SECRET: z.string().default(""),
   // The dev default is the URI the setup walkthrough tells the reader to
   // register (#138), imported rather than spelled again: the two disagreeing is
-  // `redirect_uri_mismatch`, which surfaces at Google and never reaches us.
-  GOOGLE_REDIRECT_URI: isProd ? z.string().url() : z.string().default(DEV_GOOGLE_REDIRECT_URI),
+  // `redirect_uri_mismatch`, which surfaces at Google and never reaches us. In
+  // production there is no default — the public origin is the deployment's.
+  GOOGLE_REDIRECT_URI: isProd
+    ? z.string().default("")
+    : z.string().default(DEV_GOOGLE_REDIRECT_URI),
   // AES-256-GCM key (base64, 32 bytes) for refresh-token-at-rest. Required in
   // prod; in dev util/crypto falls back to plaintext with a one-time warning.
   TOKEN_ENCRYPTION_KEY: isProd ? z.string().min(1) : z.string().optional(),
