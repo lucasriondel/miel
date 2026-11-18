@@ -48,6 +48,7 @@ const ACCOUNT: Account = {
   id: "acc-1",
   email: "you@example.com",
   displayName: "You",
+  nickname: null,
   avatarUrl: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   lastSyncedAt: null,

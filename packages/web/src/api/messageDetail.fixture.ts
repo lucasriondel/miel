@@ -31,6 +31,7 @@ export function messageDetail(over: Partial<MessageDetail> = {}): MessageDetail 
     rawHeaders: null,
     labels: [],
     attachments: [],
+    snoozedUntil: null,
     latestTriageId: null,
     triageHistory: [],
     ...over,

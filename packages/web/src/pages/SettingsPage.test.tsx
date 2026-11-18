@@ -14,6 +14,7 @@ import type { ModelSettings } from "../api/types";
 
 import { SettingsPage } from "./SettingsPage";
 import { queryKeys } from "../api/queries";
+import { googleOAuthStatus } from "../api/googleOAuthStatus.fixture";
 
 // `fetch` is the seam, not the api client: a module mock is process-global and
 // would decide what the client means for every suite loaded after this one.
@@ -54,6 +55,7 @@ const renderAt = (url: string, { token = false } = {}) => {
     });
   }
   qc.setQueryData(queryKeys.accounts, []);
+  qc.setQueryData(queryKeys.googleOAuthConfig, googleOAuthStatus());
   qc.setQueryData(queryKeys.schedule, { enabled: true, intervalMinutes: 30, since: "24h" });
   qc.setQueryData(queryKeys.scheduleStatus, {
     enabled: true,

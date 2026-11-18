@@ -19,6 +19,7 @@ const makeMessage = (priority: Priority | null, idx: number): ListedMessage => (
   triageId: null,
   labels: [],
   attachments: [],
+  snoozedUntil: null,
 });
 
 describe("bucketMessages", () => {

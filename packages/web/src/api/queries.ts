@@ -45,6 +45,10 @@ export const queryKeys = {
   // list — which deliberately carries no bodies — stays the small payload it is.
   // Nothing invalidates it: the copy is a record and never changes.
   promoOriginal: (id: string) => ["promo-original", id] as const,
+  // Mail miel holds to send later (A12): its own root, since a scheduled send is
+  // not a message yet and nothing a message action does moves it.
+  scheduledSends: (accountId: string | undefined) =>
+    ["scheduled-sends", accountId ?? "_all"] as const,
   googleOAuthConfig: ["auth", "google", "config"] as const,
   claudeCodeToken: ["settings", "claude-code-token"] as const,
   providerCredential: (provider: string) => ["settings", "provider-credentials", provider] as const,
@@ -90,6 +94,8 @@ export interface ListMessagesParams {
   internalDateTo?: string;
   /** The Done view: archived mail only (`?archivedOnly=true`). */
   archivedOnly?: boolean;
+  /** The Snoozed view: snoozed threads only (`?snoozedOnly=true`), not period-scoped. */
+  snoozedOnly?: boolean;
 }
 
 export function useMessages(params: ListMessagesParams) {
@@ -131,6 +137,7 @@ export function useAllMessages(params: Omit<ListMessagesParams, "cursor">) {
           internalDateFrom: params.internalDateFrom,
           internalDateTo: params.internalDateTo,
           archivedOnly: params.archivedOnly ? "true" : undefined,
+          snoozedOnly: params.snoozedOnly ? "true" : undefined,
         },
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,

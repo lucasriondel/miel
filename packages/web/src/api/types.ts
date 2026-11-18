@@ -2,6 +2,8 @@ export interface Account {
   id: string;
   email: string;
   displayName: string | null;
+  /** This install's own name for the mailbox (`PATCH /accounts/:id`); Gmail is not told. */
+  nickname: string | null;
   avatarUrl: string | null;
   createdAt: string;
   lastSyncedAt: string | null;
@@ -51,6 +53,8 @@ export interface ListedMessage {
   triageId: string | null;
   labels: MessageLabel[];
   attachments: MessageAttachment[];
+  /** When a snoozed conversation comes back to the inbox; null when it is not snoozed. */
+  snoozedUntil: string | null;
 }
 
 export interface ListMessagesResponse {
@@ -83,6 +87,8 @@ export interface MessageDetail {
   rawHeaders: Record<string, string> | null;
   labels: MessageLabel[];
   attachments: MessageAttachment[];
+  /** When a snoozed conversation comes back to the inbox; null when it is not snoozed. */
+  snoozedUntil: string | null;
   latestTriageId: string | null;
   triageHistory: {
     id: string;
@@ -98,6 +104,8 @@ export interface SyncRunResult {
   fetched: number;
   triaged: number;
   filtersSynced: number;
+  /** Promo codes found in this run's new mail; 0 from an API that predates the field. */
+  promosFound: number;
   errors: string[];
 }
 
@@ -336,15 +344,44 @@ export interface ScheduleStatus {
 }
 
 /**
- * Whether the server can talk to Google at all (#120): the three `GOOGLE_*`
- * variables are environment, not a runtime setting, so this is the one piece of
- * onboarding the app can report but not fix. Names only — no values ever cross
- * the wire, one of the three being a client secret.
+ * The Google OAuth client the server signs into Gmail with (#120, A15): entered
+ * in the app and stored in the database, or — as the fallback, never mixed with
+ * a stored one — read from the three `GOOGLE_*` variables. The secret never
+ * crosses the wire; a stored one is described by a masked hint.
+ *
+ * `GET /auth/google/config` and `GET /settings/google-oauth` both answer it.
  */
 export interface GoogleOAuthConfigStatus {
   configured: boolean;
   /** The variable names that are unset, empty when `configured`. */
   missing: string[];
+  /** Where the client in effect comes from, or null when there is none. */
+  source: "database" | "environment" | null;
+  /** Not a secret: it appears in every consent URL. */
+  clientId: string | null;
+  redirectUri: string | null;
+  /** A masked hint of the stored secret; only for a database client. */
+  secretHint: string | null;
+  /** The redirect URI a local `bun dev` run registers. */
+  devRedirectUri: string;
+  /** The path every redirect URI must end in. */
+  callbackPath: string;
+  /** Connected accounts a *different* client would disconnect. */
+  accountsToReconnect: number;
+}
+
+/** What `PUT` and `DELETE /settings/google-oauth` answer. */
+export interface GoogleOAuthSaveResult extends GoogleOAuthConfigStatus {
+  clientChanged: boolean;
+  /** Mailboxes the change disconnected; each has to reconnect. */
+  reconnectRequired: number;
+}
+
+/** `PUT /settings/google-oauth`: a secret left out keeps the stored one. */
+export interface SaveGoogleOAuthInput {
+  clientId: string;
+  clientSecret?: string;
+  redirectUri: string;
 }
 
 /**
@@ -458,4 +495,37 @@ export type LogEntry = SyncLogEntry | TriageLogEntry;
 
 export interface LogsResponse {
   entries: LogEntry[];
+}
+
+export type ScheduledSendStatus = "pending" | "sending" | "sent" | "failed" | "cancelled";
+
+/**
+ * A message miel holds and sends itself at `sendAt` (A12) — Gmail's API has no
+ * scheduled send. `GET /compose/scheduled` lists the pending, sending and failed
+ * ones, soonest first; `error` is the reason a failed one gave up.
+ */
+export interface ScheduledSendView {
+  id: string;
+  accountId: string;
+  kind: "new" | "reply" | "forward";
+  sourceGmailMessageId: string | null;
+  sendAt: string;
+  status: ScheduledSendStatus;
+  attempts: number;
+  error: string | null;
+  sentAt: string | null;
+  sentMessageId: string | null;
+  threadId: string | null;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  /** The body's first line, at most 140 characters. */
+  preview: string;
+  attachmentCount: number;
+  createdAt: string;
+}
+
+export interface ScheduledSendsResponse {
+  items: ScheduledSendView[];
 }

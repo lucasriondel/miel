@@ -14,6 +14,7 @@ import type { MessageDetail } from "../../api/types";
 const base: MessageDetail = {
   accountId: "acc-1",
   accountEmail: "me@example.com",
+  snoozedUntil: null,
   gmailMessageId: "m-1",
   gmailThreadId: "t-1",
   fromEmail: "bob@corp.example",

@@ -22,6 +22,7 @@ import {
 const message = (over: Partial<MessageDetail>): MessageDetail => ({
   accountId: "acc-1",
   accountEmail: "me@example.com",
+  snoozedUntil: null,
   gmailMessageId: "msg-1",
   gmailThreadId: "thr-1",
   fromEmail: "sender@example.com",

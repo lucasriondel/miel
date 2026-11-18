@@ -1,9 +1,15 @@
 import type { Account } from "../../api/types";
 
 /**
- * What a mailbox is called on screen: the Google display name, or the
- * address's local part when Google gave none. miel stores no nickname of its
- * own, so the design's "Lucas — Pro" is this name and nothing more.
+ * What a mailbox is called on screen: the nickname given to it in miel
+ * (Settings › Mailboxes, `PATCH /accounts/:id`), else the Google display name,
+ * else the address's local part. Gmail is never told the nickname — it is this
+ * install's name for the mailbox, the design's "Lucas — Pro".
  */
-export const accountDisplayName = (account: Pick<Account, "displayName" | "email">): string =>
-  account.displayName?.trim() || account.email.split("@")[0] || account.email;
+export const accountDisplayName = (
+  account: Pick<Account, "displayName" | "email"> & { nickname?: string | null },
+): string =>
+  account.nickname?.trim() ||
+  account.displayName?.trim() ||
+  account.email.split("@")[0] ||
+  account.email;

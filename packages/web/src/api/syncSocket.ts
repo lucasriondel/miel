@@ -6,6 +6,7 @@ import * as syncEventSchemas from "@miel/core/schemas/syncEvents";
 import { apiBase, apiSecret } from "../config";
 import { queryKeys } from "./queries";
 import { startGoogleOAuth } from "./googleOAuth";
+import { syncDoneSummary } from "./syncDoneToast";
 
 // What the client parses, which is what the server emits plus the deprecated
 // `sync.claude_unavailable` spelling of the provider-unavailable event (#127) —
@@ -78,13 +79,7 @@ function dispatchEvent(
       return;
     }
     case "mails.fetched": {
-      if (event.count > 0) {
-        toast.info(
-          `Found ${event.count} new mail${event.count === 1 ? "" : "s"} for ${event.account}`,
-        );
-      } else {
-        toast.info(`No new mails for ${event.account}`);
-      }
+      // No toast per account: the run's one summary is `sync.finished`'s.
       qc.invalidateQueries({ queryKey: ["messages"] });
       return;
     }
@@ -137,6 +132,15 @@ function dispatchEvent(
       return;
     }
     case "sync.finished": {
+      const summary = syncDoneSummary(event.runs);
+      toast(summary.message, {
+        action:
+          summary.codes > 0
+            ? { label: "Review", onClick: () => navigate("/promo-codes") }
+            : undefined,
+      });
+      // The codes the toast counts are rows the inbox and the page draw.
+      if (summary.codes > 0) qc.invalidateQueries({ queryKey: ["promo-suggestions"] });
       qc.invalidateQueries({ queryKey: queryKeys.accounts });
       // The fetch phase re-reads each account's Gmail filters.
       qc.invalidateQueries({ queryKey: ["filters"] });
@@ -144,11 +148,11 @@ function dispatchEvent(
     }
     case "sync.error":
       if (event.message.includes("OAuth client credentials missing")) {
-        toast.error("Google OAuth credentials not configured", {
-          description: "Add your client_secret JSON in Settings → Google OAuth.",
+        toast.error("Google OAuth client not configured", {
+          description: "Enter it in Settings → Mailboxes.",
           action: {
             label: "Go to Settings",
-            onClick: () => navigate("/settings"),
+            onClick: () => navigate("/settings?tab=mailboxes"),
           },
           duration: 10000,
         });

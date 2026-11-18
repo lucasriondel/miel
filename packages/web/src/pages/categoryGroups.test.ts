@@ -42,6 +42,7 @@ const message = ({
   triageId: null,
   labels: labels.map(label),
   attachments: [],
+  snoozedUntil: null,
 });
 
 describe("categoryOf", () => {

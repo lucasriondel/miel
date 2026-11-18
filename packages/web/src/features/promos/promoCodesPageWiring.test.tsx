@@ -1050,6 +1050,7 @@ describe("the route and the way in", () => {
     id: MINE,
     email: "me@example.com",
     displayName: "Me",
+    nickname: null,
     avatarUrl: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     lastSyncedAt: null,

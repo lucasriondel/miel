@@ -52,6 +52,7 @@ const message = (history: MessageDetail["triageHistory"]): MessageDetail => ({
   rawHeaders: null,
   labels: [],
   attachments: [],
+  snoozedUntil: null,
   latestTriageId: history[0]?.id ?? null,
   triageHistory: history,
 });

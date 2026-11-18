@@ -3,6 +3,7 @@ import { MutationObserver, useMutation, useQueryClient } from "@tanstack/react-q
 import { toast } from "sonner";
 import { apiErrorMessage } from "./apiErrorMessage";
 import { apiFetch } from "./client";
+import { generationExtras, type PreviousDraft } from "./compose.hooks";
 import { queryKeys } from "./queries";
 import type {
   EditedPromo,
@@ -52,7 +53,7 @@ export interface MessageActionInput {
 // go with it — otherwise they re-appear on the next refetch, seconds after the
 // row above them vanished. This is why an optimistic plan is handed every
 // cached message: the siblings live in other queries and other pages.
-const hideWholeThread: OptimisticPlan<MessageActionInput> = (input, cached) => {
+export const hideWholeThread: OptimisticPlan<MessageActionInput> = (input, cached) => {
   const threadIds = new Set(
     cached.filter((m) => sameMessage(m, input)).map((m) => m.gmailThreadId),
   );
@@ -69,7 +70,7 @@ const hideWholeThread: OptimisticPlan<MessageActionInput> = (input, cached) => {
  * whether or not anyone is still listening — the rollback puts the row back in
  * the list either way, and this is what says why it came back.
  */
-function announcingFailure<TInput extends MessageMutationTarget, TResult, TSide = never>(
+export function announcingFailure<TInput extends MessageMutationTarget, TResult, TSide = never>(
   qc: QueryClient,
   whenItFails: string,
   config: MessageMutationConfig<TInput, TSide>,
@@ -550,7 +551,11 @@ export function useSetMessageRead() {
 
 export interface GenerateReplyInput extends MessageActionInput {
   prompt: string;
-  /** Aborts the request on the client. The provider call keeps running on the server. */
+  /** The window's current draft, which the model then edits rather than starting over. */
+  previousDraft?: PreviousDraft;
+  /** Chosen by the caller, so Stop can name the generation it means. */
+  requestId?: string;
+  /** Aborting the request also stops the generation on the server. */
   signal?: AbortSignal;
 }
 
@@ -569,7 +574,7 @@ export function generateReplyMutationOptions() {
       apiFetch<GenerateReplyResult>({
         path: `/messages/${input.accountId}/${input.gmailMessageId}/generate-reply`,
         method: "POST",
-        body: { prompt: input.prompt },
+        body: { prompt: input.prompt, ...generationExtras(input) },
         signal: input.signal,
       }),
   };
@@ -594,6 +599,19 @@ export interface SendReplyInput extends MessageActionInput {
   replyAll?: boolean;
   /** The compose window's autosaved Gmail draft, deleted by the server once the reply is sent. */
   draftId?: string;
+  /** A verified send-as alias of the mailbox it goes from. */
+  from?: string;
+  /**
+   * Answer from another connected mailbox. That reply cannot join the Gmail
+   * thread (thread ids belong to a mailbox), so it is threaded by headers only.
+   */
+  fromAccountId?: string;
+  /** Staged uploads of the mailbox it goes from, in chip order. */
+  uploadIds?: string[];
+  /** The server quotes the original by default; false sends without it. */
+  includeQuote?: boolean;
+  /** The quote's text as the user trimmed it, instead of the stored original's. */
+  quotedText?: string;
 }
 
 export interface SendReplyResult {
@@ -618,6 +636,11 @@ export function sendReplyMutationOptions(qc: QueryClient) {
         ...(input.bcc ? { bcc: input.bcc } : {}),
         ...(input.replyAll ? { replyAll: true } : {}),
         ...(input.draftId ? { draftId: input.draftId } : {}),
+        ...(input.from ? { from: input.from } : {}),
+        ...(input.fromAccountId ? { fromAccountId: input.fromAccountId } : {}),
+        ...(input.uploadIds && input.uploadIds.length > 0 ? { uploadIds: input.uploadIds } : {}),
+        ...(input.includeQuote === false ? { includeQuote: false } : {}),
+        ...(input.quotedText !== undefined ? { quotedText: input.quotedText } : {}),
       },
     }),
   });
