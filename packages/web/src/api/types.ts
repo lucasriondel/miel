@@ -66,6 +66,13 @@ export interface MessageDetail {
   fromEmail: string;
   fromName: string | null;
   toEmails: string[];
+  /** The original's Cc, parsed off its stored headers. */
+  ccEmails: string[];
+  /**
+   * Who reply-all copies by default — the other participants, minus this
+   * account and the sender. Empty: reply-all would reach nobody a reply does not.
+   */
+  replyAllCc: string[];
   subject: string | null;
   snippet: string | null;
   bodyText: string | null;
@@ -147,6 +154,11 @@ export interface PromoSuggestion {
   /** The end of the promo's last day, in UTC — rendered as a date, never a time. */
   expiresAt: string | null;
   merchant: string | null;
+  /** The mail it was read out of: subject, sender and date, never a body. */
+  subject: string | null;
+  fromName: string | null;
+  fromEmail: string;
+  internalDate: string;
 }
 
 export interface PromoSuggestionsResponse {
@@ -185,6 +197,16 @@ export interface PromoListing {
   /** The end of the promo's last day, in UTC — rendered as a date, never a time. */
   expiresAt: string | null;
   merchant: string | null;
+  /** When it was saved; null on a suggestion. */
+  savedAt: string | null;
+  /**
+   * The mail's subject, sender and date — from the save's copy on a saved row,
+   * from the inbox row on a suggestion. Never a body.
+   */
+  subject: string | null;
+  fromName: string | null;
+  fromEmail: string | null;
+  internalDate: string | null;
 }
 
 /**

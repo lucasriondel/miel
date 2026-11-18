@@ -584,7 +584,7 @@ describe("replying", () => {
     const input = { ...INPUT, subject: "Re: hi", body: "sure" };
 
     await options.mutationFn(input);
-    options.onSuccess({ ok: true, sentMessageId: "sent-1" }, input);
+    options.onSuccess({ ok: true, sentMessageId: "sent-1", threadId: "th-1" }, input);
 
     expect(calls[0]?.url).toBe(`${API}/messages/acc-1/msg-1/send-reply`);
     expect(calls[0]?.body).toEqual({ subject: "Re: hi", body: "sure" });

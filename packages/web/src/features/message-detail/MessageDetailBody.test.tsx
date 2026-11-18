@@ -27,6 +27,8 @@ const message = (over: Partial<MessageDetail>): MessageDetail => ({
   fromEmail: "sender@example.com",
   fromName: "Sender",
   toEmails: ["me@example.com"],
+  ccEmails: [],
+  replyAllCc: [],
   subject: "Subject",
   snippet: "snippet",
   bodyText: null,

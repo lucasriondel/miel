@@ -57,6 +57,10 @@ const PROMO: PromoSuggestion = {
   terms: "Full-price items only",
   expiresAt: "2026-12-24T23:59:59.999Z",
   merchant: "Uniqlo",
+  subject: "Autumn sale",
+  fromName: "Uniqlo",
+  fromEmail: "news@uniqlo.example",
+  internalDate: "2026-09-01T09:00:00.000Z",
 };
 
 const originalFetch = globalThis.fetch;

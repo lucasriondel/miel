@@ -39,6 +39,8 @@ const message = (history: MessageDetail["triageHistory"]): MessageDetail => ({
   fromEmail: "her@example.com",
   fromName: "Her",
   toEmails: ["me@example.com"],
+  ccEmails: [],
+  replyAllCc: [],
   subject: "Decision needed",
   snippet: null,
   bodyText: null,

@@ -497,6 +497,8 @@ export interface SendReplyInput extends MessageActionInput {
 export interface SendReplyResult {
   ok: true;
   sentMessageId: string;
+  /** The thread the reply went into — what a "View in Gmail" link needs. */
+  threadId: string;
 }
 
 // Sending has no optimistic shape — the sent message is the server's to

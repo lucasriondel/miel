@@ -63,6 +63,10 @@ const promo = (over: Partial<PromoSuggestion> = {}): PromoSuggestion => ({
   terms: "orders over £50",
   expiresAt: "2026-09-06T23:59:59.999Z",
   merchant: "Zara",
+  subject: "Weekend sale",
+  fromName: "Zara",
+  fromEmail: "news@zara.example",
+  internalDate: "2026-09-01T09:00:00.000Z",
   ...over,
 });
 

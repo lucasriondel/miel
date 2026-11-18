@@ -19,6 +19,8 @@ const base: MessageDetail = {
   fromEmail: "bob@corp.example",
   fromName: "Bob Vance",
   toEmails: ["me@example.com"],
+  ccEmails: [],
+  replyAllCc: [],
   subject: "Refrigeration quote",
   snippet: null,
   bodyText: null,

@@ -19,6 +19,8 @@ export function messageDetail(over: Partial<MessageDetail> = {}): MessageDetail 
     fromEmail: "sender@example.com",
     fromName: null,
     toEmails: [],
+    ccEmails: [],
+    replyAllCc: [],
     subject: null,
     snippet: null,
     bodyText: null,
