@@ -15,7 +15,8 @@ import { Effect, Layer } from "effect";
 import { google } from "googleapis";
 import { createDebug } from "../util/debug";
 import { toGmailError } from "./gmailErrors";
-import { buildRawMessage } from "./rfc822";
+import { buildMimeMessage, buildRawMessage } from "./rfc822";
+import { mimeInputOf, usesMediaUpload } from "./GmailMessages";
 import { GmailDrafts, GoogleAuth, refKey, type GmailDraftsImpl } from "./contracts";
 
 const debug = createDebug("google:drafts");
@@ -27,23 +28,24 @@ const impl: GmailDraftsImpl = {
       const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
       const gmail = google.gmail({ version: "v1", auth });
       const { message } = draft;
-      const raw = buildRawMessage({
-        to: message.to,
-        cc: message.cc,
-        bcc: message.bcc,
-        subject: message.subject,
-        body: message.body,
-        inReplyTo: message.inReplyToHeader,
-      });
+      const input = mimeInputOf(message);
+      // A draft with files goes through the media upload, like a send does.
+      const media = usesMediaUpload(message)
+        ? { media: { mimeType: "message/rfc822", body: buildMimeMessage(input) } }
+        : {};
+      const raw = usesMediaUpload(message) ? undefined : buildRawMessage(input);
       const requestBody = {
-        message: message.threadId ? { raw, threadId: message.threadId } : { raw },
+        message: {
+          ...(raw ? { raw } : {}),
+          ...(message.threadId ? { threadId: message.threadId } : {}),
+        },
       };
       const draftId = draft.draftId;
       const res = yield* Effect.tryPromise({
         try: () =>
           draftId
-            ? gmail.users.drafts.update({ userId: "me", id: draftId, requestBody })
-            : gmail.users.drafts.create({ userId: "me", requestBody }),
+            ? gmail.users.drafts.update({ userId: "me", id: draftId, requestBody, ...media })
+            : gmail.users.drafts.create({ userId: "me", requestBody, ...media }),
         catch: (err) => toGmailError(draftId ? "drafts.update" : "drafts.create", key, err),
       });
       const saved = {

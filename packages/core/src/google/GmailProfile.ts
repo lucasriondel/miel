@@ -13,7 +13,9 @@ import {
   refKey,
   type AccountProfile,
   type GmailProfileImpl,
+  type SendAsAlias,
 } from "./contracts";
+import { toGmailError } from "./gmailErrors";
 
 const debug = createDebug("google:profile");
 
@@ -33,6 +35,29 @@ const impl: GmailProfileImpl = {
       };
       debug("profile done", { ref: key, email: profile.email });
       return profile;
+    }),
+
+  sendAs: (ref) =>
+    Effect.gen(function* () {
+      const key = refKey(ref);
+      const auth = yield* GoogleAuth.use((svc) => svc.clientFor(ref));
+      const res = yield* Effect.tryPromise({
+        try: () =>
+          google.gmail({ version: "v1", auth }).users.settings.sendAs.list({ userId: "me" }),
+        catch: (err) => toGmailError("settings.sendAs.list", key, err),
+      });
+      const aliases: SendAsAlias[] = (res.data.sendAs ?? [])
+        .filter((a) => typeof a.sendAsEmail === "string" && a.sendAsEmail.length > 0)
+        .map((a) => ({
+          email: a.sendAsEmail as string,
+          displayName: a.displayName ? a.displayName : null,
+          isPrimary: Boolean(a.isPrimary),
+          isDefault: Boolean(a.isDefault),
+          // The primary address carries no verification status; it is always usable.
+          verified: Boolean(a.isPrimary) || a.verificationStatus === "accepted",
+        }));
+      debug("sendAs done", { ref: key, count: aliases.length });
+      return aliases;
     }),
 };
 

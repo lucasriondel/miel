@@ -153,6 +153,56 @@ describe("GmailMessages", () => {
     expect(raw).toContain("Bcc: hidden@y.z");
   });
 
+  // A file makes the message too big for the JSON `raw` field to be the right
+  // door: it goes through the media upload, as the MIME text, with the thread
+  // still named in the metadata.
+  test("a message with an attachment is sent through the media upload", async () => {
+    let sent: {
+      requestBody?: { raw?: string; threadId?: string };
+      media?: { mimeType: string; body: string };
+    } = {};
+    messagesSendImpl = async (args) => {
+      sent = args as typeof sent;
+      return { data: { id: "m-att", threadId: "t0" } };
+    };
+    const exit = await run(
+      Effect.flatMap(GmailMessages, (s) =>
+        s.send(ref, {
+          ...sendInput,
+          attachments: [{ filename: "a.txt", mimeType: "text/plain", data: new Uint8Array([65]) }],
+        }),
+      ),
+    );
+    expectSuccess(exit);
+    expect(sent.requestBody).toEqual({ threadId: "t0" });
+    expect(sent.media?.mimeType).toBe("message/rfc822");
+    expect(sent.media?.body).toContain("multipart/mixed");
+    expect(sent.media?.body).toContain("In-Reply-To: <msg0@mail>");
+  });
+
+  test("metadata reads the named headers, lowercased, and no body", async () => {
+    let asked: { format?: string; metadataHeaders?: string[] } = {};
+    messagesGetImpl = async (args) => {
+      asked = args as typeof asked;
+      return {
+        data: {
+          id: "m1",
+          threadId: "t1",
+          internalDate: "1700000000000",
+          payload: { headers: [{ name: "To", value: "a@b.c, Bob <b@c.d>" }] },
+        },
+      };
+    };
+    const exit = await run(Effect.flatMap(GmailMessages, (s) => s.metadata(ref, "m1", ["To"])));
+    expect(asked).toMatchObject({ format: "metadata", metadataHeaders: ["To"] });
+    expect(expectSuccess(exit)).toEqual({
+      id: "m1",
+      threadId: "t1",
+      internalDate: new Date(1700000000000),
+      headers: { to: "a@b.c, Bob <b@c.d>" },
+    });
+  });
+
   // A send the user watched fail is owed Gmail's reason, which a tagged
   // error's empty `message` would otherwise swallow.
   test("a refused send carries Gmail's reason as its detail", async () => {

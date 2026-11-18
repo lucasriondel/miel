@@ -65,6 +65,10 @@ function gmailThatFailsAuth(): GmailDataAdapter {
     sendNew: async () => ({ messageId: "x", threadId: "t" }),
     saveDraft: async () => ({ draftId: "d", messageId: "x", threadId: "t" }),
     deleteDraft: async () => {},
+    sendThreaded: async () => ({ messageId: "x", threadId: "t" }),
+    threadingOf: fail,
+    getMessageHeaders: fail,
+    listSendAs: fail,
     listFilters: fail,
     createFilter: fail,
     deleteFilter: fail,
@@ -92,6 +96,14 @@ function gmailOk(): GmailDataAdapter {
     sendNew: async () => ({ messageId: "x", threadId: "t" }),
     saveDraft: async () => ({ draftId: "d", messageId: "x", threadId: "t" }),
     deleteDraft: async () => {},
+    sendThreaded: async () => ({ messageId: "x", threadId: "t" }),
+    threadingOf: async () => {
+      throw new Error("unused");
+    },
+    getMessageHeaders: async () => {
+      throw new Error("unused");
+    },
+    listSendAs: async () => [],
     listFilters: async () => [],
     createFilter: async () => {
       throw new Error("unused");

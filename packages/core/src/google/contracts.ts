@@ -14,6 +14,7 @@
 import { Context, Effect } from "effect";
 import type { OAuth2Client } from "google-auth-library";
 import type { GogFilterT, GogLabelT, GogMessageRawT } from "../schemas/gmail";
+import type { MimeAttachment } from "./rfc822";
 import type {
   AccountNotConnectedError,
   GmailApiError,
@@ -62,6 +63,14 @@ export interface SendMessageInput {
   bcc?: string[];
   subject: string;
   body: string;
+  /** An HTML alternative of the body (a quoted HTML original rides here). */
+  html?: string;
+  /** The From header, formatted; absent is the account's own address. */
+  from?: string;
+  /** Files to attach; any at all sends the message as `multipart/mixed`. */
+  attachments?: MimeAttachment[];
+  /** A Message-ID of miel's own (scheduled sends), instead of Gmail's. */
+  messageId?: string;
   /** The message being replied to — drives In-Reply-To/References + threadId. */
   replyToMessageId?: string;
   /** Gmail thread to attach the message to (keeps a reply in-thread). */
@@ -133,6 +142,27 @@ export interface AttachmentBytes {
   size: number;
 }
 
+/** A message's headers, without its body — `messages.get(format=metadata)`. */
+export interface MessageMetadata {
+  id: string;
+  threadId: string;
+  internalDate: Date;
+  /** Lowercased header names. */
+  headers: Record<string, string>;
+}
+
+/** One address the account may send as — `users.settings.sendAs`. */
+export interface SendAsAlias {
+  email: string;
+  displayName: string | null;
+  /** The account's own address. */
+  isPrimary: boolean;
+  /** Gmail's default From. */
+  isDefault: boolean;
+  /** Only an accepted alias can be sent from; Gmail rewrites any other From. */
+  verified: boolean;
+}
+
 export interface GmailMessagesImpl {
   readonly search: (
     ref: AccountRef,
@@ -166,6 +196,16 @@ export interface GmailMessagesImpl {
   ) => Effect.Effect<
     AttachmentBytes,
     GmailAuthError | GmailApiError | GmailParseError | TokenRefreshError | AccountNotConnectedError,
+    GoogleAuth
+  >;
+  /** The named headers of one message, and nothing of its body. */
+  readonly metadata: (
+    ref: AccountRef,
+    messageId: string,
+    headerNames: readonly string[],
+  ) => Effect.Effect<
+    MessageMetadata,
+    GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
     GoogleAuth
   >;
 }
@@ -313,6 +353,17 @@ export interface GmailProfileImpl {
     ref: AccountRef,
   ) => Effect.Effect<
     AccountProfile,
+    GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
+    GoogleAuth
+  >;
+  /**
+   * The addresses the account may send as (`users.settings.sendAs.list`) —
+   * covered by `gmail.settings.basic`, a scope every account already granted.
+   */
+  readonly sendAs: (
+    ref: AccountRef,
+  ) => Effect.Effect<
+    SendAsAlias[],
     GmailAuthError | GmailApiError | TokenRefreshError | AccountNotConnectedError,
     GoogleAuth
   >;

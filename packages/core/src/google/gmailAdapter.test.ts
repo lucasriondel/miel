@@ -4,7 +4,7 @@ import { describe, test, expect, mock, afterAll } from "bun:test";
 // they don't leak into other tests.
 afterAll(() => mock.restore());
 
-// gmailAdapter.sendReply must fetch the original message first to learn its
+// gmailAdapter.sendReply must read the original message's headers first to learn its
 // threadId + Message-ID header, then send the reply with those so it threads
 // correctly. We mock the Effect layer entirely: `./contracts` services answer
 // marker objects describing the call, and `./runtime`'s runWithApp interprets
@@ -39,6 +39,7 @@ const ORIGINAL = {
 mock.module("./contracts", () => ({
   GmailMessages: service({
     get: (...args: unknown[]) => ({ op: "get", args }) as Marker,
+    metadata: (...args: unknown[]) => ({ op: "metadata", args }) as Marker,
     send: (...args: unknown[]) => ({ op: "send", args }) as Marker,
     search: (...args: unknown[]) => ({ op: "search", args }) as Marker,
   }),
@@ -56,6 +57,12 @@ mock.module("./contracts", () => ({
 mock.module("./runtime", () => ({
   runWithApp: async (marker: Marker) => {
     if (marker.op === "get") return ORIGINAL;
+    // The threading read is headers-only: the same original, as metadata.
+    if (marker.op === "metadata") {
+      const headers: Record<string, string> = {};
+      for (const h of ORIGINAL.payload.headers) headers[h.name.toLowerCase()] = h.value;
+      return { id: ORIGINAL.id, threadId: ORIGINAL.threadId, internalDate: new Date(), headers };
+    }
     if (marker.op === "send") {
       // marker.args = [ref, sendInput]
       sendCapture = marker.args[1] as Record<string, unknown>;

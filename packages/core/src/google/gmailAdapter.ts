@@ -16,9 +16,13 @@ import {
   GmailLabels,
   GmailMessages,
   GmailModify,
+  GmailProfile,
   GmailThreads,
   type AccountRef,
+  type MessageMetadata,
+  type SendAsAlias,
 } from "./contracts";
+import type { MimeAttachment } from "./rfc822";
 import { runWithApp } from "./runtime";
 import type { GogFilterT, GogLabelT, GogMessageRawT } from "../schemas/gmail";
 
@@ -44,22 +48,41 @@ export interface OutgoingMessage {
   bcc?: string[];
   subject: string;
   body: string;
+  /** An HTML alternative of the body. */
+  html?: string;
+  /** The From header, formatted — a send-as alias; absent is the account's address. */
+  from?: string;
+  attachments?: MimeAttachment[];
+  /** A Message-ID of miel's own, written instead of Gmail's. */
+  messageId?: string;
 }
+
+/** How a message hangs off a conversation: Gmail's thread, and the RFC threading header. */
+export interface Threading {
+  /** Gmail's thread id — only meaningful in the mailbox it came from. */
+  threadId?: string;
+  /** The original's Message-ID, for In-Reply-To/References. */
+  inReplyTo?: string;
+}
+
+export type { MessageMetadata, SendAsAlias };
 export interface AttachmentBytes {
   data: Uint8Array;
   size: number;
 }
 
-/** Find the original message's threadId + Message-ID header for threading. */
-function threadingFor(ref: AccountRef, messageId: string) {
-  return GmailMessages.use((svc) => svc.get(ref, messageId));
-}
-
-/** Extract the `Message-ID` header (for In-Reply-To/References) from a raw msg. */
-function messageIdHeader(msg: GogMessageRawT): string | undefined {
-  const headers = msg.payload?.headers ?? [];
-  const h = headers.find((x) => x.name.toLowerCase() === "message-id");
-  return h?.value;
+/**
+ * The original message's threadId + Message-ID header, for threading — read as
+ * metadata, since a reply needs two headers and none of the body.
+ */
+async function threadingFor(
+  ref: AccountRef,
+  messageId: string,
+): Promise<{ threadId: string; inReplyTo: string | undefined }> {
+  const meta = await runWithApp(
+    GmailMessages.use((svc) => svc.metadata(ref, messageId, ["Message-ID"])),
+  );
+  return { threadId: meta.threadId, inReplyTo: meta.headers["message-id"] };
 }
 
 export interface GmailDataAdapter {
@@ -82,6 +105,22 @@ export interface GmailDataAdapter {
   ): Promise<SendResult>;
   /** A message that answers nothing: no thread, no threading headers. */
   sendNew(o: OutgoingMessage & { account: string }): Promise<SendResult>;
+  /**
+   * The general send: a message with whatever threading the caller resolved —
+   * a forward, or a reply sent from a different mailbox than the one it
+   * arrived in (no thread id there: it belongs to the other mailbox).
+   */
+  sendThreaded(o: OutgoingMessage & { account: string; threading: Threading }): Promise<SendResult>;
+  /** The threading a reply to this message needs: its thread and its Message-ID. */
+  threadingOf(o: { account: string; messageId: string }): Promise<Required<Threading>>;
+  /** One message's named headers, without its body. */
+  getMessageHeaders(o: {
+    account: string;
+    messageId: string;
+    headers: readonly string[];
+  }): Promise<MessageMetadata>;
+  /** The addresses the account may send as. */
+  listSendAs(o: { account: string }): Promise<SendAsAlias[]>;
   /**
    * Create a draft, or replace the one `draftId` names. A reply draft names the
    * message it answers, and is threaded the way the send would be.
@@ -119,6 +158,10 @@ const outgoing = (o: OutgoingMessage): OutgoingMessage => ({
   bcc: o.bcc,
   subject: o.subject,
   body: o.body,
+  ...(o.html !== undefined ? { html: o.html } : {}),
+  ...(o.from !== undefined ? { from: o.from } : {}),
+  ...(o.attachments && o.attachments.length > 0 ? { attachments: o.attachments } : {}),
+  ...(o.messageId !== undefined ? { messageId: o.messageId } : {}),
 });
 
 export function createGmailAdapter(): GmailDataAdapter {
@@ -143,24 +186,39 @@ export function createGmailAdapter(): GmailDataAdapter {
     // Fetch the original first for its threadId + Message-ID header so the
     // reply threads correctly, then send.
     sendReply: async (o) => {
-      const original = await runWithApp(threadingFor(ref(o.account), o.replyToMessageId));
+      const original = await threadingFor(ref(o.account), o.replyToMessageId);
       return runWithApp(
         GmailMessages.use((svc) =>
           svc.send(ref(o.account), {
             ...outgoing(o),
             replyToMessageId: o.replyToMessageId,
             threadId: original.threadId,
-            inReplyToHeader: messageIdHeader(original),
+            inReplyToHeader: original.inReplyTo,
           }),
         ),
       );
     },
     sendNew: (o) => runWithApp(GmailMessages.use((svc) => svc.send(ref(o.account), outgoing(o)))),
+    sendThreaded: (o) =>
+      runWithApp(
+        GmailMessages.use((svc) =>
+          svc.send(ref(o.account), {
+            ...outgoing(o),
+            ...(o.threading.threadId ? { threadId: o.threading.threadId } : {}),
+            ...(o.threading.inReplyTo ? { inReplyToHeader: o.threading.inReplyTo } : {}),
+          }),
+        ),
+      ),
+    threadingOf: async (o) => {
+      const t = await threadingFor(ref(o.account), o.messageId);
+      return { threadId: t.threadId, inReplyTo: t.inReplyTo ?? "" };
+    },
+    getMessageHeaders: (o) =>
+      runWithApp(GmailMessages.use((svc) => svc.metadata(ref(o.account), o.messageId, o.headers))),
+    listSendAs: (o) => runWithApp(GmailProfile.use((svc) => svc.sendAs(ref(o.account)))),
     saveDraft: async (o) => {
       const replyTo = o.replyToMessageId;
-      const original = replyTo
-        ? await runWithApp(threadingFor(ref(o.account), replyTo))
-        : undefined;
+      const original = replyTo ? await threadingFor(ref(o.account), replyTo) : undefined;
       return runWithApp(
         GmailDrafts.use((svc) =>
           svc.save(ref(o.account), {
@@ -171,7 +229,7 @@ export function createGmailAdapter(): GmailDataAdapter {
                 ? {
                     replyToMessageId: replyTo,
                     threadId: original.threadId,
-                    inReplyToHeader: messageIdHeader(original),
+                    inReplyToHeader: original.inReplyTo,
                   }
                 : {}),
             },

@@ -9,7 +9,13 @@
  * Methods no message action uses throw rather than answering emptily: a suite
  * that reaches one has strayed out of the flow it is describing.
  */
-import type { GmailDataAdapter, OutgoingMessage } from "../google/gmailAdapter";
+import type {
+  GmailDataAdapter,
+  MessageMetadata,
+  OutgoingMessage,
+  SendAsAlias,
+  Threading,
+} from "../google/gmailAdapter";
 import type { GogLabelT } from "../schemas/gmail";
 
 export interface ModifyCall {
@@ -24,10 +30,14 @@ export interface ThreadCall {
   threadId: string;
 }
 
-/** A send as the adapter was asked for it; `replyToMessageId` marks a reply. */
+/**
+ * A send as the adapter was asked for it; `replyToMessageId` marks a reply made
+ * through `sendReply`, `threading` one made through `sendThreaded`.
+ */
 export interface SendCall extends OutgoingMessage {
   account: string;
   replyToMessageId?: string;
+  threading?: Threading;
 }
 
 export interface DraftCall extends OutgoingMessage {
@@ -51,6 +61,8 @@ export interface RecordingGmail {
   /** Every draft save; a new one answers `draft-<n>`. */
   readonly savedDrafts: DraftCall[];
   readonly deletedDrafts: { account: string; draftId: string }[];
+  /** Every search query, in order. */
+  readonly searches: string[];
   /** Set to fail the next Gmail call the way a rejected request does. */
   fails: Error | null;
 }
@@ -62,6 +74,13 @@ const unused = (method: string) => () => {
 export function makeRecordingGmail(options?: {
   /** What `createLabel` answers with, by name. Defaults are derived from it. */
   createLabel?: (name: string) => GogLabelT;
+  /** What `listSendAs` answers; defaults to the account's own address only. */
+  sendAs?: SendAsAlias[];
+  /** Attachment bytes by Gmail attachment id, for forwards. */
+  attachments?: Record<string, Uint8Array>;
+  /** Header reads (contacts harvest) and search hits, by message id. */
+  headers?: Record<string, MessageMetadata>;
+  search?: (query: string) => { messageId: string; threadId: string }[];
 }): RecordingGmail {
   const recording = {
     modifications: [] as ModifyCall[],
@@ -73,6 +92,7 @@ export function makeRecordingGmail(options?: {
     sent: [] as SendCall[],
     savedDrafts: [] as DraftCall[],
     deletedDrafts: [] as { account: string; draftId: string }[],
+    searches: [] as string[],
     fails: null as Error | null,
   };
 
@@ -116,7 +136,13 @@ export function makeRecordingGmail(options?: {
       await orFail();
       return [];
     },
-    searchMessages: unused("searchMessages"),
+    searchMessages: options?.search
+      ? async (o) => {
+          await orFail();
+          recording.searches.push(o.query);
+          return options.search!(o.query);
+        }
+      : unused("searchMessages"),
     getMessage: unused("getMessage"),
     sendReply: async (o) => {
       await orFail();
@@ -143,7 +169,40 @@ export function makeRecordingGmail(options?: {
     listFilters: unused("listFilters"),
     createFilter: unused("createFilter"),
     deleteFilter: unused("deleteFilter"),
-    getAttachment: unused("getAttachment"),
+    getAttachment: options?.attachments
+      ? async (o) => {
+          await orFail();
+          const data = options.attachments![o.attachmentId];
+          if (!data) throw new Error(`no attachment ${o.attachmentId}`);
+          return { data, size: data.byteLength };
+        }
+      : unused("getAttachment"),
+    sendThreaded: async (o) => {
+      await orFail();
+      recording.sent.push(o);
+      const n = recording.sent.length;
+      return { messageId: `sent-${n}`, threadId: o.threading.threadId ?? `thread-${n}` };
+    },
+    threadingOf: async (o) => {
+      await orFail();
+      return { threadId: `gmail-thread-of-${o.messageId}`, inReplyTo: `<${o.messageId}@mail>` };
+    },
+    getMessageHeaders: options?.headers
+      ? async (o) => {
+          await orFail();
+          const meta = options.headers![o.messageId];
+          if (!meta) throw new Error(`no headers for ${o.messageId}`);
+          return meta;
+        }
+      : unused("getMessageHeaders"),
+    listSendAs: async (o) => {
+      await orFail();
+      return (
+        options?.sendAs ?? [
+          { email: o.account, displayName: null, isPrimary: true, isDefault: true, verified: true },
+        ]
+      );
+    },
   };
 
   return Object.assign(recording, { adapter });
