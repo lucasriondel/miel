@@ -11,3 +11,9 @@ export const authRoutes = new Hono();
 authRoutes.get("/claude/status", async (c) => {
   return c.json(await getClaudeCodeTokenStatus());
 });
+
+// An authenticated ping. It does nothing, which is the point: it sits behind
+// the bearer middleware like every route but `/health`, so a client connecting
+// to a server can tell a wrong secret (401) from a wrong URL (no answer)
+// before it asks for anything real.
+authRoutes.get("/check", (c) => c.json({ ok: true }));

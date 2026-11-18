@@ -5,6 +5,7 @@ import { errorHandler } from "./middleware/error";
 import { requestLog } from "./middleware/requestLog";
 import { accountsRoutes } from "./routes/accounts";
 import { authRoutes } from "./routes/auth";
+import { composeRoutes } from "./routes/compose";
 import { googleOAuthCallbackRoutes, googleOAuthStartRoutes } from "./routes/googleOAuth";
 import { filtersRoutes } from "./routes/filters";
 import { labelsRoutes } from "./routes/labels";
@@ -47,6 +48,7 @@ export function createApp(opts: { webOrigin?: string } = {}) {
   app.route("/auth", googleOAuthStartRoutes);
   app.route("/labels", labelsRoutes);
   app.route("/messages", messagesRoutes);
+  app.route("/compose", composeRoutes);
   app.route("/filters", filtersRoutes);
   app.route("/promo-codes", promoCodesRoutes);
   app.route("/logs", logsRoutes);

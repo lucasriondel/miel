@@ -158,3 +158,24 @@ describe("the fallthrough", () => {
     expect(await res.json()).toEqual({ error: "internal_error", message: "something else broke" });
   });
 });
+
+// A send Gmail refused: the reason is what the composer's "Gmail refused the
+// message: …" line shows, and it lives in `detail` for the reason the hosted
+// one does.
+describe("GmailSendError", () => {
+  test("passes Gmail's reason through as the message, at a gateway status", async () => {
+    const res = await raise(
+      new core.errors.GmailSendError({ cause: new Error("400"), detail: "Invalid To header" }),
+    );
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "gmail_error", message: "Invalid To header" });
+  });
+
+  test("still answers gmail_error when there is no reason to give", async () => {
+    const res = await raise(new core.errors.GmailSendError({ cause: new Error("boom") }));
+
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe("gmail_error");
+  });
+});

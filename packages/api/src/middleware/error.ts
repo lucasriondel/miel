@@ -79,6 +79,14 @@ export const errorHandler: ErrorHandler = (err, c) => {
     }
     return c.json({ error: "claude_unavailable", message }, 503);
   }
+  // A refused send is owed Gmail's reason ("Invalid To header"): the user
+  // watched it fail and nothing was sent. It travels in `detail`, scrubbed of
+  // anything token-shaped where the error is built, because a tagged error's
+  // own `message` is empty — the same arrangement as `HostedApiError` below.
+  if (tag === "GmailSendError") {
+    const send = err as { detail?: string };
+    return c.json({ error: "gmail_error", message: send.detail ?? message }, 502);
+  }
   if (tag && GMAIL_TAGS.has(tag)) {
     return c.json({ error: "gmail_error", message }, 502);
   }

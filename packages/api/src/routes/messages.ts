@@ -15,6 +15,8 @@ import {
   setMessageRead,
   setMessagePriority,
   trashMessage,
+  unarchiveMessage,
+  untrashMessage,
 } from "@miel/core";
 
 export const messagesRoutes = new Hono();
@@ -27,6 +29,7 @@ messagesRoutes.get("/", async (c) => {
     limit: c.req.query("limit"),
     cursor: c.req.query("cursor"),
     includeArchived: c.req.query("includeArchived"),
+    archivedOnly: c.req.query("archivedOnly"),
     includeTrashed: c.req.query("includeTrashed"),
     includeRemoved: c.req.query("includeRemoved"),
     internalDateFrom: c.req.query("internalDateFrom"),
@@ -39,6 +42,7 @@ messagesRoutes.get("/", async (c) => {
     limit: q.limit,
     cursor: q.cursor,
     includeArchived: q.includeArchived,
+    archivedOnly: q.archivedOnly,
     includeTrashed: q.includeTrashed,
     includeRemoved: q.includeRemoved,
     internalDateFrom: q.internalDateFrom,
@@ -90,6 +94,22 @@ messagesRoutes.post("/:accountId/:gmailMessageId/archive", async (c) => {
   return c.json(result);
 });
 
+// The two undos — the toast's Undo, and how a message leaves the Done view.
+// Each is its action read backwards; the rules are the core service's.
+messagesRoutes.post("/:accountId/:gmailMessageId/unarchive", async (c) => {
+  const accountId = c.req.param("accountId");
+  const gmailMessageId = c.req.param("gmailMessageId");
+  const result = await unarchiveMessage({ accountId, gmailMessageId });
+  return c.json(result);
+});
+
+messagesRoutes.post("/:accountId/:gmailMessageId/untrash", async (c) => {
+  const accountId = c.req.param("accountId");
+  const gmailMessageId = c.req.param("gmailMessageId");
+  const result = await untrashMessage({ accountId, gmailMessageId });
+  return c.json(result);
+});
+
 messagesRoutes.post("/:accountId/:gmailMessageId/read", async (c) => {
   const accountId = c.req.param("accountId");
   const gmailMessageId = c.req.param("gmailMessageId");
@@ -132,6 +152,9 @@ messagesRoutes.post("/:accountId/:gmailMessageId/send-reply", async (c) => {
     body: body.body,
     to: body.to,
     cc: body.cc,
+    bcc: body.bcc,
+    replyAll: body.replyAll,
+    draftId: body.draftId,
   });
   return c.json(result);
 });
