@@ -11,42 +11,157 @@
 @import "./styles/gousse/effects.css";
 @import "./styles/gousse/sidebar-chrome.css";
 
-/* Web accent override — tokens.css ships a default; we tint miel honey-yellow,
-   the same pair the landing page uses (`--accent` in
-   packages/landing-page/src/styles.ts): a deep amber on light so text and
-   focus rings keep contrast, a brighter one on dark. Layered after the imports
-   so it wins. */
-/* Priority as text, not as a filled pill (#141). `--gousse-high|medium|low` are
-   fill colours: on a light surface, amber-gold and green read as decoration and
-   fail AA as words. So each priority also gets an *ink* — the same hue taken
-   down until it clears 4.5:1 on `--gousse-bg` and `--gousse-panel`. On dark the
-   fill already clears it, so the ink is the token itself rather than a second
-   value to keep in step. They live here and not in `styles/gousse/tokens.css`
-   for the reason the accent override does: that sheet is the vendored registry's
-   and the next `bunx shadcn@latest add` overwrites it (DESIGN.md §10).
-   `src/lib/priorityColors.ts` is what maps a `Priority` onto them, and its test
-   computes the ratios from these very declarations. */
+/* The miel palette (the "UI System For Miel" page of `miel.figcraft`).
+
+   tokens.css is the vendored registry's sheet and ships gousse's warm neutrals
+   and orange accent; the next `bunx shadcn@latest add` overwrites it (DESIGN.md
+   §10). So miel's own values are restated here, layered after the imports so
+   they win: cool slate neutrals, one brand *ink* (`--gousse-primary`, the
+   near-black blue-grey every primary action and selection is drawn in) and the
+   triage colours. `--gousse-accent` takes the same ink — it is what the
+   registry's primitives paint active state with, and the design has no second
+   brand colour for it to be.
+
+   The tokens past the registry's nine are miel's and get their utilities from
+   the `@theme` block below. Values are space-separated RGB triplets like the
+   registry's, so `bg-gousse-fill/60` and `rgb(var(--gousse-fill) / 0.6)` both
+   work. */
 :root {
-  --gousse-accent: 148 100 10; /* #94640a — web override, honey (light) */
-  --gousse-high-ink: 198 48 33; /* #c63021 — high as text (light) */
-  --gousse-medium-ink: 155 92 0; /* #9b5c00 — medium as text (light) */
-  --gousse-low-ink: 19 120 57; /* #137839 — low as text (light) */
+  --gousse-bg: 247 248 250; /* #f7f8fa — canvas */
+  --gousse-panel: 255 255 255; /* #ffffff — cards, the reader */
+  --gousse-ink: 20 32 46; /* #14202e — text */
+  --gousse-body: 42 54 68; /* #2a3644 — long-form body text */
+  --gousse-muted: 94 106 120; /* #5e6a78 — secondary text, icons at rest */
+  --gousse-subtle: 138 150 163; /* #8a96a3 — tertiary text, quiet icons */
+  --gousse-quiet: 61 73 87; /* #3d4957 — text on a fill */
+  --gousse-line: 226 230 235; /* #e2e6eb — hairlines */
+  --gousse-border: 220 225 231; /* #dce1e7 — control borders */
+  --gousse-border-strong: 201 210 220; /* #c9d2dc — hovered borders, disabled glyphs */
+  --gousse-fill: 238 241 244; /* #eef1f4 — sidebar, fields, segmented track */
+  --gousse-hover: 243 246 249; /* #f3f6f9 — row and button hover */
+  --gousse-field-hover: 229 233 238; /* #e5e9ee — a field under the pointer */
+  --gousse-primary: 31 41 55; /* #1f2937 — the brand ink: primary buttons, selection */
+  --gousse-primary-hover: 55 65 81; /* #374151 */
+  --gousse-primary-pressed: 17 24 39; /* #111827 */
+  --gousse-on-primary: 255 255 255;
+  --gousse-disabled: 165 176 190; /* #a5b0be — a disabled primary's fill */
+  --gousse-disabled-ink: 181 190 200; /* #b5bec8 — disabled text */
+  --gousse-accent: 31 41 55; /* #1f2937 — web override, ink (light) */
+  --gousse-navy: 30 58 95; /* #1e3a5f — links and the blue tint's ink */
+  --gousse-high: 212 69 44; /* #d4452c — high priority, danger */
+  --gousse-medium: 184 137 44; /* #b8892c — medium priority, warning */
+  --gousse-low: 62 155 107; /* #3e9b6b — success */
+  --gousse-error: 176 58 34; /* #b03a22 — error text */
+  --gousse-high-bg: 251 237 234; /* #fbedea */
+  --gousse-high-border: 240 201 192; /* #f0c9c0 */
+  --gousse-high-text: 122 42 27; /* #7a2a1b — text on high-bg */
+  --gousse-medium-bg: 248 241 225; /* #f8f1e1 */
+  --gousse-medium-text: 107 78 20; /* #6b4e14 — text on medium-bg */
+  --gousse-tint-blue: 227 234 243; /* #e3eaf3 */
+  --gousse-tint-green: 225 238 234; /* #e1eeea */
+  --gousse-tint-green-ink: 47 107 91; /* #2f6b5b */
+  --gousse-tint-amber: 246 238 220; /* #f6eedc */
+  --gousse-tint-amber-ink: 138 100 32; /* #8a6420 */
+  --gousse-shadow-sm: 0 1px 2px rgb(20 32 46 / 0.12);
+  --gousse-shadow-md: 0 4px 10px rgb(20 32 46 / 0.08), 0 1px 2px rgb(20 32 46 / 0.06);
+  --gousse-shadow-lg: 0 8px 24px rgb(20 32 46 / 0.12), 0 1px 3px rgb(20 32 46 / 0.08);
+  --gousse-shadow-xl: 0 18px 48px rgb(20 32 46 / 0.18), 0 2px 6px rgb(20 32 46 / 0.08);
+  --gousse-shadow-window: 0 30px 80px rgb(20 32 46 / 0.28);
+
+  /* Priority as text (#141). The section headers in the design colour the word
+     itself; a priority read as a word has to clear 4.5:1 on `--gousse-bg` and
+     `--gousse-panel`, so each takes the nearest value of its hue that does —
+     the design's own #d4452c and #b8892c sit at 4.2 and 3.0. Low is the
+     design's grey rather than a green: a low verdict is the absence of
+     urgency, so it reads as quiet text. `src/lib/priorityColors.ts` maps a
+     `Priority` onto these, and its test computes the ratios from these very
+     declarations. */
+  --gousse-high-ink: 198 48 33; /* #c63021 */
+  --gousse-medium-ink: 138 100 32; /* #8a6420 */
+  --gousse-low-ink: 94 106 120; /* #5e6a78 */
 }
 
 .dark {
-  --gousse-accent: 237 182 75; /* #edb64b — web override, honey (dark) */
+  --gousse-bg: 15 20 25;
+  --gousse-panel: 22 28 36;
+  --gousse-ink: 232 236 241;
+  --gousse-body: 200 207 215;
+  --gousse-muted: 138 150 163;
+  --gousse-subtle: 110 121 134;
+  --gousse-quiet: 184 194 206;
+  --gousse-line: 41 49 60;
+  --gousse-border: 51 60 72;
+  --gousse-border-strong: 61 71 84;
+  --gousse-fill: 29 36 45;
+  --gousse-hover: 26 32 41;
+  --gousse-field-hover: 35 43 53;
+  --gousse-primary: 232 236 241;
+  --gousse-primary-hover: 209 215 222;
+  --gousse-primary-pressed: 245 247 250;
+  --gousse-on-primary: 15 20 25;
+  --gousse-disabled: 61 71 84;
+  --gousse-disabled-ink: 74 85 99;
+  --gousse-accent: 232 236 241; /* #e8ecf1 — web override, ink (dark) */
+  --gousse-navy: 143 176 217;
+  --gousse-high: 240 116 92;
+  --gousse-medium: 217 174 85;
+  --gousse-low: 92 191 138;
+  --gousse-error: 240 138 114;
+  --gousse-high-bg: 54 32 27;
+  --gousse-high-border: 92 49 40;
+  --gousse-high-text: 242 164 147;
+  --gousse-medium-bg: 46 38 20;
+  --gousse-medium-text: 232 192 122;
+  --gousse-tint-blue: 28 40 56;
+  --gousse-tint-green: 24 42 35;
+  --gousse-tint-green-ink: 127 196 174;
+  --gousse-tint-amber: 44 37 22;
+  --gousse-tint-amber-ink: 217 174 85;
+  --gousse-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --gousse-shadow-md: 0 4px 10px rgb(0 0 0 / 0.4);
+  --gousse-shadow-lg: 0 8px 24px rgb(0 0 0 / 0.5);
+  --gousse-shadow-xl: 0 18px 48px rgb(0 0 0 / 0.6);
+  --gousse-shadow-window: 0 30px 80px rgb(0 0 0 / 0.6);
   --gousse-high-ink: var(--gousse-high);
   --gousse-medium-ink: var(--gousse-medium);
-  --gousse-low-ink: var(--gousse-low);
+  --gousse-low-ink: var(--gousse-muted);
 }
 
-/* The utilities for the three above. Tailwind 4 is CSS-first, so a token is a
-   utility only once it is named in a `@theme` block; the vendored
-   `styles/gousse/theme.css` does that for the registry's own tokens. */
+/* The utilities for miel's own tokens above. Tailwind 4 is CSS-first, so a
+   token is a utility only once it is named in a `@theme` block; the vendored
+   `styles/gousse/theme.css` does that for the registry's nine. */
 @theme {
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --color-gousse-body: rgb(var(--gousse-body));
+  --color-gousse-subtle: rgb(var(--gousse-subtle));
+  --color-gousse-quiet: rgb(var(--gousse-quiet));
+  --color-gousse-border: rgb(var(--gousse-border));
+  --color-gousse-border-strong: rgb(var(--gousse-border-strong));
+  --color-gousse-fill: rgb(var(--gousse-fill));
+  --color-gousse-hover: rgb(var(--gousse-hover));
+  --color-gousse-field-hover: rgb(var(--gousse-field-hover));
+  --color-gousse-primary: rgb(var(--gousse-primary));
+  --color-gousse-primary-hover: rgb(var(--gousse-primary-hover));
+  --color-gousse-primary-pressed: rgb(var(--gousse-primary-pressed));
+  --color-gousse-on-primary: rgb(var(--gousse-on-primary));
+  --color-gousse-disabled: rgb(var(--gousse-disabled));
+  --color-gousse-disabled-ink: rgb(var(--gousse-disabled-ink));
+  --color-gousse-navy: rgb(var(--gousse-navy));
+  --color-gousse-error: rgb(var(--gousse-error));
+  --color-gousse-high-bg: rgb(var(--gousse-high-bg));
+  --color-gousse-high-border: rgb(var(--gousse-high-border));
+  --color-gousse-high-text: rgb(var(--gousse-high-text));
+  --color-gousse-medium-bg: rgb(var(--gousse-medium-bg));
+  --color-gousse-medium-text: rgb(var(--gousse-medium-text));
+  --color-gousse-tint-blue: rgb(var(--gousse-tint-blue));
+  --color-gousse-tint-green: rgb(var(--gousse-tint-green));
+  --color-gousse-tint-green-ink: rgb(var(--gousse-tint-green-ink));
+  --color-gousse-tint-amber: rgb(var(--gousse-tint-amber));
+  --color-gousse-tint-amber-ink: rgb(var(--gousse-tint-amber-ink));
   --color-gousse-high-ink: rgb(var(--gousse-high-ink));
   --color-gousse-medium-ink: rgb(var(--gousse-medium-ink));
   --color-gousse-low-ink: rgb(var(--gousse-low-ink));
+  --shadow-gousse-window: var(--gousse-shadow-window);
 }
 
 /* `pointer-fine:` — the variant for "this device has a real mouse".
@@ -108,95 +223,55 @@ body {
 }
 
 /* ============================================================
-   FILTERS PAGE — active-filter rows are borderless ledger cards
-   that lift on hover. Kept here because the scroll states are
-   awkward to express in Tailwind.
+   TOASTS (Main view › Toasts) — bottom-centre, one dark line each, in
+   both themes: the glyph, the message, at most one action ("Undo",
+   "Review") and the close. sonner is rendered `unstyled` (see
+   MielToaster) so the surface is ours. Colour is carried by one per-type
+   `--hue` that feeds the leading glyph only — the card itself stays the
+   same ink, so a stack reads as one material.
    ============================================================ */
-
-/* Borderless ledger card for an active filter. Depth via shadow, lifts
-   on hover — no hard border (DESIGN.md §2).
-
-   The hairline in the ramp is load-bearing rather than decorative. In dark
-   the panel is rgb(23 23 22) on a rgb(13 13 12) page: ten levels apart, with
-   a drop shadow that is black on near-black and so separates nothing. The
-   card edge disappeared and the rows read as floating fragments. An inset
-   hairline is what draws the edge; it stays inside the radius, so the card is
-   still borderless in the §2 sense — no hard border box, just the line the
-   shadow cannot carry at this contrast. */
-.filter-card {
-  background: rgb(var(--gousse-panel));
-  border-radius: 16px;
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--gousse-line) / 0.55),
-    var(--gousse-shadow-sm);
-  transition: box-shadow 0.18s cubic-bezier(0.2, 0, 0, 1);
-}
-.filter-card:hover {
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--gousse-line) / 0.8),
-    var(--gousse-shadow-md);
+:root,
+.dark {
+  --gousse-toast: 31 41 55; /* #1f2937 — the toast surface, both themes */
 }
 
-/* ============================================================
-   TOASTS — sonner is rendered `unstyled` (see MielToaster) so the
-   surface is ours: a floating panel card with a hairline and the
-   highest shadow ramp, like PopoverPanel. Colour is carried by a
-   single per-type `--hue` that feeds the leading glyph only — the
-   card itself stays neutral, so a stack of toasts reads as one
-   material.
-   ============================================================ */
-/* Container: sonner hard-codes its own font stack and a 356px width.
-   Inherit the app font instead, and let the card breathe a little wider
-   so a title long enough to name an account stays at two lines. */
 [data-sonner-toaster] {
   font-family: inherit;
-  --width: 380px;
+  --width: 420px;
 }
 
-/* The card is a two-column grid, not a row: the glyph owns column one,
-   the text block column two, and any action button spans both on a
-   second row. Grid makes that break explicit — with flex the buttons sat
-   beside the text and squeezed it against the close button's gutter,
-   and flex-wrap would leave the break up to how long the label is. */
+/* One row: glyph, text, action, close. sonner gates `width: var(--width)` on
+   `[data-styled='true']`, which `unstyled` turns off, so the card would be
+   content-sized; a centred stack of content-sized cards is what the design
+   draws, so the width is a maximum here rather than a fixed size. No
+   `position` either: sonner's base rule sets `position: absolute`, which is
+   what makes a stack a stack. */
 [data-sonner-toast].miel-toast {
-  --hue: var(--gousse-accent);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  /* No `position` here, deliberately. sonner's own base rule sets
-     `position: absolute`, which is what makes a stack a stack: every toast
-     shares one anchor in the toaster and is pushed apart by the `--y`
-     transform it computes. This selector is more specific, so declaring
-     `position: relative` here (as it once did, to anchor the close button)
-     dropped every toast back into normal flow — they laid out one under the
-     next and the pile grew taller with each one. The close button anchors
-     fine without it: an absolutely-positioned box is already a containing
-     block for its own absolute children. */
-  /* sonner gates `width: var(--width)` on `[data-styled='true']`, which
-     `unstyled` turns off. Without it the card is content-sized, and since
-     `[data-x-position='right']` pins `right: 0` the stack's left edges
-     stagger by however long each message happens to be. Restate it here:
-     the width is the toaster's `--width`, not sonner's styling opinion. */
-  width: var(--width);
+  --hue: 174 183 194;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: var(--width);
+  width: max-content;
+  /* Centred inside the toaster's column: absolutely positioned, so the auto
+     margins between both edges do the centring. */
+  left: 0;
+  right: 0;
+  margin-inline: auto;
 }
 
-/* The other rule `unstyled` drops: sonner hides the *contents* of collapsed
-   background toasts so a resting stack reads as layered cards rather than
-   four legible messages at full height. Same selector, minus the
-   `data-styled` gate. */
 [data-sonner-toast].miel-toast[data-expanded="false"][data-front="false"] > * {
   opacity: 0;
 }
 [data-sonner-toast].miel-toast[data-type="success"] {
-  --hue: var(--gousse-low);
+  --hue: 92 191 138;
 }
 [data-sonner-toast].miel-toast[data-type="error"] {
-  --hue: var(--gousse-high);
+  --hue: 240 116 92;
 }
 [data-sonner-toast].miel-toast[data-type="warning"] {
-  --hue: var(--gousse-medium);
+  --hue: 232 192 122;
 }
-/* info + loading keep the accent default. */
 
 [data-sonner-toast].miel-toast .miel-toast-icon {
   color: rgb(var(--hue));
@@ -204,82 +279,42 @@ body {
 }
 
 /* A custom `icons.loading` is wrapped by sonner in an absolutely-positioned
-   `.sonner-loader`. The icon slot above is the containing block; the wrapper
-   then just fills it, so the spinner sits where the static glyphs do instead
-   of centring itself against the whole card. */
+   `.sonner-loader`; the icon slot above is its containing block. */
 [data-sonner-toast].miel-toast .miel-toast-icon > .sonner-loader {
   position: absolute;
   inset: 0;
-  top: 0;
-  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   transform: none;
 }
-[data-sonner-toast].miel-toast .miel-toast-icon > .sonner-loader[data-visible="false"] {
-  transform: scale(0.8);
-}
 
-/* Actions sit on their own row spanning the full card width — the toast
-   has exactly one next step, so the button reads as that step rather
-   than as a control tucked beside the text. */
-[data-sonner-toast].miel-toast .miel-toast-action {
-  grid-column: 1 / -1;
-}
-/* With a cancel button too, stacking two full-width blocks reads as a
-   dialog. Split the row instead: the columns are re-cut so the pair sits
-   side by side, and the icon's `auto` column collapses (its content is
-   on row one, which sets its own width). */
-[data-sonner-toast].miel-toast:has([data-cancel]) {
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
-}
-[data-sonner-toast].miel-toast:has([data-cancel]) [data-content] {
-  grid-column: 2 / -1;
-}
-[data-sonner-toast].miel-toast [data-cancel].miel-toast-action {
-  grid-column: 1 / 3;
-}
-[data-sonner-toast].miel-toast:has([data-cancel]) [data-action].miel-toast-action {
-  grid-column: 3 / -1;
-}
-
-/* Close button: sonner only positions its own when `data-styled`, so
-   we own placement. Hidden until hover/focus so a resting stack stays
-   quiet. The *visual* affordance is a small 24x24 pill sitting inside
-   the card's padding box (so it never bleeds past the 16px corner);
-   the 40x40 touch target is an invisible ::after overlay centred on
-   it (DESIGN.md §5 — extend the hit area, never shrink it). */
+/* The close sits at the end of the row as a quiet glyph, always visible: a
+   toast that stays until closed (an error) has to show where it closes. */
 [data-sonner-toast].miel-toast .miel-toast-close[data-close-button] {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  position: relative;
+  order: 99;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
-  width: 24px;
-  border-radius: 9999px;
+  height: 20px;
+  width: 20px;
+  flex: none;
+  border-radius: 6px;
   padding: 0;
-  /* sonner paints a filled, bordered close button in dark theme from a rule
-     that is *not* gated on `data-styled` — hence the grey blob. Reset it: the
-     resting state is a bare glyph, the fill only appears on hover below. */
+  transform: none;
   background: transparent;
   border: 0;
-  color: rgb(var(--gousse-muted));
-  opacity: 0;
-  transition:
-    opacity 0.15s cubic-bezier(0.2, 0, 0, 1),
-    background-color 0.15s cubic-bezier(0.2, 0, 0, 1),
-    color 0.15s cubic-bezier(0.2, 0, 0, 1);
+  color: rgb(138 150 163);
+  transition: color 0.15s, background-color 0.15s;
 }
 [data-sonner-toast].miel-toast .miel-toast-close::after {
   content: "";
   position: absolute;
   top: 50%;
   left: 50%;
-  height: 40px;
-  width: 40px;
+  height: 36px;
+  width: 36px;
   transform: translate(-50%, -50%);
 }
 [data-sonner-toast].miel-toast .miel-toast-close svg {
@@ -287,181 +322,67 @@ body {
   width: 12px;
   display: block;
 }
-[data-sonner-toast].miel-toast:hover .miel-toast-close,
-[data-sonner-toast].miel-toast .miel-toast-close:focus-visible {
-  opacity: 1;
-}
 [data-sonner-toast].miel-toast .miel-toast-close[data-close-button]:hover {
-  background: rgb(var(--gousse-line) / 0.4);
-  border-color: transparent;
-  color: rgb(var(--gousse-ink));
-}
-/* Reserve the close button's gutter on the text block only — not as card
-   padding, which would leave the full-width action button visibly
-   off-centre. The close pill is 24px + 8px inset, so 1.5rem past the
-   card's own 12px padding clears it with a hair of breathing room. */
-[data-sonner-toast].miel-toast:has(.miel-toast-close) [data-content] {
-  padding-right: 1.5rem;
-}
-
-/* ============================================================
-   SETTINGS PAGE — grouped single-scroll. A sticky group header
-   rides along while its group is in view; a right-edge dot rail
-   jumps between the three groups. Kept here because the rail's
-   active-dot state is awkward to express cleanly in Tailwind.
-   ============================================================ */
-
-/* Sticky group header. It is painted solid in the content column's own colour
-   (`--gousse-panel`, what `AppMain` sits on), so the cards scrolling under it
-   are covered rather than showing through the label and its rule — and, being
-   the exact colour around it, it reads as the page itself rather than as a
-   band. The fade-and-blur mask it once had is what drew a visible dark box.
-
-   `top` is negative because a sticky box sticks to its scroll container's
-   *content* edge, and `AppContent` pads that by `py-6`: at `top: 0` the header
-   parked 1.5rem below the top bar and the cards stayed visible in the strip
-   above it. Keep this in step with `AppContent`'s top padding. */
-.settings-group-head {
-  position: sticky;
-  top: -1.5rem;
-  z-index: 5;
-  background: rgb(var(--gousse-panel));
-}
-
-/* Fully-rounded control language for the settings page. Buttons, selects
-   and inputs all become pills. `Button`, `Select` and `Switch` come from
-   gousse-ui, so their radius is overridden here rather than in the
-   component; scoping to `.settings-surface` keeps the pill treatment off
-   the rest of the app. The segmented control opts out — it sets its own
-   radius and is excluded below. */
-.settings-surface :is(button, [role="button"]):not([role="radio"]) {
-  border-radius: 9999px;
-}
-
-.settings-surface :is(select, input, textarea) {
-  border-radius: 9999px;
-}
-
-/* Same pill treatment for the Create/Dismiss actions inside the
-   "Proposed by AI" card (SuggestedFilterRow). The gousse-ui
-   `Button` owns its own radius, so it's overridden here by scope rather
-   than at the component. Scoped to the action cluster, not the whole
-   card, so the label badge's own radius is left alone. A pill eats its
-   horizontal padding at the ends, hence the wider inline padding
-   (DESIGN.md §3). */
-.filter-row-actions :is(button, [role="button"]) {
-  border-radius: 9999px;
-  padding-inline: 0.875rem;
-}
-
-/* And again for the onboarding gate's single "Connect with Google" action —
-   same reason (gousse-ui `Button` owns its radius), same pill + wider inline
-   padding as everywhere else. */
-.onboarding-gate :is(button, [role="button"]) {
-  border-radius: 9999px;
-  padding-inline: 1.125rem;
-}
-
-/* A native select is painted by the OS, which ignores border-radius —
-   so the pill only lands once the native appearance is dropped. That
-   also removes the built-in arrow, hence the inline-SVG chevron and the
-   right padding that keeps the label clear of it. `currentColor` can't
-   be used in a url(), so the chevron is drawn in the muted token's
-   literal rgb and the two themes swap it below. */
-.settings-surface select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  padding-inline: 0.875rem 2rem;
-}
-
-.dark .settings-surface select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(255 255 255);
 }
 
 /* ---------------------------------------------------------------------------
-   Inbox category subgroups (the "tinted header + tinted body" of
-   design/message-row-proposals).
+   Inbox category subgroups (Main view › Category Header).
 
-   Each group sets one custom property — `--hue`, the `hue` field of
-   `components/systemLabels.ts`, the same triplet the sidebar rows drive their
-   tint from — and every surface below derives from it. Adding a category is one
-   declaration in that table and nothing here.
+   Each group sets custom properties from `components/systemLabels.ts` through
+   `categoryStyle` — `--hue` (the band's tint), `--cat-ink` / `--cat-ink-dark`
+   (its name, glyph and count as text) and optionally `--tint-head` — and every
+   surface below derives from them. Adding a category is one entry in that table
+   and nothing here. Primary sets none and keeps the neutral defaults: an ink
+   tint, the name in ink, glyph and count muted.
 
-   Only three alphas separate light from dark, so the recipe is written once.
-   The tint alone carries the identity: the header at 10–14% and the run of rows
-   under it at 3–4.5%, enough that the eye reads a band without the wash ever
-   competing with the text on top of it.
+   The rows under a heading stay white: the card is one surface, and the band
+   alone says which group a row is in.
    --------------------------------------------------------------------------- */
 .category-group {
-  --hue: var(--gousse-muted);
-  --tint-head: 0.1;
-  --tint-body: 0.028;
-  --tint-text: 0.82;
+  --hue: var(--gousse-ink);
+  --tint-head: 0.04;
+  --cat-ink: var(--gousse-ink);
+  --cat-ink-dark: var(--gousse-ink);
+  --cat-glyph: var(--gousse-muted);
+  --cat-count: var(--gousse-muted);
+  --cat-count-alpha: 1;
+}
+
+.category-group[data-hued] {
+  --cat-glyph: var(--cat-ink);
+  --cat-count: var(--cat-ink);
+  --cat-count-alpha: 0.6;
 }
 
 .dark .category-group {
-  --tint-head: 0.14;
-  --tint-body: 0.045;
-  --tint-text: 1;
+  --tint-head: 0.1;
+}
+
+.dark .category-group[data-hued] {
+  --cat-ink: var(--cat-ink-dark);
+}
+
+.category-group + .category-group .category-group-header,
+.category-group-body .message-row {
+  border-top: 1px solid rgb(var(--gousse-fill));
 }
 
 .category-group-header {
   background: rgb(var(--hue) / var(--tint-head));
 }
 
-/* The heading's text-coloured parts: the chevron, the name and the count all
-   read in the category's own hue, so the band is identifiable from any one of
-   them. Lucide icons paint in `currentColor`, so setting `color` is enough. */
 .category-group-ink {
-  color: rgb(var(--hue) / var(--tint-text));
+  color: rgb(var(--cat-ink));
 }
 
 .category-group-count {
-  background: rgb(var(--hue) / 0.18);
+  color: rgb(var(--cat-count) / var(--cat-count-alpha));
 }
 
 .category-group-glyph {
-  color: rgb(var(--hue));
-}
-
-.category-group-body {
-  background: rgb(var(--hue) / var(--tint-body));
-}
-
-/* The row's hover is the category's, not a neutral grey: the band it belongs to
-   stays legible while the pointer is inside it. Painted on the row wrapper so a
-   row keeps one hover rule wherever it is mounted. */
-.category-group-body .message-row:hover {
-  background: rgb(var(--hue) / 0.07);
-}
-
-/* The two tinted surfaces above, flattened into opaque colours so the
-   row-actions overlay can paint the exact colour the row already is.
-
-   `color-mix` composites the tint over the page background the same way the
-   browser does when it paints `rgb(hue / a)` on top of `rgb(bg)`. Tailwind 4
-   already requires the browsers that shipped `color-mix` (Chrome 111, Safari
-   16.4), so there is no fallback to carry.
-
-   The hover surface is the two tint layers at once: over the same backdrop,
-   `--tint-body` under 7% hue composites to `1 - (1 - tint-body) * (1 - 0.07)`,
-   which is why it is one mix and not a mix of a mix. */
-.category-group-body {
-  --tint-hover-total: calc(1 - (1 - var(--tint-body)) * (1 - 0.07));
-
-  --tinted-body: color-mix(
-    in srgb,
-    rgb(var(--hue)) calc(var(--tint-body) * 100%),
-    rgb(var(--gousse-bg))
-  );
-
-  --tinted-hover: color-mix(
-    in srgb,
-    rgb(var(--hue)) calc(var(--tint-hover-total) * 100%),
-    rgb(var(--gousse-bg))
-  );
+  color: rgb(var(--cat-glyph));
 }
 
 /* --------------------------------------------------------------------------
@@ -469,48 +390,32 @@ body {
 
    `MessageActions`' row variant is an overlay: it fades in on top of the
    subject and sender and needs an opaque backing, or the text runs underneath
-   the icons. That backing has to be *the colour the row actually is*, and a row
-   is no longer the page background — it sits on `.category-group-body`'s tint,
-   with the hover tint over that, and the two are alpha-composited over
-   `--gousse-bg`. So the colour is published here, next to the rules that make
-   it, rather than hardcoded in the component.
-
-   It is a finished colour rather than this repo's usual bare `R G B` triplet,
-   because the two tinted values are produced by `color-mix`, which has no
-   triplet form. The overlay therefore fades to the `transparent` keyword: that
-   is `rgba(0, 0, 0, 0)`, so the ramp technically passes through grey — but only
-   at the far tail, where the gradient is already almost fully transparent, and
-   the alternative costs six per-channel custom properties per category.
-
-   Kept as three declarations mirroring the three surfaces above. A category
-   whose tints change updates the backing with them, because both read the same
-   `--hue` and the same alphas.
+   the icons. That backing is *the colour the row actually is* — the card's
+   white, or the neutral hover wash — so it is published here, next to the rule
+   that paints it, rather than hardcoded in the component.
    -------------------------------------------------------------------------- */
 .message-row {
-  --row-surface: rgb(var(--gousse-bg));
+  --row-surface: rgb(var(--gousse-panel));
+  background: rgb(var(--gousse-panel));
 }
 
-.category-group-body .message-row {
-  --row-surface: var(--tinted-body);
+.message-row:hover,
+.message-row[data-current="true"] {
+  --row-surface: rgb(var(--gousse-hover));
+  background: rgb(var(--gousse-hover));
 }
 
-.category-group-body .message-row:hover {
-  --row-surface: var(--tinted-hover);
-}
+/* The heading is 32px tall, so the actions in it cannot be full-size targets
+   — they would set the band's height instead and make every band taller than
+   the design.
 
-/* The heading is 8px of padding around a 16px glyph — T1's height — so the
-   actions in it cannot be the 32px *tall* targets they are in a section header,
-   which would set the row's height instead and make every band taller than the
-   design.
-
-   The width stays 32px, and that is not a leftover: three strips of these
-   actions are on screen at once — the section header above the card, this band
-   heading inside it and a row's own on hover — and read/archive/delete are the
-   three they share, right-aligned so they line up in columns. A column is the
-   button's width plus the 4px gap, so shrinking the width here to match the
-   height would give this strip a 28px pitch against the others' 36px and pull
-   every one of its icons off the column its neighbours sit in. Only the height
-   is the band's business.
+   The width stays 28px, the icon buttons' own (`iconButton.ts` `sm`), and that
+   is not a leftover: three strips of these actions are on screen at once — the
+   section header above the card, this band heading inside it and a row's own
+   on hover — and read/archive/delete are the three they share, right-aligned
+   so they line up in columns. A column is the button's width plus the gap, so
+   a narrower button here would pull every one of its icons off the column its
+   neighbours sit in. Only the height is the band's business.
 
    That 24px used to be justified by these being pointer-only — hidden below
    `sm` and hover-revealed above it. They are not: a touch device reaches them
@@ -525,7 +430,7 @@ body {
 .category-group-actions button {
   position: relative;
   height: 1.5rem;
-  width: 2rem;
+  width: 1.75rem;
 }
 
 .category-group-actions button::after {

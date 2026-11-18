@@ -145,12 +145,17 @@ describe("the colour is legible on its own", () => {
  * Every class on every rendered element, one per entry. The filled pill is
  * looked for as an exact `bg-gousse-<priority>`: the danger hover the section's
  * "Delete all" carries is `hover:bg-gousse-high/10`, a different class doing a
- * different job, and a substring search would call it a pill.
+ * different job, and a substring search would call it a pill. Decoration hidden
+ * from assistive tech is skipped: the row toolbar's priority picker draws the
+ * level as three filled bars (`PriorityBars`, `aria-hidden`) beside the level's
+ * name, a glyph rather than a pill standing in for the word.
  */
 const renderedClasses = (root: HTMLElement): string[] =>
-  [...root.querySelectorAll<HTMLElement>("*")].flatMap((node) =>
-    node.className.split(/\s+/).filter(Boolean),
-  );
+  [...root.querySelectorAll<HTMLElement>("*")]
+    .filter((node) => !node.closest('[aria-hidden="true"]'))
+    .flatMap((node) =>
+      (typeof node.className === "string" ? node.className : "").split(/\s+/).filter(Boolean),
+    );
 
 describe("the call sites", () => {
   for (const priority of PRIORITIES) {
