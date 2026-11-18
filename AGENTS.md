@@ -80,9 +80,12 @@ three (#138). `packages/core/src/googleOAuthSetup.ts` is a leaf module beside
 `claudeUsage.ts` — the ordered steps as data, plus the callback path the API
 route mounts and the dev redirect URI `env.ts` defaults to, so what the
 documents tell someone to register is what an unconfigured server actually
-sends Google. Two surfaces render that list: the onboarding gate's first step
-(`GoogleOAuthSteps.tsx`, the one screen a fresh install reaches before it can
-do anything) and the landing page's installation guide, whose `GuideStep` gained
+sends Google. Two surfaces render that list: the onboarding gate's Google step
+(`GoogleOAuthSteps.tsx`, inside the step a fresh install reaches before it can
+do anything — the gate is Server · Google · Mailbox · AI triage, and the Server
+step only speaks when the API cannot be reached or refuses the bearer, read
+with `GET /auth/check` after a failed config read) and the landing page's
+installation guide, whose `GuideStep` gained
 a `substeps` field for it. The README is the third and the only one allowed to
 restate them, in Markdown of its own; `contributorDocs.test.ts` checks its
 section against the same list. Console labels, the consent screen's mode and a
@@ -343,7 +346,7 @@ and keeps its name: a refusal on the run path is still `claude_unavailable` (503
 The API key for a hosted provider is **not** an env var. It lives in
 `encrypted_secrets` under the vendor's name, encrypted with
 `TOKEN_ENCRYPTION_KEY` (the same `util/crypto.ts` that protects Google refresh
-tokens), and is pasted in the app under Settings → AI & Triage → Credentials,
+tokens), and is pasted in the app under Settings → AI → Providers,
 which since #110 holds one row per provider — the three vendor keys and the
 Claude Code token, which is the same kind of setting and no longer a separate
 read-only subsection. The provider picker is a runtime setting, so its
@@ -636,11 +639,21 @@ reach it; the click, the removal and the refusal are rendered in
 ## The Promo Codes page
 
 Saved promos get a home (#162): `pages/PromoCodesPage.tsx` at **`/promo-codes`**,
-a top-level route beside logs and settings with one entry in the sidebar's
-footer nav. Global, not account-scoped, and that is the feature rather than a
-shortcut — a promo code is a thing used at a checkout, so which mailbox it
-arrived in is a **column** on the row and never a filter the user must satisfy
-before seeing anything. Being outside `/account` is also what keeps it: `App`'s
+a top-level route with one entry among the sidebar's views (its count is the
+codes to review). Global, not account-scoped, and that is the feature rather
+than a shortcut — a promo code is a thing used at a checkout, so which mailbox
+it arrived in is shown on the promo (always in the reader's ticket, and on a
+row whenever the page spans more than one mailbox) and never a filter the user
+must satisfy before seeing anything.
+
+On screen (the design's "Promo codes" page) it is three sections and a reader:
+**To review** — the suggestions, as cards — then **Active** and **Expired** —
+the saved promos, as rows — with the selected promo open in a reader column on
+the right (the code as a ticket with Copy code, Terms, Valid until and the Shop,
+derived from the sender's domain, then the original email copy). The regions
+are labelled "Promo codes to review", "Active promo codes", "Expired promo
+codes", and "Saved promo codes" when nothing is saved but suggestions exist. The
+reader's pager walks the page in that order. Being outside `/account` is also what keeps it: `App`'s
 `isAccountScope` only redirects `/` and `/account…` into the default account, so
 a top-level route is excluded by construction.
 
@@ -667,8 +680,8 @@ there is nothing suggested, and the page's empty state waits for all three
 sections to be empty: a page with suggestions and no saved rows is not empty, it
 is a page with something to do.
 
-The suggested row shares the saved rows' columns and differs in what it *does*:
-one control, the same save. Each of the other three absences is a rule — there
+A suggestion card differs from a saved row in what it *does*: one control, the
+same save (the design draws a delete on the card too; it is left out). Each of the other three absences is a rule — there
 is no copy of the mail to view until a save writes one (and the Gmail original
 is still in the inbox), the guesses become corrigible when the user decides to
 keep them, and removing a detection would be a *dismissal*, an act this feature
@@ -743,9 +756,9 @@ promo nobody saved has no copy (the columns are written at save time and at no
 other moment) and answers the same 404 an unknown id does, because a viewer must
 never draw an empty mail as though that were what the shop sent.
 
-The read is the dialog's, not the page's: `usePromoOriginalMail(id)` is disabled
-until `ViewOriginalMailButton` opens one, so a table of twenty rows fetches no
-mail until someone asks for one — which is why the list payload carries no
+The read is the reader's, not the page's: `usePromoOriginalMail(id)` runs only
+for the promo opened in the reader ("Original email copy"), so a page of twenty
+rows fetches no mail until someone opens one — which is why the list payload carries no
 bodies in the first place. `["promo-original", id]` is its own key with
 `staleTime: Infinity` and nothing invalidates it: a record does not change.
 `SavedPromoMailBody` renders the stored HTML and falls back to the stored text,
@@ -755,10 +768,11 @@ The browser's remote-images preference still applies: the mail is gone from
 Gmail, but its images are still hosted by the sender and loading one is still
 the read receipt it always was.
 
-Everything in that dialog is read-only, and that is the rule rather than an
+The copy of the mail is read-only, and that is the rule rather than an
 omission: the five extracted fields are the model's guesses and are the
 corrigible part (#164, below), while the copy of the mail is a record. The
-dialog's only control closes it, and the endpoint has no writer.
+endpoint has no writer. A suggestion has no copy to show; its reader says where
+the mail is instead and links to it.
 
 ## Correcting a promo, and removing one
 
@@ -799,12 +813,11 @@ saved row `listSavedPromos` files under expired against the same `now` — so a
 promo with no stated end, or one lapsing today, is never cleared — and answers
 how many went, zero included.
 
-On screen, `SavedPromoRow` is now a two-state row: `SavedPromoReadRow` or
-`SavedPromoEditRow`, with the flag the row's own rather than the section's, since
-correcting two rows is two independent corrections and closing one would discard
-typing nobody asked to discard. The editor replaces the row in place so each box
-sits under the heading that names it; the account cell stays plain text, because
-where a mail arrived is not a guess. `savedPromoDraft.ts` is the pure module
+On screen the correction happens in the reader: Edit swaps the ticket for its
+five fields (`PromoTicketEditor`), Enter saves, Escape cancels, and stepping to
+another promo abandons the open edit — one correction at a time, in the place
+the promo is being read. The account stays plain text, because where a mail
+arrived is not a guess. `savedPromoDraft.ts` is the pure module
 between the boxes and the request — the draft a row starts from (the stored
 instant read as the UTC day it is the end of, for the reason `promoExpiryLabel`
 is UTC-pinned), the patch naming only what changed, `null` for an emptied box,
@@ -833,12 +846,14 @@ presented it as a normal answer are gone:
   offers **no copy act at all**, rather than a disabled one labelled "No code to
   copy" — the way `CodeLedgerRow` leaves the icon off a magic link;
 - `PromoCodeRow` on the message page draws its context and no chip;
-- `SavedPromoReadRow` puts the table's `UNSTATED` dash in the code cell.
+- the Promo Codes page puts the `UNSTATED` dash in the row's code slot and in the
+  reader's ticket, with no copy button.
 
 **Nothing hides, drops or breaks such a row**, and that is the constraint the
 whole change is written around: the save trashed the Gmail original, so the row
 is very often the only surviving copy of that mail. It still renders, still
-opens its original-mail dialog, and is still editable and deletable.
+opens in the reader with its original email copy, and is still editable and
+deletable.
 
 The editor is the other half. `code` joins `discount` as a field that may be
 corrected but not **cleared** — in `UpdatePromoRequest` (so a patch naming
@@ -1016,74 +1031,97 @@ stores too.
 
 ## The app shell
 
-The frame around every page is gousse's `app-shell` registry item, composed once
-in `packages/web/src/App.tsx`: `AppShell` › `SidebarShell` + `AppMain` ›
-`TopBar` + `AppContent`. The top bar is the layout's, not the page's. It sits
-above the scroll region, and a page fills it through
-`features/shell/PageTopBar.tsx`, which portals the page's `TopBarStart` /
-`TopBarTitle` / `TopBarEnd` into the header the layout rendered — so bar
-content is declared beside the body it belongs to, is laid out by the bar's own
-flex row, and picks up its `data-scrolled` state. The collapsed sidebar's open
-button is the one child the bar contributes itself, which is why no page draws
-a `SidebarTrigger` and `LayoutContext` no longer carries the collapsed flag.
+The look is `miel.figcraft` at the repo root (pages Main view, Promo codes,
+Settings, Onboarding, Compose & Reply, UI System For Miel), and
+`packages/web/DESIGN.md` is what it means for the code — tokens, type scale,
+radii, which primitive to reach for. The redesign changed the frame:
 
-That button has to stay leftmost, and what keeps it there is that `App` gives
-the bar a slot to portal into rather than the header itself. A portal appends
-to its container, so page controls portalled into the `<header>` landed wherever
-the DOM stood when they mounted: with the sidebar open there is no trigger yet,
-and collapsing later appended it *after* them, at the far right. The slot is a
-`display: contents` div, so `TopBarStart`/`TopBarEnd` are still flex items of
-the bar — their `ml-auto` and the inbox's centred period nav both resolve
-against the header — while DOM order is pinned. The bar also widens its gap to
-`gap-4` while collapsed, since the default leaves the trigger and the account
-switcher's avatar reading as one clump.
-
-Two things the slot module settles. Its context is tri-state on purpose:
-`undefined` means no layout above (a page mounted alone in a test) and the
-content renders in place, so a suite still sees the controls it would in the
-app; `null` means the bar has not attached yet, and nothing renders rather than
-flashing the controls inside the content for a frame. And `AppContent` is the
-content column's one scrolling element — `useScrollRestoration` takes that node
-and the bar watches it — so a page must never introduce its own
-`overflow-y-auto`, and a sticky bar inside a page sticks at `top-0`.
-`App.test.tsx` renders all of that.
-
-Nothing in the shell owns state. The collapsed flag is `App`'s, persisted in
-`localStorage`, and the scroll node rides through a callback ref into state,
-because the bar renders before the region and has to re-render once there is a
-node to watch — so the registry's `useAppShell` goes unused here.
-
-Below `sm` the same flag drives a drawer over the page rather than a column
-beside it, so `App` starts it closed there whatever the stored preference says,
-closes it again on every navigation (a tapped row has done its job), and does
-not write the stored flag from that viewport — the preference is the desktop's.
-The inbox's period nav and select button leave the bar for `MobileBottomBar`
-below `md`, and the account switcher shows only its avatar there, because a
-fixed-height bar has no second row to wrap onto.
+- **No shared top bar.** `App.tsx` draws `components/sidebar/AppSidebar` beside
+  a `<main>` column, and every page draws its own header (`PageHeader`: the
+  28px title, then the page's controls on the same row) above its own scroll
+  body (`PageLayout`, both in `features/shell/`). The old `app-shell` +
+  `PageTopBar` portal is gone; the vendored `app-shell` and `sidebar` items
+  stay in `components/ui/` but frame nothing.
+- **One scrolling element per column**, and the page owns it: `PageLayout`'s
+  body hands itself to the layout through `ScrollRegionContext`
+  (`features/shell/scrollRegion.ts`), and `useScrollRestoration` saves an offset
+  against each history entry from whichever body is mounted. A page must never
+  add its own `overflow-y-auto` inside that body. `App.test.tsx` renders it.
+- **The sidebar** holds what the old top bar did: the account switcher (a card
+  at its top), Compose (`C` from anywhere not typing), the views — Inbox with
+  the period's unread count, Done, Promo codes with the codes to review — the
+  labels, then Filters, Logs, Settings and the last-sync line. Collapsed on
+  desktop it is a 72px rail of the same things (`SidebarRailContext`); below
+  `sm` it is a drawer, opened from the menu button `PageHeader` draws while it
+  is closed (`sidebarToggle.ts`), started closed and closed again on every
+  navigation. Only the desktop flag is persisted. The design's Snoozed row is
+  not drawn: nothing in Gmail's API or miel's schema can snooze.
+- **List and reader are one screen.** `messages/:gmailMessageId` is a child
+  route of `account/:accountId`: `InboxPage` renders the list and an `Outlet`
+  where `MessageDetailPage` is the reader column, handing it the list's
+  reading order (`features/inbox/readingOrder.ts`) for the "1 of N" pager and
+  `J`/`K`. The list stays mounted and scrolled while messages are read. Opening
+  another message while one is open *replaces* the history entry (the row's
+  link and the pager both do), so the entry behind the reader is always the
+  list and `useReturnToInbox`'s `navigate(-1)` still lands there. Below `lg` the
+  reader takes the whole column. Escape closes it.
+- **The inbox header** carries the period title ("This week", `periodTitle`),
+  the dates pill, the search field, the Week/Month/Year switch, Select, Triage
+  and Sync. `PageHeader` is a CSS container, so the inbox drops the pill, Select
+  and the switch by its own column's width — narrow beside the reader — rather
+  than the viewport's; `MobileBottomBar` still carries the period nav and
+  Select below `md`.
+- **Search (⌘K)** is client-side over the period already loaded
+  (`features/inbox/searchMessages.ts`: every word must appear in sender,
+  subject or snippet, case- and accent-insensitively). There is no search
+  endpoint, and the empty result says the search covers only the period.
+- **Done** is `?mailbox=done` beside `?view`/`?range`/`?label`
+  (`features/inbox/mailbox.ts`, and one of `inboxLocation.ts`'s scope params, so
+  a message opened from Done returns to Done). It reads `archivedOnly`.
+- **Toasts** are bottom-centre, one dark line each in both themes
+  (`MielToaster`, `index.css`).
 
 ## The compose window
 
-Replying is a floating window, not a block at the bottom of the page (#96):
-docked bottom-right at `z-[80]`, collapsible to its own title bar, over the page
-rather than in its flow. The split is the thing to keep. `features/compose/*` is
-the window — the shell (`ComposeWindow`), its title bar, the To/Cc/Subject
-header, the body field, the footer, plus the two pure modules `recipients.ts`
-(one text field per address list, parsed but never rewritten under the caret)
-and `composeWindowState.ts` — and none of it knows a message is being answered.
-`features/reply/*` is the reply: the prefilled recipients and subject
-(`replyDefaults.ts`), the AI instruction section carried over from #91, and the
-two mutations. A blank Compose mounts the same shell with an empty form; that
-is why the seam exists. Its backend is in place (see *Composing a new message*);
-the button is the redesign's to wire.
+Replying and composing are floating windows docked bottom-right at `z-[80]`,
+over the page rather than in its flow (#96), held app-wide:
+`features/compose/ComposeProvider.tsx`, mounted in `App`, owns every window's
+fields (so a minimized window keeps them) and is the one way anything opens
+one — `useCompose().openNew(accountId)` for the sidebar's Compose and `C`,
+`openReply(message, "reply" | "replyAll" | "forward", prefill?)` for the
+reader's `ReplySplitButton` (keys R, A, F, ⇧R) and `DraftReplyCard`.
+`ComposeDock` renders up to three windows, one open at a time (opening one
+minimizes the others); a fourth is refused with a toast. Each window
+(`ComposeSessionWindow`) owns its AI (`useComposeAi`), its send
+(`useComposeSend`), its Gmail-draft autosave (`useDraftAutosave`) and its keys
+(`composeShortcuts.ts`: ⌘↵ send, ⌘⇧↵ send & archive for replies, ⌘J the AI
+strip, Esc stop or minimize, ⌘⌫ discard).
 
-Which of the three states the window is in is derived, not stored:
+The split is still the thing to keep: `features/compose/*` is the window — the
+shell, title bar, the From row (static: the account, no send-as), the To/Cc/Bcc
+chip rows, subject, body, AI strip, footer, plus the pure modules
+`recipients.ts` (typing is committed into chips only on a comma, semicolon,
+Enter or blur — never rewritten under the caret) and `composeWindowState.ts` —
+and none of it knows a message is being answered. `features/reply/*` is the
+reply: the prefilled recipients and subject (`replyDefaults.ts`, including the
+text-only forward block — attachments are not forwarded), the split button and
+the reader's draft card, whose drafting is on demand only: nothing is generated
+until someone presses "Draft with AI". New mail and forwards send through
+`/compose/send`, replies through `send-reply` (`replyAll` prefills Cc from
+`replyAllCc`); a send that names a Gmail draft deletes it.
+
+Which state a window is in is derived, not stored:
 `composeWindowMode(intent, draft)` folds the user's intent together with "is
-there anything unsent", so a window holding a draft or typed text cannot fall
-shut — #91's non-negotiable, now with a third state. Minimize is exempt from
-that override on purpose: it is an explicit request to keep the draft and get it
-out of the way, and a window that re-expanded itself would read as broken. The
-body is unmounted while minimized rather than hidden, which is safe because
-every field is controlled by `ReplyComposer`'s state.
+there anything unsent" (for a new mail, being addressed counts), so a window
+holding a draft or typed text cannot fall shut — a close is a request, answered
+in place by a discard confirmation. Minimize is exempt from that override on
+purpose: it is an explicit request to keep the draft and get it out of the way.
+The body is unmounted while minimized rather than hidden, which is safe because
+every field lives in the provider.
+
+Left out, because the backend cannot do them: schedule send, snooze, send-as
+another mailbox, attachments on send, recipient suggestions and a server-side
+stop of a draft (Stop aborts the browser's request only).
 
 To and Cc being editable is end to end, not decoration: `SendReplyRequest`
 takes optional `to`/`cc`, `services/replyRecipients.ts` decides between what was
@@ -1194,8 +1232,16 @@ write with the flag cleared — so a refusal leaves nothing written. Untrash is 
 `threads.modify` that removes TRASH *and* adds INBOX, not the REST `untrash`,
 which lifts TRASH only and would leave the INBOX miel's trash took away gone; for
 the same reason it clears `isArchived` too. Unarchive is also how a message
-leaves Done. The web client's `BatchMessageAction` union does not name the two
-undos yet — that and the optimistic plans are the redesign's.
+leaves Done.
+
+In the web app the Undo hangs off the mutation, like the failure notice
+(`announcingUndo` in `api/mutations.ts`): archive and trash answer with an
+"Archived · Undo" / "Moved to trash · Undo" toast, and a section's bulk archive
+or trash with "N messages archived · Undo". The toast outlives every component
+that could hold a hook, so Undo runs `unarchive`/`untrash` through a
+`MutationObserver` on the same client. The undos are not optimistic — the rows
+they restore are no longer in the cached lists — and re-read the lists, the
+detail and the promo suggestions instead.
 
 `GET /auth/check` answers `{ ok: true }` behind the bearer middleware and does
 nothing else: a client connecting to a server tells a wrong secret (401) from a
