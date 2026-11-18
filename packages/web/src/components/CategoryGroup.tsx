@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { ListedMessage } from "../api/types";
 import { CategoryGroupBody } from "./CategoryGroupBody";
 import { CategoryHeader } from "./CategoryHeader";
@@ -6,6 +5,7 @@ import { MessageRow } from "./MessageRow";
 import { PresenceRow } from "./PresenceRow";
 import { staggerDelayMs } from "./presenceStagger";
 import { getSystemLabelMeta } from "./systemLabels";
+import { categoryStyle } from "./categoryStyle";
 import { senderRun, type CategoryName } from "../pages/categoryGroups";
 import type { Presence } from "../hooks/presence";
 
@@ -55,10 +55,14 @@ export const CategoryGroup = ({
   onToggleCategory,
 }: Props) => {
   const meta = getSystemLabelMeta(category);
-  const style = meta?.hue ? ({ "--hue": meta.hue } as CSSProperties) : undefined;
+  const style = categoryStyle(meta);
 
   return (
-    <div style={style} className="category-group group/category">
+    <div
+      style={style}
+      data-hued={meta?.hue ? "" : undefined}
+      className="category-group group/category"
+    >
       {/* The heading enters with its first row rather than ahead of it — a group
           arriving (a new account's, or a category's first message) would
           otherwise show its heading over an empty run for the row's delay. It

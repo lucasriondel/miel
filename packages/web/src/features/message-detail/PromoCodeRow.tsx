@@ -21,13 +21,13 @@ interface Props {
  * not an answer this panel gives (#168).
  */
 export const PromoCodeRow = ({ promo }: Props) => (
-  <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-sm font-semibold text-gousse-ink">{promo.discount}</span>
       {promo.terms ? (
         <span className="text-xs leading-relaxed text-gousse-muted">{promo.terms}</span>
       ) : null}
-      <span className="text-xs text-gousse-muted opacity-75">
+      <span className="text-xs text-gousse-subtle">
         {promo.merchant ? `${promo.merchant} · ` : ""}
         {promoExpiryLabel(promo.expiresAt)}
       </span>

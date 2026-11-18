@@ -21,13 +21,13 @@ export const SelectModeButton = ({
     aria-label={active ? "Exit select mode" : "Enter select mode"}
     aria-pressed={active}
     title={active ? "Exit select mode" : idleTitle}
-    className={`relative inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-bold transition-[background-color,border-color,color,box-shadow] duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 border border-transparent group-data-[scrolled=true]/bar:shadow-gousse-lg ${
+    className={`relative inline-flex h-7 items-center gap-1.5 rounded-[7px] px-2.5 text-xs font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${
       active
-        ? "bg-gousse-ink text-gousse-bg"
-        : "bg-gousse-line/40 text-gousse-muted hover:bg-gousse-line/60 hover:text-gousse-ink group-data-[scrolled=true]/bar:border-gousse-line group-data-[scrolled=true]/bar:bg-gousse-panel group-data-[scrolled=true]/bar:hover:bg-gousse-line/40"
+        ? "bg-gousse-primary text-gousse-on-primary hover:bg-gousse-primary-hover"
+        : "text-gousse-muted hover:bg-gousse-fill hover:text-gousse-ink"
     }`}
   >
-    <CheckSquare className="h-4 w-4" aria-hidden />
+    <CheckSquare className="h-3.5 w-3.5" aria-hidden />
     <span className="hidden sm:inline">Select</span>
   </button>
 );

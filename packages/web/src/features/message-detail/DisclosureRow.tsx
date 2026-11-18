@@ -38,14 +38,14 @@ export const DisclosureRow = ({
   <details className={cn(nested ? "group/nested" : "group", className)} open={defaultOpen}>
     <summary
       className={cn(
-        "flex min-h-10 w-full cursor-pointer select-none list-none items-center gap-2 rounded-full px-4 text-xs font-semibold text-gousse-muted transition-[background-color,color,transform] hover:bg-gousse-line/30 hover:text-gousse-ink active:scale-[0.96] [&::-webkit-details-marker]:hidden",
+        "flex min-h-8 w-full cursor-pointer select-none list-none items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gousse-muted transition-[background-color,color] hover:bg-gousse-fill hover:text-gousse-ink [&::-webkit-details-marker]:hidden",
         summaryClassName,
       )}
     >
       {label}
       <ChevronDown
         className={cn(
-          "ml-auto h-4 w-4 shrink-0 transition-transform duration-200",
+          "ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-200",
           nested ? "group-open/nested:rotate-180" : "group-open:rotate-180",
         )}
         aria-hidden

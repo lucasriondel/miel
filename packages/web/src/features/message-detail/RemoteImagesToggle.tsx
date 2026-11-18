@@ -18,7 +18,7 @@ export const RemoteImagesToggle = ({ enabled, onToggle }: Props) => (
     type="button"
     aria-pressed={enabled}
     onClick={onToggle}
-    className="rounded-full border border-gousse-line/60 bg-gousse-panel px-3.5 py-1.5 text-xs font-bold text-gousse-muted shadow-gousse-sm transition-[background-color,color,transform] hover:bg-gousse-line/30 hover:text-gousse-ink active:scale-[0.96]"
+    className="h-7 rounded-lg border border-gousse-border bg-gousse-panel px-2.5 text-xs font-semibold text-gousse-ink transition-colors hover:border-gousse-border-strong hover:bg-gousse-hover"
   >
     {enabled ? "Hide remote images" : "Show remote images"}
   </button>

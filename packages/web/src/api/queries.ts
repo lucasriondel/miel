@@ -88,6 +88,8 @@ export interface ListMessagesParams {
   cursor?: string;
   internalDateFrom?: string;
   internalDateTo?: string;
+  /** The Done view: archived mail only (`?archivedOnly=true`). */
+  archivedOnly?: boolean;
 }
 
 export function useMessages(params: ListMessagesParams) {
@@ -128,6 +130,7 @@ export function useAllMessages(params: Omit<ListMessagesParams, "cursor">) {
           cursor: pageParam,
           internalDateFrom: params.internalDateFrom,
           internalDateTo: params.internalDateTo,
+          archivedOnly: params.archivedOnly ? "true" : undefined,
         },
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,

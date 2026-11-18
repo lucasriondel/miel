@@ -37,7 +37,7 @@ export const MessageRowSecondLine = ({ accountId, gmailMessageId, attachments, p
   return (
     // Indented to the subject's column on desktop so the files read as hanging
     // off the message rather than starting a new column of their own.
-    <div className="flex flex-wrap items-center gap-1.5 pb-2.5 pl-4 pr-3 sm:pl-[13.5rem]">
+    <div className="flex flex-wrap items-center gap-1.5 pr-3 pb-3 pl-4 sm:-mt-1.5 sm:pl-[13.25rem]">
       {promos.map((p) => (
         <MessageRowPromoChip key={p.id} promo={p} />
       ))}
@@ -76,7 +76,7 @@ const AttachmentChip = ({ accountId, gmailMessageId, attachment }: ChipProps) =>
         disabled={busy}
         aria-label={`Attachment ${downloadName}`}
         onClick={(e) => e.stopPropagation()}
-        className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-full border border-gousse-line bg-gousse-panel px-2.5 py-1 text-xs font-medium text-gousse-ink shadow-gousse-sm transition-all active:scale-[0.96] hover:bg-gousse-line/30 disabled:cursor-progress disabled:opacity-70"
+        className="inline-flex h-6 max-w-[16rem] items-center gap-1.5 rounded-full border border-gousse-line bg-gousse-panel px-2.5 text-xs font-medium text-gousse-ink transition-colors hover:border-gousse-border-strong hover:bg-gousse-hover disabled:cursor-progress disabled:opacity-70"
       >
         {busy ? (
           <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />

@@ -19,7 +19,7 @@ export const CategorySenderRun = ({ senders }: Props) => {
   if (senders.length === 0) return null;
 
   return (
-    <span className="min-w-0 flex-1 truncate text-left text-xs font-medium text-gousse-muted">
+    <span className="min-w-0 flex-1 truncate text-right text-xs text-gousse-muted">
       {senders.join(", ")}
     </span>
   );

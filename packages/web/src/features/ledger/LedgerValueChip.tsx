@@ -22,11 +22,11 @@ const UNSTATED = "—";
  */
 export const LedgerValueChip = ({ value }: Props) =>
   value === null ? (
-    <span className="inline-flex shrink-0 items-center rounded-lg border border-gousse-line bg-gousse-bg px-2.5 py-[3px] text-xs font-medium text-gousse-muted">
+    <span className="inline-flex shrink-0 items-center h-6 rounded-md border border-gousse-line bg-gousse-panel px-2 text-xs font-medium text-gousse-muted">
       {UNSTATED}
     </span>
   ) : (
-    <span className="inline-flex shrink-0 items-center rounded-lg border border-dashed border-gousse-line bg-gousse-bg px-2.5 py-[3px] font-mono text-[13px] font-bold tracking-[0.16em] tabular-nums text-gousse-ink">
+    <span className="inline-flex shrink-0 items-center h-6 rounded-md border border-gousse-border bg-gousse-hover px-2 font-mono text-xs font-semibold tracking-[0.12em] tabular-nums text-gousse-ink">
       {value}
     </span>
   );

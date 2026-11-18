@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { TriagePanel } from "./TriagePanel";
 import type { MessageDetail, Priority } from "../../api/types";
 import { priorityInk } from "../../lib/priorityColors";
+import { priorityBanner } from "./priorityBanner";
 
 // #89 turns the triage card into one collapsible row. This package has no DOM
 // harness, so what is asserted here is the markup the panel decides: what lands
@@ -87,12 +88,15 @@ describe("at rest", () => {
     expect(summaryClasses(triaged).length).toBe(1);
   });
 
-  test("shows the sparkles glyph, the priority in words and the muted section label", () => {
+  // UI System › Priority Banner: a dot in the level's colour and the verdict
+  // spelled out, on the level's own tint.
+  test("is the priority banner: a dot, the verdict in words, the level's tint", () => {
     const summary = firstSummary(triaged);
-    expect(summary).toContain("lucide-sparkles");
-    expect(summary).toContain(">high</span>");
-    expect(summary).toContain(priorityInk("high"));
-    expect(summary).toMatch(/<h2[^>]*class="[^"]*text-gousse-muted[^"]*"[^>]*>\s*AI Triage/);
+    const banner = priorityBanner("high");
+    expect(summary).toContain("High priority —");
+    expect(summary).toContain(banner.dot);
+    expect(summary).toContain(banner.text);
+    expect(triaged).toContain(banner.surface);
   });
 
   test("truncates the reasoning to its first line", () => {
@@ -176,9 +180,9 @@ describe("earlier runs", () => {
 });
 
 describe("the surface", () => {
-  test("is the shared rounded-3xl card, not the old rounded-xl one", () => {
-    expect(triaged).toContain("rounded-3xl");
-    expect(triaged).not.toContain("rounded-xl");
+  test("is an 8px-cornered band, not a card", () => {
+    expect(triaged).toMatch(/<details[^>]*class="[^"]*rounded-lg/);
+    expect(triaged).not.toContain("rounded-3xl");
   });
 
   test("drops the accent gradient wash — §1 tints by lowering alpha on a flat fill", () => {
@@ -186,19 +190,15 @@ describe("the surface", () => {
     expect(render([])).not.toContain("bg-gradient");
   });
 
-  test("heads with a muted section label rather than an accent one (§1, §4)", () => {
-    expect(triaged).not.toMatch(/<h2[^>]*text-gousse-accent/);
-    expect(triaged).toMatch(/uppercase tracking-wide/);
-  });
-
-  // #141: the verdict is the word in its own colour, not a filled badge. The
-  // word has to survive the pill, since colour alone would carry it otherwise.
-  test("keeps the semantic priority colors, now on the word itself (§1)", () => {
+  // #141: colour is emphasis, never the only carrier — each banner spells its
+  // level out, and wears that level's own tint and text colour.
+  test("spells every level out and wears that level's tint", () => {
     for (const priority of ["high", "medium", "low"] as const) {
       const html = render([run({ priority })]);
-      expect(html).toContain(`>${priority}</span>`);
-      expect(html).toContain(priorityInk(priority));
-      expect(html).not.toContain(`bg-gousse-${priority}`);
+      const banner = priorityBanner(priority);
+      expect(html).toContain(`${banner.label} —`);
+      expect(html).toContain(banner.surface);
+      expect(html).toContain(banner.text);
       expect(html).not.toContain("text-white");
     }
   });
@@ -211,14 +211,12 @@ describe("the surface", () => {
 describe("the untriaged empty state", () => {
   const empty = render([]);
 
-  test("keeps its dashed treatment and its run-a-sync message", () => {
-    expect(empty).toContain("border-dashed");
+  // UI System › Priority Banner, "classifying": the banner's own shape on the
+  // hover fill, with a hairline and the run-a-sync message.
+  test("takes the banner's shape with its run-a-sync message", () => {
+    expect(empty).toContain("rounded-lg");
+    expect(empty).toContain("border border-gousse-line");
     expect(empty).toContain("run a sync");
-  });
-
-  test("takes the shared card radius and drops the gradient", () => {
-    expect(empty).toContain("rounded-3xl");
-    expect(empty).not.toContain("rounded-xl");
     expect(empty).not.toContain("bg-gradient");
   });
 
@@ -227,18 +225,18 @@ describe("the untriaged empty state", () => {
   });
 });
 
-describe("the summary row as a control (§5)", () => {
-  test("is a full-width target at least 40px tall that presses", () => {
+describe("the summary row as a control", () => {
+  test("is a full-width target with a named transition", () => {
     for (const cls of summaryClasses(render(older))) {
       expect(cls).toContain("w-full");
-      expect(cls).toContain("min-h-10");
-      expect(cls).toContain("active:scale-[0.96]");
       expect(cls).not.toContain("transition-all");
       expect(cls).toMatch(/transition-\[/);
     }
   });
 
-  test("clears the corner arc with the row inset §3 asks for", () => {
-    expect(summaryClasses(triaged)[0]).toContain("px-5");
+  test("is the banner's 38px height with its 12px inset", () => {
+    const [banner] = summaryClasses(triaged);
+    expect(banner).toContain("min-h-[38px]");
+    expect(banner).toContain("px-3");
   });
 });

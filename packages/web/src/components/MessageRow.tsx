@@ -2,7 +2,8 @@ import { Link, useLocation } from "react-router-dom";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ListedMessage } from "../api/types";
 import { messageDetailPath } from "../features/inbox/inboxLocation";
-import { relativeAge } from "./relativeAge";
+import { rowDate } from "./rowDate";
+import { cn } from "@/lib/utils";
 import { MessageRowSecondLine } from "./MessageRowSecondLine";
 import { MessageRowEndCell } from "./MessageRowEndCell";
 import { MessageRowLabels } from "./MessageRowLabels";
@@ -39,7 +40,7 @@ interface Props {
  */
 export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Props) => {
   const date = new Date(message.internalDate);
-  const relative = Number.isNaN(date.getTime()) ? "" : relativeAge(date);
+  const dateText = rowDate(date);
   const sender = message.fromName?.trim() || message.fromEmail;
   const subject = message.subject?.trim() || "(no subject)";
   const isUnread = message.labels.some((l) => l.name === "UNREAD");
@@ -50,8 +51,15 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
   // The inbox's scope rides along on the URL (#95): it is what the user comes
   // back to, and on a deep link it is all `useReturnToInbox` has to rebuild
   // the inbox from.
-  const { search } = useLocation();
+  const { search, pathname } = useLocation();
   const href = messageDetailPath(message.accountId, message.gmailMessageId, search);
+  // The row whose message is open in the reader beside the list. Opening
+  // another while one is open *replaces* the history entry: the entry behind
+  // the reader stays the bare inbox, so leaving the reader (Back, archive,
+  // delete) lands on the list rather than on the previous message.
+  const openId = /\/messages\/([^/?]+)/.exec(pathname)?.[1];
+  const current = openId === message.gmailMessageId;
+  const replace = openId !== undefined;
 
   // Whether the list's one label panel is currently hanging off this row's
   // trigger (#170). The actions are revealed by hover and focus, and a panel
@@ -72,11 +80,18 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
     <div
       {...(isMobile && showActions ? handlers : {})}
       data-labelling={labelling ? "true" : undefined}
-      className={`message-row group relative flex flex-col text-sm transition-colors duration-150 ${
-        selected ? "bg-gousse-accent/[0.08]" : ""
-      }`}
+      data-current={current ? "true" : undefined}
+      className={cn(
+        "message-row group relative flex flex-col text-[13px] transition-colors duration-150",
+        selected && "bg-gousse-primary/[0.06]",
+      )}
     >
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-4 py-2.5 sm:flex-nowrap sm:gap-3">
+      {/* The open message's row: a darker wash (index.css) and the brand ink
+          as a bar down its left edge. */}
+      {current ? (
+        <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-gousse-primary" />
+      ) : null}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-4 py-2.5 sm:h-11 sm:flex-nowrap sm:gap-3 sm:py-0">
         {selectMode && (
           // Not an action: the handler exists only so that ticking the checkbox
           // does not also open the message behind it. There is nothing for a key
@@ -94,16 +109,33 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
         <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2 sm:contents">
           <Link
             to={href}
-            className={`truncate transition-colors hover:underline sm:w-44 sm:shrink-0 ${
-              isUnread
-                ? "font-bold text-gousse-ink"
-                : "font-medium text-gousse-muted hover:text-gousse-ink"
-            }`}
+            replace={replace}
+            aria-current={current ? "true" : undefined}
+            className="flex min-w-0 items-center gap-2 sm:w-[184px] sm:shrink-0"
           >
-            {sender}
+            <span
+              aria-hidden
+              className={cn(
+                "h-1.5 w-1.5 shrink-0 rounded-full",
+                isUnread ? "bg-gousse-primary" : "bg-transparent",
+              )}
+            />
+            <span
+              className={cn(
+                "truncate",
+                isUnread ? "font-semibold text-gousse-ink" : "font-medium text-gousse-muted",
+              )}
+            >
+              {sender}
+            </span>
           </Link>
-          <span className="shrink-0 whitespace-nowrap text-xs font-medium text-gousse-muted tabular-nums sm:hidden">
-            {relative}
+          <span
+            className={cn(
+              "shrink-0 text-xs whitespace-nowrap tabular-nums sm:hidden",
+              isUnread ? "font-semibold text-gousse-ink" : "text-gousse-muted",
+            )}
+          >
+            {dateText}
           </span>
         </div>
         {/* The flexible middle: the labels keep their width and the subject line
@@ -116,9 +148,9 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
             screen reader and give the row two nodes to keep in step. */}
         <div className="flex min-w-0 basis-full items-center gap-2 sm:basis-auto sm:flex-1">
           <MessageRowLabels labels={message.labels} />
-          <Link to={href} className="min-w-0 flex-1 truncate hover:underline">
+          <Link to={href} replace={replace} tabIndex={-1} className="min-w-0 flex-1 truncate">
             <span
-              className={isUnread ? "font-bold text-gousse-ink" : "font-medium text-gousse-ink"}
+              className={isUnread ? "font-semibold text-gousse-ink" : "font-medium text-gousse-ink"}
             >
               {subject}
             </span>
@@ -136,7 +168,7 @@ export const MessageRow = ({ message, selectMode, selected, onToggleSelect }: Pr
           isArchived={message.isArchived}
           isTrashed={message.isTrashed}
           priority={message.priority}
-          relative={relative}
+          date={dateText}
           showActions={showActions}
         />
       </div>

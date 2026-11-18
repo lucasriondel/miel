@@ -25,7 +25,7 @@ export const LedgerIconButton = ({ label, onClick, disabled, danger, children }:
     title={label}
     onClick={onClick}
     disabled={disabled}
-    className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gousse-muted transition-[background-color,color,transform] active:scale-[0.92] disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gousse-muted ${
+    className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gousse-muted transition-[background-color,color,transform] active:scale-[0.92] disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gousse-muted ${
       danger
         ? "hover:bg-gousse-high/[0.14] hover:text-gousse-high"
         : "hover:bg-gousse-ink/[0.08] hover:text-gousse-ink"

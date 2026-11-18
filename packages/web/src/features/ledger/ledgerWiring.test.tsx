@@ -115,6 +115,7 @@ const layout = (): LayoutContext => ({
   goToday: () => {},
   setViewMode: () => {},
   selectedAccountEmail: undefined,
+  mailbox: "inbox",
 });
 
 const mountInbox = () => {
@@ -198,7 +199,7 @@ describe("the ledger", () => {
     mountInbox();
     await shownLedger();
 
-    fireEvent.click(screen.getByRole("button", { name: "Enter select mode" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Enter select mode" })[0]!);
 
     expect(ledger() === null).toBe(true);
   });

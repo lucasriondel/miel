@@ -1,6 +1,6 @@
 import type { ComponentType, SVGProps } from "react";
 import { forwardRef } from "react";
-import { Archive, ExternalLink, Mail, MailOpen, Trash2, Zap } from "lucide-react";
+import { Archive, Check, ExternalLink, Mail, MailOpen, Trash2 } from "lucide-react";
 import {
   useArchiveMessage,
   useSetMessageRead,
@@ -9,26 +9,18 @@ import {
 } from "../api/mutations";
 import type { Priority } from "../api/types";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import {
   iconButtonClass,
   iconButtonIconClass,
   iconButtonIconPx,
   type IconButtonSize,
 } from "./iconButton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { PriorityPicker } from "./PriorityPicker";
 import { RowAddLabelButton } from "../features/labels/RowAddLabelButton";
 import { buildGmailMessageUrl } from "../features/message-detail/gmailUrl";
 import { useReturnToInbox } from "../features/inbox/useReturnToInbox";
 
 export type MessageActionsVariant = "row" | "detail";
-
-const PRIORITIES = ["high", "medium", "low"] as const;
 
 interface Props {
   accountId: string;
@@ -124,10 +116,10 @@ export const MessageActions = ({
         // own padding already separates them from the pill's edge.
         "flex items-center gap-0.5"
       : forceVisible
-        ? // `gap-1` is the list surfaces' shared pitch: a row's actions and the
-          // two section headers' above it draw the same 32px button with the
-          // same 4px gap, so the trailing trio lands in the same three columns.
-          "flex items-center gap-1"
+        ? // The row's hover toolbar (Main view › Row Actions): a white strip
+          // with a hairline and a soft shadow floating at the row's end, the
+          // priority picker leading and a divider before the icon actions.
+          "flex h-[30px] items-center gap-0.5 rounded-lg border border-gousse-line bg-gousse-panel px-[3px] shadow-[0_2px_6px_rgb(20_32_46/0.08)]"
         : // Desktop hover-reveal overlay. Confined to sm+ so mobile never gets a
           // phantom tap target (mobile uses the swipe-mounted wrapper instead).
           // Gradient stops are fixed pixel widths (not %) so the opaque zone
@@ -138,11 +130,13 @@ export const MessageActions = ({
 
   return (
     <div className={containerClass}>
+      <PriorityPicker priority={priority} onSelect={handlePrioritySelect} />
+      {variant === "row" ? <span aria-hidden className="mx-0.5 h-4 w-px bg-gousse-line" /> : null}
       {/* Row only (#170). Filing a mail you can identify from its row is the
           common case, and it used to cost opening the message or entering select
           mode. The detail bar has no need of it: its own trigger sits in the
-          header, in the badge row it adds to. It leads the strip for the same
-          reason the trio below trails it — everything a surface offers on top of
+          header, in the badge row it adds to. It sits after the priority picker and
+          ahead of the trio for the same reason the trio trails the strip — everything a surface offers on top of
           read/archive/delete goes to their left, so those three keep their
           columns from the right edge inwards. */}
       {variant === "row" ? (
@@ -152,31 +146,6 @@ export const MessageActions = ({
           appliedLabelIds={appliedLabelIds ?? []}
         />
       ) : null}
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              aria-label="Change priority"
-              title="Change priority"
-              className={buttonClass(variant)}
-            >
-              <Zap className={iconClass(variant)} aria-hidden />
-            </button>
-          }
-        />
-        <DropdownMenuContent align="end" className="min-w-[8rem]">
-          {PRIORITIES.map((p) => (
-            <DropdownMenuItem
-              key={p}
-              onClick={() => handlePrioritySelect(p)}
-              className={cn("capitalize", priority === p && "bg-gousse-accent/20 font-bold")}
-            >
-              {p}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
       <ActionLink href={gmailUrl} Icon={ExternalLink} label="View in Gmail" variant={variant} />
       {/* Read / archive / delete are the three every set of message actions has
           — a row's, the detail bar's and a section header's — so they are last,
@@ -193,7 +162,9 @@ export const MessageActions = ({
         variant={variant}
       />
       <ActionButton
-        Icon={Archive}
+        // In the reader the archive is the design's "done" check: archiving is
+        // what moves a message to Done.
+        Icon={variant === "detail" ? Check : Archive}
         label={isArchived ? "Archived" : "Archive"}
         onClick={onArchive}
         disabled={busy || isArchived}

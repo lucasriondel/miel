@@ -37,20 +37,21 @@ const buttonClasses = (html: string) =>
   [...html.matchAll(/<button\b[^>]*class="([^"]*)"/g)].map(([, cls]) => cls!);
 
 describe("the panel's surface", () => {
-  test("is the shared rounded-3xl card, not the old rounded-xl one", () => {
+  test("is the shared rounded-xl card with a hairline", () => {
     const html = render();
-    expect(html).toContain("rounded-3xl");
-    expect(html).not.toContain("rounded-xl");
+    expect(html).toContain("rounded-xl border border-gousse-line");
+    expect(html).not.toContain("rounded-3xl");
   });
 
   test("drops the accent gradient wash — §1 tints by lowering alpha on a flat fill", () => {
     expect(render()).not.toContain("bg-gradient");
   });
 
-  test("heads with a gousse-low check glyph and a muted section label (§4)", () => {
+  test("heads with a gousse-low check glyph and a 12px semibold heading", () => {
     const html = render();
     expect(html).toContain("text-gousse-low");
-    expect(html).toMatch(/<h2[^>]*class="[^"]*text-gousse-muted[^"]*"[^>]*>\s*Verification Items/);
+    expect(html).toMatch(/<h2[^>]*class="text-xs font-semibold[^"]*"[^>]*>\s*Verification Items/);
+    expect(html).not.toMatch(/<h2[^>]*uppercase/);
     expect(html).not.toMatch(/<h2[^>]*text-gousse-accent/);
   });
 
@@ -70,23 +71,22 @@ describe("the panel's surface", () => {
 });
 
 describe("its controls", () => {
-  test("gives both icon buttons a round 40px hit area (§5)", () => {
-    const iconButtons = buttonClasses(render()).filter((c) => c.includes("h-10"));
+  test("gives both icon buttons a 32px square with a 6px corner", () => {
+    const iconButtons = buttonClasses(render()).filter((c) => c.includes("h-8 w-8"));
     // One copy button per code, plus the open-link button on the link.
     expect(iconButtons.length).toBe(3);
     for (const cls of iconButtons) {
-      expect(cls).toContain("w-10");
-      expect(cls).toContain("rounded-full");
+      expect(cls).toContain("rounded-md");
     }
   });
 
-  test("shapes the delete control as a pill keeping its gousse-high hover (§3)", () => {
+  test("shapes the delete control as a secondary button turning red on hover", () => {
     const html = render({ onDelete: () => {} });
     const [deleteClasses] = buttonClasses(html).filter((c) => c.includes("gousse-high"));
     expect(deleteClasses).toBeDefined();
-    expect(deleteClasses).toContain("rounded-full");
-    expect(deleteClasses).toContain("hover:bg-gousse-high/10");
-    expect(deleteClasses).toContain("hover:text-gousse-high");
+    expect(deleteClasses).toContain("rounded-lg");
+    expect(deleteClasses).toContain("hover:bg-gousse-high-bg");
+    expect(deleteClasses).toContain("hover:text-gousse-high-text");
     expect(html).toContain("Delete message");
   });
 
@@ -94,13 +94,12 @@ describe("its controls", () => {
     expect(render()).not.toContain("Delete message");
   });
 
-  test("presses every control with active:scale-[0.96] and a named transition (§5)", () => {
+  test("transitions every control's colours, never transition-all", () => {
     const classes = buttonClasses(render({ onDelete: () => {} }));
     expect(classes.length).toBe(4);
     for (const cls of classes) {
-      expect(cls).toContain("active:scale-[0.96]");
+      expect(cls).toContain("transition-colors");
       expect(cls).not.toContain("transition-all");
-      expect(cls).toMatch(/transition-\[/);
     }
   });
 

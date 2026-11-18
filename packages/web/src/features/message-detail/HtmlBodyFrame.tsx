@@ -85,7 +85,7 @@ export const HtmlBodyFrame = ({ html, imagesEnabled }: Props) => {
       style={{ height }}
       // `bg-white` overrides the panel fill on purpose: mail HTML assumes a
       // light page and the wrapped document paints white in both themes.
-      className={cn(detailSurfaceClass("md"), "w-full bg-white")}
+      className={cn(detailSurfaceClass(), "w-full bg-white")}
     />
   );
 };

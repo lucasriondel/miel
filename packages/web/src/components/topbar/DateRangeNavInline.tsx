@@ -35,15 +35,15 @@ const ArrowButton = ({
     onClick={onClick}
     disabled={disabled}
     aria-label={label}
-    className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-full text-gousse-muted transition-[background,color,transform] duration-150 hover:bg-gousse-line/50 hover:text-gousse-ink active:scale-90 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+    className="inline-flex h-5 w-4 flex-none items-center justify-center rounded text-gousse-muted transition-colors duration-150 hover:text-gousse-ink disabled:cursor-not-allowed disabled:text-gousse-border-strong"
   >
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="h-[15px] w-[15px]"
+      className="h-3.5 w-3.5"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.25}
+      strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -64,22 +64,24 @@ export const DateRangeNavInline = ({
   onNext,
   onToday,
 }: Props) => (
-  <div className="inline-flex items-center gap-1">
-    <ArrowButton dir="prev" label={`Previous ${PERIOD_NOUN[range.mode]}`} onClick={onPrev} />
-    <span className="min-w-[140px] text-center text-[13px] font-semibold tabular-nums text-gousse-ink">
-      {formatRangeLabel(range)}
-    </span>
-    <ArrowButton
-      dir="next"
-      label={`Next ${PERIOD_NOUN[range.mode]}`}
-      onClick={onNext}
-      disabled={!canGoNext}
-    />
+  <div className="inline-flex items-center gap-2">
+    <div className="inline-flex h-7 items-center gap-1.5 rounded-[7px] border border-gousse-line bg-gousse-panel px-1.5">
+      <ArrowButton dir="prev" label={`Previous ${PERIOD_NOUN[range.mode]}`} onClick={onPrev} />
+      <span className="text-center text-[13px] font-medium whitespace-nowrap text-gousse-muted tabular-nums">
+        {formatRangeLabel(range)}
+      </span>
+      <ArrowButton
+        dir="next"
+        label={`Next ${PERIOD_NOUN[range.mode]}`}
+        onClick={onNext}
+        disabled={!canGoNext}
+      />
+    </div>
     {!isCurrentPeriod && (
       <button
         type="button"
         onClick={onToday}
-        className="ml-0.5 flex-none rounded-full border border-gousse-line bg-gousse-bg px-2.5 py-1 text-[11.5px] font-semibold text-gousse-ink transition-[background,transform] duration-150 hover:bg-gousse-accent/10 active:scale-95"
+        className="h-7 flex-none rounded-[7px] px-2 text-xs font-semibold text-gousse-muted transition-colors duration-150 hover:bg-gousse-fill hover:text-gousse-ink"
       >
         Today
       </button>

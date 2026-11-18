@@ -72,9 +72,12 @@ describe("what starts a sync", () => {
    * Listed rather than counted: a fourth way to start a sync is a period
    * decision, and it should arrive with someone looking at this list.
    */
-  test("they are the button and the focus refresh, and nothing else", () => {
+  // The third is the empty Promo codes page's "Sync now", which asks for the
+  // period the inbox is showing through `syncWindow`, as the button does.
+  test("they are the button, the focus refresh and the empty promo page, and nothing else", () => {
     expect(STARTERS.toSorted()).toEqual([
       "components/topbar/SyncActions.tsx",
+      "features/promos/usePromoPageSync.ts",
       "features/sync/useFocusSync.ts",
     ]);
   });

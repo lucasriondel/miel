@@ -30,24 +30,24 @@ export const AttachmentRow = ({ accountId, gmailMessageId, attachment }: Props) 
         disabled={busy}
         title={downloadName}
         aria-label={`Attachment ${downloadName}`}
-        className="flex min-h-14 w-full items-center gap-3 px-5 py-3 text-left transition-[background-color,transform] duration-150 active:scale-[0.98] hover:bg-gousse-line/20 disabled:cursor-progress disabled:opacity-70"
+        className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-gousse-hover disabled:cursor-progress disabled:opacity-70"
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gousse-line/40 text-gousse-muted">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gousse-fill text-gousse-muted">
           {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
           ) : (
-            <Paperclip className="h-4 w-4" aria-hidden />
+            <Paperclip className="h-3.5 w-3.5" aria-hidden />
           )}
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
           {/* Truncated only when a name outruns the row, hence the title (§4). */}
-          <span className="truncate text-sm font-semibold text-gousse-ink">{downloadName}</span>
-          <span className="truncate text-xs font-medium text-gousse-muted">
+          <span className="truncate text-[13px] font-semibold text-gousse-ink">{downloadName}</span>
+          <span className="truncate text-xs text-gousse-muted">
             {attachment.mimeType || "application/octet-stream"}
             {sizeLabel ? ` · ${sizeLabel}` : ""}
           </span>
         </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-gousse-muted" aria-hidden />
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gousse-muted" aria-hidden />
       </DropdownMenuTrigger>
       <AttachmentMenuContent attachment={attachment} actions={actions} />
     </DropdownMenu>

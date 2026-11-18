@@ -8,12 +8,12 @@ interface Props {
 
 /** One superseded verdict in the earlier-runs list. */
 export const TriageRunEntry = ({ run }: Props) => (
-  <li className="flex flex-col gap-2 border-l-2 border-gousse-line/60 pl-4">
+  <li className="flex flex-col gap-2 border-l-2 border-gousse-line pl-3">
     <div className="flex flex-wrap items-center gap-2.5">
       <PriorityText priority={run.priority} />
       <TriageRunMeta createdAt={run.createdAt} model={run.model} />
     </div>
-    <p className="whitespace-pre-line text-sm font-medium leading-relaxed text-gousse-ink">
+    <p className="text-[13px] leading-relaxed whitespace-pre-line text-gousse-ink">
       {run.reasoning}
     </p>
   </li>

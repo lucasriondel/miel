@@ -142,6 +142,7 @@ const layout = (): LayoutContext => ({
   goToday: () => {},
   setViewMode: () => {},
   selectedAccountEmail: undefined,
+  mailbox: "inbox",
 });
 
 const mountInbox = (suggestions: PromoSuggestion[]) => {

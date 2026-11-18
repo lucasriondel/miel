@@ -228,6 +228,7 @@ const layout = (selectedAccountId: string): LayoutContext => ({
   goToday: () => {},
   setViewMode: () => {},
   selectedAccountEmail: undefined,
+  mailbox: "inbox",
 });
 
 describe("the inbox hands each section the selected account", () => {

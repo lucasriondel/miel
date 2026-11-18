@@ -43,15 +43,13 @@ export const TriageButton = ({ onClick, loading, disabled }: Props) => {
       disabled={disabled || loading}
       aria-label="Triage messages"
       title="Triage messages"
-      className="group group/triage relative isolate inline-flex items-center rounded-full transition-transform duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+      className="group group/triage relative isolate inline-flex items-center rounded-[7px] disabled:cursor-not-allowed disabled:opacity-60"
     >
       <RainbowGlow active={loading} />
       <span
         ref={innerRef}
-        className={`relative z-[1] m-0.5 inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-bold transition-colors duration-200 ${
-          loading
-            ? "bg-gousse-panel text-gousse-ink shadow-gousse-sm"
-            : "bg-gousse-accent/[0.12] text-gousse-accent group-hover/triage:bg-gousse-panel group-hover/triage:text-gousse-ink group-hover/triage:shadow-gousse-sm"
+        className={`relative z-[1] m-px inline-flex h-[26px] items-center gap-1.5 rounded-md border border-gousse-border bg-gousse-panel px-2.5 text-xs font-semibold text-gousse-ink transition-colors duration-150 ${
+          loading ? "" : "hover:border-gousse-border-strong hover:bg-gousse-hover"
         }`}
       >
         <SparkleIcon loading={loading} />

@@ -84,6 +84,7 @@ const layout = (selectedAccountId: string): LayoutContext => ({
   goToday: () => {},
   setViewMode: () => {},
   selectedAccountEmail: undefined,
+  mailbox: "inbox",
 });
 
 const mountInbox = (items: ListedMessage[] = MAILBOX) => {

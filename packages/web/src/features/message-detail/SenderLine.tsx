@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import type { MessageDetail } from "../../api/types";
 import { recipientLine } from "./recipientLine";
 import { SenderAvatar } from "./SenderAvatar";
+import { readerDate } from "./readerDate";
 
 interface Props {
   message: MessageDetail;
@@ -24,34 +25,29 @@ export const SenderLine = ({ message }: Props) => {
   return (
     <div className="flex items-center gap-3">
       <SenderAvatar name={name} email={message.fromEmail} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex min-w-0 items-baseline gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 items-baseline gap-1">
           <span
-            className="truncate text-sm font-bold text-gousse-ink"
+            className="truncate text-sm font-semibold text-gousse-ink"
             title={name ?? message.fromEmail}
           >
             {name ?? message.fromEmail}
           </span>
           {name && (
-            <span
-              className="truncate text-xs font-medium text-gousse-muted"
-              title={message.fromEmail}
-            >
-              {message.fromEmail}
+            <span className="truncate text-sm text-gousse-muted" title={message.fromEmail}>
+              &lt;{message.fromEmail}&gt;
             </span>
           )}
         </div>
-        {recipients && (
-          <span className="truncate text-xs font-medium text-gousse-muted">{recipients}</span>
-        )}
+        {recipients && <span className="truncate text-xs text-gousse-muted">{recipients}</span>}
       </div>
       {hasDate && (
         <time
           dateTime={message.internalDate}
           title={format(date, "PPpp")}
-          className="shrink-0 text-xs font-medium tabular-nums text-gousse-muted"
+          className="shrink-0 self-start pt-0.5 text-xs text-gousse-muted tabular-nums"
         >
-          {format(date, "MMM d, p")}
+          {readerDate(date)}
         </time>
       )}
     </div>

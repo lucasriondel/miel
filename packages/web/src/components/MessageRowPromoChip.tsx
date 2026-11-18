@@ -28,9 +28,9 @@ export const MessageRowPromoChip = ({ promo }: Props) => {
   return (
     <span
       title={title}
-      className="inline-flex max-w-[20rem] items-center gap-1.5 rounded-full border border-gousse-accent/30 bg-gousse-accent/[0.08] py-0.5 pl-2.5 pr-0.5 text-xs font-medium text-gousse-ink"
+      className="inline-flex h-6 max-w-[20rem] items-center gap-1.5 rounded-full border border-gousse-line bg-gousse-panel pr-0.5 pl-2.5 text-xs font-medium text-gousse-ink"
     >
-      <Tag className="h-3 w-3 shrink-0 text-gousse-accent" aria-hidden />
+      <Tag className="h-3 w-3 shrink-0 text-gousse-muted" aria-hidden />
       {promo.code !== null && (
         <span className="shrink-0 font-mono font-semibold tracking-wide">{promo.code}</span>
       )}
@@ -48,7 +48,7 @@ export const MessageRowPromoChip = ({ promo }: Props) => {
             gmailMessageId: promo.gmailMessageId,
           });
         }}
-        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-gousse-accent transition-[background-color,transform] hover:bg-gousse-accent/[0.16] active:scale-[0.92] disabled:cursor-progress disabled:opacity-60"
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-gousse-ink transition-colors hover:bg-gousse-fill disabled:cursor-progress disabled:opacity-60"
       >
         {save.isPending ? <Spinner size={12} /> : <Bookmark className="h-3.5 w-3.5" aria-hidden />}
       </button>

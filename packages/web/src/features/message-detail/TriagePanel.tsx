@@ -1,8 +1,7 @@
-import { Sparkles } from "lucide-react";
 import type { MessageDetail } from "../../api/types";
-import { DetailCard } from "./DetailCard";
+import { cn } from "../../lib/utils";
 import { DisclosureRow } from "./DisclosureRow";
-import { PriorityText } from "./PriorityText";
+import { priorityBanner } from "./priorityBanner";
 import { TriageRunEntry } from "./TriageRunEntry";
 import { TriageRunMeta } from "./TriageRunMeta";
 import { UntriagedNotice } from "./UntriagedNotice";
@@ -27,43 +26,47 @@ export const TriagePanel = ({ message }: Props) => {
 
   const older = message.triageHistory.slice(1);
 
+  const banner = priorityBanner(latest.priority);
   return (
-    <DetailCard elevation="md">
-      <DisclosureRow
-        summaryClassName="px-5 gap-3"
-        label={
-          <>
-            <Sparkles className="h-5 w-5 shrink-0 text-gousse-accent" aria-hidden />
-            <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gousse-muted">
-              AI Triage
-            </h2>
-            <PriorityText priority={latest.priority} />
-            <span className="min-w-0 flex-1 truncate font-medium text-gousse-muted">
-              {firstLine(latest.reasoning)}
-            </span>
-          </>
-        }
-      >
-        <div className="border-t border-gousse-line/60 px-5 py-4">
-          <p className="whitespace-pre-line text-sm font-medium leading-relaxed text-gousse-ink">
-            {latest.reasoning}
-          </p>
-          <TriageRunMeta createdAt={latest.createdAt} model={latest.model} className="mt-3" />
-          {older.length > 0 ? (
-            <DisclosureRow
-              nested
-              className="mt-4 border-t border-gousse-line/60 pt-2"
-              label={`${older.length} earlier triage run${older.length === 1 ? "" : "s"}`}
-            >
-              <ol className="flex flex-col gap-4 px-4 pb-1 pt-3">
-                {older.map((run) => (
-                  <TriageRunEntry key={run.id} run={run} />
-                ))}
-              </ol>
-            </DisclosureRow>
-          ) : null}
-        </div>
-      </DisclosureRow>
-    </DetailCard>
+    // The priority banner (UI System › Priority Banner): the verdict and the
+    // first line of its reasoning on the level's own tint, right under the
+    // title. It is still the disclosure it always was — the whole reasoning,
+    // the run's model and time and the earlier runs open beneath it.
+    <DisclosureRow
+      className={cn("rounded-lg", banner.surface)}
+      summaryClassName={cn(
+        "min-h-[38px] gap-2 rounded-lg px-3 text-[13px] font-normal hover:bg-transparent",
+        banner.text,
+        "hover:text-current",
+      )}
+      label={
+        <>
+          <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", banner.dot)} />
+          <span className="shrink-0 font-semibold">{banner.label} —</span>
+          <span className="min-w-0 flex-1 truncate">{firstLine(latest.reasoning)}</span>
+        </>
+      }
+    >
+      <div className={cn("border-t px-3 pt-3 pb-3.5", banner.rule)}>
+        <p className={cn("text-[13px] leading-relaxed whitespace-pre-line", banner.text)}>
+          {latest.reasoning}
+        </p>
+        <TriageRunMeta createdAt={latest.createdAt} model={latest.model} className="mt-2" />
+        {older.length > 0 ? (
+          <DisclosureRow
+            nested
+            className="mt-3"
+            summaryClassName="-mx-1 px-1 hover:bg-gousse-panel/60"
+            label={`${older.length} earlier triage run${older.length === 1 ? "" : "s"}`}
+          >
+            <ol className="flex flex-col gap-4 px-1 pt-2 pb-1">
+              {older.map((run) => (
+                <TriageRunEntry key={run.id} run={run} />
+              ))}
+            </ol>
+          </DisclosureRow>
+        ) : null}
+      </div>
+    </DisclosureRow>
   );
 };

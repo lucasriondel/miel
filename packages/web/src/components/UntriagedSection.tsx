@@ -55,16 +55,16 @@ export const UntriagedSection = ({
           />
         )}
       </PresenceHeaders>
-      <div className="relative rounded-md">
+      <div className="relative rounded-xl">
         {/* trigger="hover" + a non-.group host keeps the halo dark at rest;
             `active` is the only thing that lights it — i.e. only while triaging.
             The `--card` glow defaults to a 24px frame radius; override it to hug
             this section's small `rounded-md` (6px) card + the -3px inset so the
             halo tracks the corners instead of bulging past them. */}
-        <RainbowGlow variant="card" trigger="hover" active={triaging} className="!rounded-[9px]" />
+        <RainbowGlow variant="card" trigger="hover" active={triaging} className="!rounded-[13px]" />
         {/* Untriaged is a category in the same sense the priorities are (#146),
             so its card groups by Gmail category the same way theirs do. */}
-        <div className="relative z-[1] overflow-hidden rounded-md border border-gousse-line bg-gousse-panel">
+        <div className="relative z-[1] overflow-hidden rounded-xl border border-gousse-line bg-gousse-panel shadow-[0_1px_2px_rgb(20_32_46/0.04)]">
           <CategoryGroupList
             accountId={accountId}
             presence={presence}
@@ -108,12 +108,12 @@ const UntriagedHeader = ({
   return (
     // Same row rules as the priority header (#144): permanently visible actions,
     // so the heading is the one element that truncates.
-    <header className="flex items-center gap-2 sm:gap-3">
+    <header className="flex h-6 items-center gap-2 pl-4">
       {/* Untriaged is a category in the same sense the three priorities are, so
           it is named the way they are: the heading says which one, with the
           count beside it. It carries no colour because it carries no verdict —
           nothing has judged these yet. */}
-      <h2 className="min-w-0 truncate text-base font-bold text-gousse-ink">Untriaged</h2>
+      <h2 className="min-w-0 truncate text-sm font-semibold text-gousse-muted">Untriaged</h2>
       <SectionCount category="untriaged" count={count} />
       {live && (
         // Untriaged is a category in the same sense (#146), so it carries the

@@ -3,7 +3,8 @@ import {
   ChevronsRight,
   FileEdit,
   Inbox,
-  Info,
+  CircleAlert,
+  MailOpen,
   MessageSquare,
   Send,
   Star,
@@ -25,6 +26,16 @@ export type SystemLabelMeta = {
    * to the full hue on hover/active. Only the Gmail inbox categories carry one.
    */
   hue?: string;
+  /**
+   * The category's colour *as text* (its name, count and glyph in the inbox's
+   * subgroup heading), light and dark. The design takes Gmail's own category
+   * inks (#a15200 Updates, #1967d2 Social, #8430ce Forums, #137333 Promotions),
+   * which clear 4.5:1 on white; dark mode needs a lighter value of each hue.
+   */
+  ink?: string;
+  inkDark?: string;
+  /** How strongly the heading band is tinted with `hue` (default 4%). */
+  tint?: number;
 };
 
 export const SYSTEM_LABELS: Record<string, SystemLabelMeta> = {
@@ -35,32 +46,41 @@ export const SYSTEM_LABELS: Record<string, SystemLabelMeta> = {
   },
   CATEGORY_PERSONAL: {
     label: "Primary",
-    Icon: Inbox,
+    Icon: MailOpen,
     className: "bg-gousse-bg text-gousse-ink",
   },
   CATEGORY_PROMOTIONS: {
     label: "Promotions",
     Icon: Tag,
     className: "bg-emerald-50 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-200",
-    hue: "55 178 77",
+    hue: "24 128 56",
+    ink: "19 115 51",
+    inkDark: "129 201 149",
   },
   CATEGORY_UPDATES: {
-    label: "Notifications",
-    Icon: Info,
+    label: "Updates",
+    Icon: CircleAlert,
     className: "bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200",
-    hue: "250 176 5",
+    hue: "227 116 0",
+    ink: "161 82 0",
+    inkDark: "252 173 92",
+    tint: 0.07,
   },
   CATEGORY_FORUMS: {
     label: "Forums",
     Icon: MessageSquare,
     className: "bg-sky-50 text-sky-900 dark:bg-sky-900/30 dark:text-sky-200",
-    hue: "77 171 247",
+    hue: "147 52 230",
+    ink: "132 48 206",
+    inkDark: "197 160 245",
   },
   CATEGORY_SOCIAL: {
     label: "Social",
     Icon: Users,
     className: "bg-indigo-50 text-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-200",
-    hue: "120 143 252",
+    hue: "26 115 232",
+    ink: "25 103 210",
+    inkDark: "138 180 248",
   },
   IMPORTANT: {
     label: "Important",
