@@ -71,12 +71,13 @@ bun run src/index.ts sync --since 7d        # fetch + triage
 
 ## Environment
 
-`.env` at repo root is the single source of truth — loaded by `bun run --env-file=../../.env` (api/cli) and by Vite via `envDir: '../..'`. See `.env.example`. Required keys: `DATABASE_URL`, `CLAUDE_BIN`, `API_SECRET`, `API_PORT`, `WEB_PORT`, `VITE_API_BASE`, `VITE_API_SECRET`, plus the Google OAuth set (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`) and `TOKEN_ENCRYPTION_KEY` (required in prod). No AI credential is an env var — not a vendor key and, since the fallback was dropped, not `CLAUDE_CODE_OAUTH_TOKEN` either; setting one does nothing, because nothing reads it. `VITE_API_SECRET` must match `API_SECRET` (web sends it as a bearer token).
+`.env` at repo root is the single source of truth — loaded by `bun run --env-file=../../.env` (api/cli) and by Vite via `envDir: '../..'`. See `.env.example`. Required keys: `DATABASE_URL`, `CLAUDE_BIN`, `API_SECRET`, `API_PORT`, `WEB_PORT`, `VITE_API_BASE`, `VITE_API_SECRET`, and `TOKEN_ENCRYPTION_KEY` (required in prod). The Google OAuth set (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`) is optional everywhere: the client is entered in the app and stored in Postgres, and these are only the fallback for an install with none saved (see *The Google OAuth client entered in the app*). No AI credential is an env var — not a vendor key and, since the fallback was dropped, not `CLAUDE_CODE_OAUTH_TOKEN` either; setting one does nothing, because nothing reads it. `VITE_API_SECRET` must match `API_SECRET` (web sends it as a bearer token).
 
 Env is parsed/validated once via `getEnv()` in `packages/core/src/env.ts`.
 
 How an operator *gets* the three Google values is one walkthrough rather than
-three (#138). `packages/core/src/googleOAuthSetup.ts` is a leaf module beside
+three (#138); where they *go* is the app's own Google step, and the last step of
+that walkthrough says so (with `.env` as the alternative). `packages/core/src/googleOAuthSetup.ts` is a leaf module beside
 `claudeUsage.ts` — the ordered steps as data, plus the callback path the API
 route mounts and the dev redirect URI `env.ts` defaults to, so what the
 documents tell someone to register is what an unconfigured server actually
@@ -101,14 +102,18 @@ than editing source (#99).
 
 ## Data model (high level)
 
-- `accounts` — connected Gmail accounts (email, profile, encrypted OAuth `refresh_token`, granted scopes, `connected_at`).
+- `accounts` — connected Gmail accounts (email, profile, encrypted OAuth `refresh_token`, granted scopes, `connected_at`), and `nickname` — the user's own name for the mailbox ("Lucas — Pro"), null meaning the Google display name.
 - `labels` — Gmail labels per account (synced).
 - `messages` — fetched Gmail messages (PK: `accountId + gmailMessageId`). Bodies stored as text + html.
 - `message_labels` — join.
 - `triages` — one row per Claude triage run per message (priority + reasoning + model/runId).
 - `promo_codes` — one discount code extracted from a marketing mail, keyed back to it. Two states on one row: suggested (the extraction wrote it) and saved (`saved_at`, the user acted) — the save also writes the six denormalised copies of the mail (subject, sender name/address, `internal_date`, HTML and stripped text), which is what makes a saved promo outlive the Gmail original it trashes. `expires_at` is stored at end-of-day UTC and treated as a date (`promoExpiry.ts`), never an instant.
-- `app_settings` — KV for model picks etc. (see `services/settings.ts`).
-- `encrypted_secrets` — every secret that is not a Gmail refresh token, one row per secret, value AES-256-GCM ciphertext: an LLM vendor's API key (named for the vendor), worp's key and proxy headers, and the Claude Code token (dotted names). See below.
+- `snoozes` — one row per snoozed conversation (PK `account_id + gmail_thread_id`): the message snoozed and `wake_at`. Joined onto the message list by thread.
+- `compose_uploads` — attachments uploaded for a send that has not happened yet (bytes in `bytea`, scoped to an account, swept a day after upload unless a pending scheduled send names them).
+- `scheduled_sends` — schedule send: the send request (`payload` jsonb), `send_at`, a Message-ID of miel's own, and a `pending → sending → sent | failed`, `pending → cancelled` state machine.
+- `contacts` — who each account has written to (PK `account_id + lower(email)`), the address suggestions' source.
+- `app_settings` — KV for model picks etc. (see `services/settings.ts`), and the Google OAuth client's ID and redirect URI when it was entered in the app.
+- `encrypted_secrets` — every secret that is not a Gmail refresh token, one row per secret, value AES-256-GCM ciphertext: an LLM vendor's API key (named for the vendor), worp's key and proxy headers, the Claude Code token and the Google OAuth client secret (dotted names). See below.
 
 ## Migrations
 
@@ -954,7 +959,12 @@ per aggregate, each with a Postgres adapter (`stores/postgres.ts`) and an
 in-memory one (`testkit/stores.ts`, `testkit/mailbox.ts`). Two implementations
 are what make the seam real (#132).
 
-There are six. `SettingsStore` and `SecretStore` were the first — five
+There are eight. `OutboxStore` (staged uploads and scheduled sends — one store
+because an upload a pending send names must outlive the sweep, and splitting
+them would put that join in a service; `claimDue` is the atomic claim the
+due-work loop relies on) and `ContactStore` (the address suggestions) are the
+newest, and `MessageStore` gained nicknames and snoozes, joined onto the list by
+thread. `SettingsStore` and `SecretStore` were the first — five
 operations over `app_settings` and `encrypted_secrets`. `MessageStore`,
 `TriageStore` and `LabelStore` (#136) are the mailbox: the rows a page of the
 list is made of, what Claude said about them, and the label catalogue both
@@ -1098,7 +1108,7 @@ minimizes the others); a fourth is refused with a toast. Each window
 strip, Esc stop or minimize, ⌘⌫ discard).
 
 The split is still the thing to keep: `features/compose/*` is the window — the
-shell, title bar, the From row (static: the account, no send-as), the To/Cc/Bcc
+shell, title bar, the From row, the To/Cc/Bcc
 chip rows, subject, body, AI strip, footer, plus the pure modules
 `recipients.ts` (typing is committed into chips only on a comma, semicolon,
 Enter or blur — never rewritten under the caret) and `composeWindowState.ts` —
@@ -1119,9 +1129,11 @@ purpose: it is an explicit request to keep the draft and get it out of the way.
 The body is unmounted while minimized rather than hidden, which is safe because
 every field lives in the provider.
 
-Left out, because the backend cannot do them: schedule send, snooze, send-as
-another mailbox, attachments on send, recipient suggestions and a server-side
-stop of a draft (Stop aborts the browser's request only).
+The backend now does everything the design draws around a send — attachments,
+the quoted original, forwards with their files, send-as and a second mailbox,
+address suggestions, schedule send, a server-side Stop and refinement of a draft
+— see *Writing mail: what a send carries* below. Snooze sits beside them under
+*Snooze*. The web client does not use all of it yet.
 
 To and Cc being editable is end to end, not decoration: `SendReplyRequest`
 takes optional `to`/`cc`, `services/replyRecipients.ts` decides between what was
@@ -1178,6 +1190,150 @@ draft names `replyToGmailMessageId` and is threaded as the send would be. Both
 sends take an optional `draftId` and delete that draft once the mail is out; a
 refusal there is logged and swallowed, because failing the request would report
 a sent mail as unsent.
+
+## Writing mail: what a send carries
+
+Every outgoing message — new (`/compose/send`), reply (`send-reply`), forward
+(`/messages/:a/:m/forward`), draft (`PUT /compose/drafts`) or scheduled — goes
+through the same resolution in `services/outgoing.ts` before Gmail is asked
+anything, and every refusal there is a `ComposeRefusedError` (reason code +
+sentence; the middleware maps it to 400/404/409/413), so a refused request has
+sent nothing.
+
+- **MIME.** `google/rfc822.ts` builds the message: a plain `text/plain` part as
+  before when there is nothing else; `multipart/alternative` (text + HTML) when
+  an HTML body rides along; `multipart/mixed` around that when there are files.
+  A message with attachments goes through Gmail's media upload
+  (`message/rfc822`, up to 35 MB) rather than the JSON `raw` field.
+- **Attachments are upload-then-reference.** The compose window uploads each
+  file as it is attached (`POST /compose/uploads`, multipart, one file), keeps
+  the id, and a send, a draft save or a scheduled send names `uploadIds`. That
+  is what gives the design its per-file progress and "Send waits for uploads".
+  Bytes are staged in `compose_uploads` (Postgres, not a container's disk, so a
+  scheduled send survives a restart), scoped to the account. One file over 25 MB
+  is refused at upload; the total is checked again at send
+  (`MAX_ATTACHMENTS_BYTES` in the leaf `composeLimits.ts` — base64 grows a file
+  by a third, and Gmail's own composer stops at 25 MB). The due-work loop sweeps
+  uploads a day old that no pending send names.
+- **The quoted original is the server's.** A reply carries it unless
+  `includeQuote: false` — "It is sent either way" — as `> ` lines under an
+  "On …, … wrote:" attribution and as a `blockquote.gmail_quote` around the
+  original's HTML (`services/quoting.ts`, dates in UTC). `quotedText` replaces
+  the stored original's text when the user trimmed it.
+  `GET /messages/:a/:m/quote` answers both blocks and the forwardable
+  attachments, so the window draws what will be sent. Reply drafts carry the
+  quote too, so the Gmail draft reads as what goes out.
+- **Forward** is its own route: the user's text, the "Forwarded message" block
+  (header, then the original's text and HTML), then the original's attachments
+  fetched from Gmail — all of them unless `keepAttachmentIds` names a subset (a
+  removed chip is simply not named) — plus any uploads. It stays in the
+  original's conversation in this mailbox, as Gmail's own forward does.
+- **Send-as.** `GET /accounts/:id/send-as` lists `users.settings.sendAs`
+  (covered by `gmail.settings.basic`, which every account already granted — no
+  new scope, no re-consent). A send names `from`; only a *verified* alias is
+  accepted, because Gmail would silently rewrite any other From.
+- **A second mailbox.** `send-reply` takes `fromAccountId` to answer from
+  another connected account. That reply cannot join the Gmail thread (thread ids
+  belong to a mailbox), so it is sent with `In-Reply-To`/`References` only,
+  read from the original through the account it arrived in.
+- **Address suggestions** (`GET /accounts/:id/contacts?q=`) come from
+  `contacts`, "people you've emailed": every send through miel records its
+  recipients (best-effort — a sent mail never fails over it), and every sync
+  harvests the To/Cc/Bcc *headers* of the account's sent mail in the window it
+  synced (`format=metadata`, no body, nothing written to `messages` — the inbox
+  search keeps its `-in:sent`). A sighting newer than the stored one counts one
+  more contact, so re-harvesting a window does not inflate the ranking.
+- **Stop and refine.** `generate-reply` and `/compose/generate` run as an
+  interruptible fiber (`services/generations.ts`) keyed by an optional
+  client-chosen `requestId`; `POST /compose/generations/:requestId/cancel` or the
+  client dropping the request interrupts it, which kills the CLI subprocess and
+  aborts the hosted call's signal, and a caller still listening gets
+  `generation_cancelled` (409). `previousDraft` hands the model the window's
+  current draft for "Shorter"/"Warmer"/a follow-up instruction. It is the user's
+  own text, never a received body, so `BODY_BEARING_TASKS` does not move —
+  `claude/tasks.test.ts` asserts a refined new mail still inlines no body.
+- **Mailbox nicknames.** `PATCH /accounts/:id { nickname }` — this install's
+  name for a mailbox, shown by the switcher and the From menu; Gmail is not told.
+
+There is still no AI drafting during sync: a draft is generated only when
+someone asks for one.
+
+## Snooze
+
+Gmail's API has no snooze, so miel does what it looks like from outside:
+`POST /messages/:a/:m/snooze { until }` archives the thread in Gmail and writes a
+`snoozes` row; the due-work loop wakes it at `wake_at` by putting INBOX back on
+the thread and UNREAD on the snoozed message (Gmail's own snooze returns a
+conversation unread), then drops the row. `DELETE …/snooze` wakes it now without
+marking it unread (the user is looking at it). Gmail first, local write after,
+as for every message action. A snoozed thread is archived, so `archivedOnly`
+(Done) now means archived *and not snoozed*, and `snoozedOnly=true` is the
+Snoozed view; a listed message carries `snoozedUntil`. A wake Gmail refuses is
+pushed back 15 minutes rather than retried every tick. It wakes on time only
+while the API runs; anything overdue wakes on the first tick after a restart.
+
+## Schedule send and the due-work loop
+
+Gmail's API has no scheduled send either — the design's "hands Gmail a time" is
+implemented by miel holding the message. `POST /compose/scheduled` validates
+everything it can now (account, source message, recipients, uploads, size, the
+From alias) and stores the *send request*, not MIME: a reply is threaded and
+quoted, a forward's files fetched, when it goes, through the same send services
+an immediate send uses. `GET /compose/scheduled` lists pending, in-flight and
+failed sends; `DELETE /compose/scheduled/:id` is the toast's Undo (pending only);
+`PATCH … { sendAt }` moves a pending send or gives a failed one another go.
+
+`services/dueWork.ts` is the API process's second loop, beside the sync
+scheduler and independent of it (a snooze must wake whether or not automatic
+sync is on): every 30 s it sends what is due, wakes what is due, and hourly
+sweeps stale uploads, each pass failing on its own. The guarantees, all in
+`services/scheduledSends.ts`:
+
+- **One claim per row.** `OutboxStore.claimDue` is a single
+  `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)`, so two ticks or two
+  API processes never both send a row.
+- **At-least-once, guarded.** A row left `sending` by a process that died is
+  reclaimed after `STALE_CLAIM_MS` (10 min). Before a reclaimed row is sent
+  again, Gmail is searched for `rfc822msgid:` the Message-ID miel wrote into it;
+  if the first attempt landed, the send is recorded instead of repeated.
+- **Failures.** A refusal of ours, or Gmail refusing the message itself (a
+  `GmailSendError` carrying Gmail's reason), fails the row at once with that
+  reason; anything else is retried at 2 and 4 minutes, then failed
+  (`MAX_SEND_ATTEMPTS`).
+
+## The Google OAuth client entered in the app
+
+The onboarding gate's Google step asks for the client ID, secret and redirect
+URI, so a fresh install needs no `.env` edit and no restart before it can
+connect a mailbox. `services/googleOAuthConfig.ts` stores them like every other
+runtime credential — ID and redirect URI in `app_settings`
+(`google.client_id`, `google.redirect_uri`), the secret in `encrypted_secrets`
+(`google.client_secret`) through `encryptedSecrets.ts`, still the only
+decryptor. `GET|PUT|DELETE /settings/google-oauth`; `GET /auth/google/config`
+answers the same status (its `configured`/`missing` keep their old shape).
+
+- **The database wins, the environment is the fallback, never mixed.** A stored
+  client ID means the stored client, all three fields; none stored means
+  `GOOGLE_*` exactly as before, so an existing deployment keeps working with
+  nothing entered. `env.ts` no longer requires them in production.
+- **Resolved per call.** `GoogleAuthLive` is now built from the stores (like
+  `ClaudeLive`) and reads the client on each consent URL, code exchange and
+  token refresh, so a saved client takes effect on the next sign-in.
+  `runWithGoogleAuth` provides Postgres under it.
+- **Changing the client disconnects every mailbox.** A refresh token belongs to
+  the client that minted it. The status carries `accountsToReconnect` (how many
+  a different client would disconnect) for the warning before a save; a save or
+  clear answers `clientChanged` and `reconnectRequired`. Nothing is deleted:
+  putting the old client back revives the grants.
+- A redirect URI must be http(s), end in `GOOGLE_OAUTH_CALLBACK_PATH`, and carry
+  no query; the secret may be omitted to keep the stored one.
+
+## The sync toast's counts
+
+`SyncRunResult` (and so `sync.finished`'s runs) carries `promosFound`, the codes
+the extraction found in that run's new mail — "Sync done · 14 new, 3 codes to
+review". Additive, so no alias dance: the received schema defaults it to 0, so a
+client of this release reading an older API's event still parses it.
 
 ## Acting on a message
 
