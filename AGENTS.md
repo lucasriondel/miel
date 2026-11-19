@@ -1118,6 +1118,29 @@ replies through `send-reply` (`replyAll` prefills Cc from `replyAllCc`),
 forwards through `/messages/:a/:m/forward`; a send that names a Gmail draft
 deletes it.
 
+**The mode chip.** A window answering a message leads its title bar with a chip
+naming what it is — Reply, Reply all, Forward — whose menu (a `ComposePopover`,
+arrow keys, Home/End and Escape; Reply all offered only when `replyAllCc` is
+non-empty, as on the reader) answers the same message another way
+(`features/reply/ReplyModeChip.tsx`, `ComposeSessionActions.switchMode`). A new
+mail has none. The session's `kind` changes, so everything keyed on it follows
+for free: the quote or the forwarded block under the body, the original's files,
+the send route (`send-reply` or `/forward`), the scheduled kind, the From menu.
+What a switch does to the fields is one pure rule, `switchReplyMode` in
+`features/reply/replyModeSwitch.ts`: **it changes what was prefilled, never what
+was typed.** To/Cc/Bcc are diffed against the previous mode's own defaults — an
+address that mode put there and that is still there is replaced by the new
+mode's default, one the user added is kept, a default the user removed stays
+removed, and nothing lands twice; the subject follows the mode only while it
+still reads as the previous mode prefilled it; the body, instruction, files, a
+trimmed quote and a forward's removed files are kept (the latter two come back
+if the user switches back). A forward cannot leave from another mailbox, so
+switching to it from one comes back to the original's mailbox, alias dropped. The
+Gmail draft is *replaced* when the switch crosses between a reply and a forward
+(`draftPlace` in `useDraftAutosave.ts`: mailbox and answered thread) — the old
+draft is deleted and the next save creates one in the right place, because a
+draft is not moved between threads by replacing its message.
+
 Which state a window is in is derived, not stored:
 `composeWindowMode(intent, draft)` folds the user's intent together with "is
 there anything unsent" (for a new mail, being addressed counts), so a window

@@ -49,6 +49,16 @@ export const draftRequest = (session: ComposeSession): Omit<SaveDraftInput, "dra
 };
 
 /**
+ * Where a draft is filed: its mailbox, and the thread it answers (none for a
+ * forward or a new mail). A change of either is a new draft rather than an
+ * edit of the old one — a change of mailbox because a draft belongs to one, a
+ * change of thread because the mode chip turned a reply into a forward or back,
+ * and a Gmail draft is not moved between threads by replacing its message.
+ */
+export const draftPlace = (request: Pick<SaveDraftInput, "accountId" | "replyToGmailMessageId">) =>
+  `${request.accountId}|${request.replyToGmailMessageId ?? ""}`;
+
+/**
  * The compose window's autosave into Gmail drafts (the footer's "Saving
  * draft…" / "Saved to Gmail drafts · 10:41").
  *
@@ -56,16 +66,20 @@ export const draftRequest = (session: ComposeSession): Omit<SaveDraftInput, "dra
  * every later one names its id, so pausing ten times leaves one draft, not ten.
  * A send waits for a save already in flight (`flush`) so the id it hands the
  * server — which deletes the draft once the mail is out — is the real one. A
- * change of mailbox moves the draft: the old one is deleted and the next save
- * creates it where the mail now goes from.
+ * change of place moves the draft: the old one is deleted and the next save
+ * creates it where it now belongs (see `draftPlace`).
  */
 export function useDraftAutosave({ session, enabled, worthSaving, delayMs, update }: Options) {
   const [status, setStatus] = useState<DraftStatus>("idle");
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [draftId, setDraftId] = useState<string | null>(session.fields.draftId);
-  const draftRef = useRef<{ id: string; accountId: string } | null>(
+  const draftRef = useRef<{ id: string; accountId: string; place: string } | null>(
     session.fields.draftId
-      ? { id: session.fields.draftId, accountId: draftRequest(session).accountId }
+      ? {
+          id: session.fields.draftId,
+          accountId: draftRequest(session).accountId,
+          place: draftPlace(draftRequest(session)),
+        }
       : null,
   );
   const inFlight = useRef<Promise<void> | null>(null);
@@ -87,12 +101,13 @@ export function useDraftAutosave({ session, enabled, worthSaving, delayMs, updat
         try {
           const request = JSON.parse(snapshot) as Omit<SaveDraftInput, "draftId">;
           const previous = draftRef.current;
-          if (previous && previous.accountId !== request.accountId) {
+          const place = draftPlace(request);
+          if (previous && previous.place !== place) {
             draftRef.current = null;
             void deleteDraft(previous.accountId, previous.id).catch(() => {});
           }
           const result = await saveDraft({ ...request, draftId: draftRef.current?.id });
-          draftRef.current = { id: result.draftId, accountId: request.accountId };
+          draftRef.current = { id: result.draftId, accountId: request.accountId, place };
           setDraftId(result.draftId);
           update({ draftId: result.draftId });
           lastSaved.current = snapshot;

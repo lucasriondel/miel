@@ -263,6 +263,12 @@ looping flourishes.
   is a `ComposePopover` at `z-[85]`, so it floats over the dock without
   `PopoverPanel` (which sits under it); its shape is the menu's: white,
   `rounded-xl`, `p-1.5`, `shadow-gousse-xl`, `rounded-lg` items.
+- **The mode chip** leads a reply's title bar (not a new mail's): 28px,
+  `rounded-lg`, white with a `border-strong` hairline, the mode's glyph, its
+  name in 12px semibold and a chevron (up while open). Its menu is a
+  `ComposePopover` 280px wide, 40px items with the mode over an 11px `subtle`
+  line saying who it reaches ("Claire Martin · Cc …") or what it carries
+  ("Empties To · keeps 2 attachments"), the current one on `hover` with a check.
 - **Chips in a window** are pills, as tags are: recipients on `fill`,
   attachments white with a `border` hairline (a spinner and percentage while
   uploading, `high-bg` with the reason when refused), between the body and the
