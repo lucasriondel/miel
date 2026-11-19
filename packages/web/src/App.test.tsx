@@ -274,3 +274,35 @@ describe("the default view", () => {
     await waitFor(() => expect(readLastAccountId()).toBe("acc-2"));
   });
 });
+
+/** The page under the layout, showing which label filter it was handed. */
+const LabelRecorder = () => {
+  const { selectedLabelId } = useOutletContext<LayoutContext>();
+  return <div data-testid="page" data-label={selectedLabelId ?? ""} />;
+};
+
+describe("leaving a label from the sidebar", () => {
+  test("the Inbox row clears the label filter and is the row marked current", async () => {
+    // The label used to be copied into state only when `?label` was present, so
+    // the Inbox link — which drops it — left the list filtered and no row lit.
+    render(
+      <QueryClientProvider client={seeded()}>
+        <MemoryRouter initialEntries={["/account/acc-1?label=Label_1"]}>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route path="account/:accountId" element={<LabelRecorder />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect((await screen.findByTestId("page")).dataset.label).toBe("Label_1");
+    const inbox = await screen.findByRole("link", { name: /Inbox/ });
+    expect(inbox.getAttribute("aria-current")).toBeNull();
+
+    fireEvent.click(inbox);
+
+    await waitFor(() => expect(screen.getByTestId("page").dataset.label).toBe(""));
+    expect(screen.getByRole("link", { name: /Inbox/ }).getAttribute("aria-current")).toBe("page");
+  });
+});

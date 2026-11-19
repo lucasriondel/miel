@@ -1,7 +1,7 @@
 /**
  * The inbox's scope lives in the URL, not in state: `useDateRange` re-derives
  * the view mode and the period from `?view`/`?range` on every render, and the
- * sidebar's label selection is seeded from `?label`. A URL without them is a
+ * sidebar's label selection is read from `?label`. A URL without them is a
  * reset inbox — so opening a message has to carry them along, and returning
  * has to land on a URL that still has them.
  *

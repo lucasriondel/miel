@@ -67,7 +67,10 @@ const AppLayout = () => {
   // be redirected into /account/:id by the default-account effect below.
   const isAccountScope = pathname === "/" || pathname.startsWith("/account");
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
-  const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>();
+  // The label filter is the URL's, read on every render like the period: a
+  // copy in state outlived the `?label` the sidebar's Inbox link drops, so the
+  // list stayed filtered after leaving the label.
+  const selectedLabelId = params.get("label") || undefined;
   const { range, isCurrentPeriod, canGoNext, goPrev, goNext, goToday, setViewMode } =
     useDateRange();
   // Below `sm` the sidebar is a drawer over the page, not a column beside it,
@@ -113,13 +116,6 @@ const AppLayout = () => {
     if (routeAccountId) writeLastAccountId(target.id);
     else if (isAccountScope) navigate(`/account/${target.id}`, { replace: true });
   }, [accounts.data, routeAccountId, selectedAccountId, navigate, isAccountScope]);
-
-  useEffect(() => {
-    const labelFromUrl = params.get("label");
-    if (labelFromUrl !== null) {
-      setSelectedLabelId(labelFromUrl || undefined);
-    }
-  }, [params]);
 
   const selectedAccount = accounts.data?.find((a) => a.id === selectedAccountId);
 
@@ -211,7 +207,6 @@ const AppLayout = () => {
   // Picking a label filters the inbox (not Done) and keeps the period.
   const handleSelectLabel = useCallback(
     (id: string | undefined) => {
-      setSelectedLabelId(id);
       if (!selectedAccountId) return;
       navigate(
         `/account/${selectedAccountId}${scopedSearch(search, { label: id ?? null, mailbox: null })}`,
