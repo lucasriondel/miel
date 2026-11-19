@@ -17,6 +17,8 @@ interface Props {
   /** What the close control is called, when "Close" is not the honest word. */
   closeLabel?: string;
   onKeyDown?: (e: KeyboardEvent<HTMLElement>) => void;
+  /** What leads the open window's title bar: a reply's mode chip. Not drawn minimized. */
+  titleLeading?: ReactNode;
   children: ReactNode;
 }
 
@@ -25,8 +27,8 @@ interface Props {
  * corner and the highest shadow, docked by `ComposeDock` — or, minimized, a
  * 300px title bar sitting on the bottom edge.
  *
- * It knows nothing about replies — a title, a body and three controls — which
- * is what lets a new mail, a reply and a forward share it.
+ * It knows nothing about replies — a title, a body, three controls and a slot
+ * before the title the reply fills with its mode chip — which is what lets a new mail, a reply and a forward share it.
  *
  * Not a modal: nothing is trapped, because the page behind it — the message
  * being answered — is exactly what a user reads while writing.
@@ -41,6 +43,7 @@ export const ComposeWindow = ({
   onClose,
   closeLabel,
   onKeyDown,
+  titleLeading,
   children,
 }: Props) =>
   minimized ? (
@@ -66,6 +69,7 @@ export const ComposeWindow = ({
         onMinimize={onMinimize}
         onClose={onClose}
         closeLabel={closeLabel}
+        leading={titleLeading}
       />
       {/* Unmounted, not hidden, when minimized: the fields live in the
           provider, so a minimized window keeps every keystroke without

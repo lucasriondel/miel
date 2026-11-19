@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useAccounts } from "../../api/queries";
 import type { Account, MessageDetail } from "../../api/types";
 import { accountDisplayName } from "../../components/sidebar/accountDisplayName";
+import { switchReplyMode } from "../reply/replyModeSwitch";
 import { ComposeDock } from "./ComposeDock";
 import {
   isBlank,
@@ -51,6 +52,8 @@ export interface ComposeSessionActions {
   remove: (id: string) => void;
   /** Put a closed window back as it was — the Undo of a scheduled send. */
   reopen: (session: ComposeSession) => void;
+  /** The title bar's mode chip: answer the same message another way, keeping what was typed. */
+  switchMode: (id: string, mode: ReplyMode) => void;
 }
 
 const noop: ComposeApi = { openNew: () => {}, openReply: () => {} };
@@ -175,6 +178,14 @@ export const ComposeProvider = ({ children, draftSaveDelayMs = 1500 }: Props) =>
           ),
         ),
       restore: (id) => setSessions((current) => focusOnly(current, id)),
+      switchMode: (id, mode) =>
+        setSessions((current) =>
+          current.map((s) =>
+            s.id === id && s.kind !== "new" && s.message
+              ? { ...s, kind: mode, fields: switchReplyMode(s.message, s.kind, mode, s.fields) }
+              : s,
+          ),
+        ),
       remove: (id) => setSessions((current) => current.filter((s) => s.id !== id)),
       reopen: (session) => {
         const current = sessionsRef.current;

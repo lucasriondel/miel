@@ -7,6 +7,8 @@ import { useMessageQuote, useSendAs } from "../../api/composeReads.hooks";
 import { useAccounts } from "../../api/queries";
 import { ForwardedBlock } from "../reply/ForwardedBlock";
 import { QuotedThread } from "../reply/QuotedThread";
+import { ReplyModeChip } from "../reply/ReplyModeChip";
+import { replyModeOptions } from "../reply/replyModeSwitch";
 import { presetTimeLabel } from "../time/timePresets";
 import { AiInstructionStrip } from "./AiInstructionStrip";
 import { AttachmentChips } from "./AttachmentChips";
@@ -66,15 +68,16 @@ export const ComposeSessionWindow = ({ session, actions, draftSaveDelayMs }: Pro
   const quote = useMessageQuote(
     answering ? { accountId: answering.accountId, gmailMessageId: answering.gmailMessageId } : null,
   );
-  const originals = useMemo(
+  // The original's files a forward carries — counted for the mode menu whatever
+  // the mode, drawn and sent only on a forward.
+  const forwardable = useMemo(
     () =>
-      kind === "forward"
-        ? (quote.data?.attachments ?? []).filter(
-            (a) => !fields.droppedAttachmentIds.includes(a.attachmentId),
-          )
-        : [],
-    [kind, quote.data, fields.droppedAttachmentIds],
+      (quote.data?.attachments ?? []).filter(
+        (a) => !fields.droppedAttachmentIds.includes(a.attachmentId),
+      ),
+    [quote.data, fields.droppedAttachmentIds],
   );
+  const originals = kind === "forward" ? forwardable : [];
 
   // Who it goes from.
   const accounts = useAccounts();
@@ -208,6 +211,17 @@ export const ComposeSessionWindow = ({ session, actions, draftSaveDelayMs }: Pro
     e.preventDefault();
   };
 
+  const names = { ...session.names, ...fields.contactNames };
+  const modeChip =
+    answering && kind !== "new" ? (
+      <ReplyModeChip
+        mode={kind}
+        options={replyModeOptions(answering, kind, names, forwardable.length)}
+        onPick={(next) => actions.switchMode(id, next)}
+        disabled={locked}
+      />
+    ) : null;
+
   const title = sessionTitle(session);
   const confirming = closeRequested && mode !== "closed";
   const draftLine =
@@ -221,7 +235,6 @@ export const ComposeSessionWindow = ({ session, actions, draftSaveDelayMs }: Pro
 
   const showCc = fields.showCc || fields.cc.length > 0;
   const showBcc = fields.showBcc || fields.bcc.length > 0;
-  const names = { ...session.names, ...fields.contactNames };
   const onName = (email: string, name: string) =>
     update((f) => ({ contactNames: { ...f.contactNames, [email.toLowerCase()]: name } }));
   const senderEmail = sender?.email ?? session.accountEmail;
@@ -242,6 +255,7 @@ export const ComposeSessionWindow = ({ session, actions, draftSaveDelayMs }: Pro
       onRestore={() => actions.restore(id)}
       onClose={requestClose}
       onKeyDown={onKeyDown}
+      titleLeading={modeChip}
     >
       <div className="relative flex min-h-0 flex-1 flex-col" {...(locked ? {} : drop.handlers)}>
         {drop.over ? <DropOverlay /> : null}
